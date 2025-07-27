@@ -1,0 +1,6 @@
+// this "iostream" file
+int main_()
+{
+    std::cout << "ciallo world" << '\n';
+    return 0;
+}

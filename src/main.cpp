@@ -1,6 +1,8 @@
+#include "preprocessor.hpp"
 #include <iostream>
 int main()
 {
-    std::cout << "ciallo world!\n";
+    Preprocessor p{};
+    p.process("/home/toucher/vscoderope/mycomplier/test/test1.cpp");
     return 0;
 }
