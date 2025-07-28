@@ -1,36 +1,17 @@
 #include "preprocessor.hpp"
+#include "file.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <regex>
 #include <unordered_map>
-Preprocessor::Preprocessor(const std::vector<std::string>& include_paths_)
-    : include_paths(include_paths_)
+std::expected<file, Preprocessor::error> Preprocessor::deal_include(file src)
 {
-}
-
-std::expected<bool, Preprocessor::error> Preprocessor::process(const std::string& src_path,
-                                                               const std::string& out_path)
-{
-    // 打开文件进行读取
-    std::ifstream in(src_path);
-    if (!in.is_open())
-    {
-        // 打开失败
-        return std::unexpected(error::file_not_exsist);
-    }
-
-    // 打开文件进行写入
-    std::ofstream out(out_path);
-    if (!out.is_open())
-    {
-        // 打开失败
-        return std::unexpected(error::can_not_create_file);
-    }
+    std::string out;
     std::string line;
-    // 用于保存宏定义
-    std::unordered_map<std::string, std::string> defines;
-    while (std::getline(in, line))
+
+    // 处理include
+    while (src.readline(line))
     {
         std::smatch match;
         std::regex preprocessor_regex(R"(^\s*#\s*(\w+)\s*(.*))");
@@ -60,50 +41,143 @@ std::expected<bool, Preprocessor::error> Preprocessor::process(const std::string
                 {
                     return std::unexpected(error::file_not_exsist);
                 }
-                std::ifstream tp{path};
-                if (!tp.is_open())
-                {
-                    return std::unexpected(error::file_not_exsist);
-                }
-                std::string inc_line;
-                while (std::getline(tp, inc_line))
-                {
-                    out << inc_line << '\n';
-                }
+                file tp{path};
+                std::string f{};
+                tp.readalllast(f);
+                src.insert("\n" + f + "\n");
             }
-            else if (directive == "define")
+            else
             {
-                // 解析 define 指令，假设格式为 #define NAME VALUE
-                // [TODO]支持递归替换
-                std::istringstream iss(arg);
-                std::string name, value;
-                iss >> name;
-                std::getline(iss, value);
-                // 去除前导空格
-                value.erase(0, value.find_first_not_of(" \t"));
-                if (!name.empty())
-                    defines[name] = value;
+                out += line;
+                out += '\n';
             }
         }
         else
         {
-            // 替换宏定义
-            for (const auto& def : defines)
-            {
-                size_t pos = 0;
-                while ((pos = line.find(def.first, pos)) != std::string::npos)
-                {
-                    line.replace(pos, def.first.length(), def.second);
-                    pos += def.second.length();
-                }
-            }
-            out << line << '\n';
+            out += line;
+            out += '\n';
         }
     }
-    out.close();
+    return file{out, true};
+}
+std::expected<file, Preprocessor::error> Preprocessor::deal_des(file in)
+{
+    std::string src;
+    in.readalllast(src);
+    std::regex comment_regex(R"(\/\/.*|\/\*[\s\S]*?\*\/)");
+    std::string result = std::regex_replace(src, comment_regex, "");
+    return file{result, true};
+}
+std::expected<file, Preprocessor::error> Preprocessor::deal_def(file src)
+{
+    std::string out;
+    std::string line;
+    std::vector<std::pair<std::string, std::string>> defines;
+    bool skip = false;
+    while (src.readline(line))
+    {
+        std::smatch match;
+        std::regex preprocessor_regex(R"(^\s*#\s*(\w+)\s*(\w+)?\s*(.*))");
+        auto ret = std::regex_search(line, match, preprocessor_regex);
+        if (ret)
+        {
+            std::string directive = match[1];
+            std::string key = match[2];
+            std::string val = match[3];
+            if (directive == "define")
+            {
+                if (!key.empty())
+                    defines.push_back({key, val});
+            }
+            else if (directive == "undef")
+            {
+                defines.erase(std::remove_if(defines.begin(), defines.end(),
+                                             [&](const auto& def) { return def.first == key; }),
+                              defines.end());
+            }
+            else if (directive == "ifdef")
+            {
+                skip = std::find_if(defines.begin(), defines.end(), [&](const auto& def)
+                                    { return def.first == key; }) == defines.end();
+            }
+            else if (directive == "ifndef")
+            {
+                skip = std::find_if(defines.begin(), defines.end(), [&](const auto& def)
+                                    { return def.first == key; }) != defines.end();
+            }
+            else if (directive == "endif")
+            {
+                skip = false;
+            }
+            else
+            {
+                if (!skip)
+                {
+                    // 替换宏
+                    for (const auto& def : defines)
+                    {
+                        size_t pos = 0;
+                        while ((pos = line.find(def.first, pos)) != std::string::npos)
+                        {
+                            line.replace(pos, def.first.length(), def.second);
+                            pos += def.second.length();
+                        }
+                    }
+                    out += line;
+                    out += '\n';
+                }
+            }
+        }
+        else
+        {
+            if (!skip)
+            {
+                for (const auto& def : defines)
+                {
+                    size_t pos = 0;
+                    while ((pos = line.find(def.first, pos)) != std::string::npos)
+                    {
+                        line.replace(pos, def.first.length(), def.second);
+                        pos += def.second.length();
+                    }
+                }
+                out += line;
+                out += '\n';
+            }
+        }
+    }
+    return file{out, true};
+}
+Preprocessor::Preprocessor(const std::vector<std::string>& include_paths_)
+    : include_paths(include_paths_)
+{
+}
+std::expected<bool, Preprocessor::error> Preprocessor::process(const std::string& src_path,
+                                                               const std::string& out_path)
+{
+    auto result = deal_include(file{src_path});
+    if (!result)
+    {
+        // 错误处理
+        return std::unexpected(result.error());
+    }
+    file without_include = result.value();
+    auto res = deal_des(without_include);
+    if (!res)
+    {
+        // 错误处理
+        return std::unexpected(res.error());
+    }
+    file without_include_des = res.value();
+    auto res2 = deal_def(without_include_des);
+    if (!res2)
+    {
+        // 错误处理
+        return std::unexpected(res.error());
+    }
+    res2.value().writeto(out_path);
     return true;
 }
-
 std::expected<bool, Preprocessor::error> Preprocessor::process(const std::string& src_path)
 {
     return this->process(src_path, src_path + ".pre");
