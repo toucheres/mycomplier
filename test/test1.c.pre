@@ -1,0 +1,23 @@
+
+
+
+
+
+
+some thing in test2
+
+
+
+some thing in test3
+
+some thing in test1
+这是注释前面的  这是注释后面的
+这是也注释前面的
+
+some thing in ioss
+
+int main()
+{
+    printf("%d",12);
+    return 0;
+}

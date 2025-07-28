@@ -1,9 +1,9 @@
-#include <iostream>
+#include <stdio.h>
 #define testdef main_
 #define main_ main
 // test
 int testdef()
 {
-    std::cout << "ciallo world" << '\n';
+    printf("%d",12);
     return 0;
 }

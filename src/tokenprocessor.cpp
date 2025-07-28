@@ -1,4 +1,5 @@
 #include "tokenprocessor.h"
+#include "file.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -6,21 +7,17 @@
 #include <unordered_map>
 std::expected<Tokens, Tokenprocessor::error> Tokenprocessor::process(const std::string& src_path)
 {
-    std::ifstream in(src_path);
-    if (!in.is_open())
+    file in{src_path};
+    std::regex token_regex(
+        R"([a-zA-Z_][a-zA-Z0-9_]*|\d+|\".*?\"|\'.*?\'|==|!=|<=|>=|&&|\|\||[{}()\[\];,<>+\-*/%=&|^!~])");
+    std::string src;
+    in.readalllast(src); // 预处理后的文本
+    std::vector<std::string> tokens;
+    auto begin = std::sregex_iterator(src.begin(), src.end(), token_regex);
+    auto end = std::sregex_iterator();
+    for (auto it = begin; it != end; ++it)
     {
-        // 打开失败
-        return std::unexpected(error::file_not_exsist);
+        tokens.push_back(it->str());
     }
-    in.seekg(0, std::ios::end);
-    size_t char_count = in.tellg();
-    in.seekg(0, std::ios::beg); // 若后续还要读内容
-    std::vector<std::string> result;
-    result.reserve(char_count / 4);
-    std::string token;
-    while (in >> token)
-    {
-        result.push_back(token);
-    }
-    return result;
+    return tokens;
 }
