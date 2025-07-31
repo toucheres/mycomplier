@@ -13,16 +13,10 @@ struct VCPU
     int ax; // common register
     int cycle;
 };
-struct VMEM
-{
-    char* data = new char[10240];
-    ~VMEM();
-    char operator[](int addr);
-};
 
 struct Execution
 {
-    /* data */
+    
 };
 
 class VM

@@ -6,9 +6,9 @@ int main()
     Preprocessor p{};
     p.process("/home/toucher/vscoderope/mycomplier/test/test1.c");
     auto ret = Tokenprocessor::process("/home/toucher/vscoderope/mycomplier/test/test1.c.pre");
-    for(auto& each: ret.value())
+    for (auto& each : ret.value())
     {
-        std::cout << each<<' ';
+        std::cout << each.content << ' ';
     }
     return 0;
 }

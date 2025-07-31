@@ -1,13 +1,39 @@
 #pragma once
+#include "enums.h"
+#include "error.hpp"
 #include <expected>
+#include <optional>
 #include <string>
 #include <vector>
 struct Token
 {
     std::string content;
-    bool can_be_name();
+    bool can_be_id();
+    std::optional<Basic_Type> is_type();
 };
-using Tokens = std::vector<std::string>;
+// using Tokens = std::vector<Token>;
+class Tokens : public std::vector<Token>
+{
+  public:
+    size_t pos = 0;
+    size_t last_pos = 0;
+    inline void save()
+    {
+        last_pos = pos;
+    }
+    inline void load()
+    {
+        pos = last_pos;
+    }
+    bool prase_over()
+    {
+        return pos = size();
+    };
+    Token& now()
+    {
+        return (*this)[pos];
+    };
+};
 class TokenStream
 {
     Tokens tokens;
@@ -18,12 +44,6 @@ class TokenStream
 };
 class Tokenprocessor
 {
-    enum class error
-    {
-        file_not_exsist,
-        can_not_create_file
-    };
-
   public:
     static std::expected<Tokens, error> process(const std::string& path);
 };

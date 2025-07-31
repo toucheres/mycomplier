@@ -5,14 +5,10 @@
 #include <format>
 #include <string>
 #include <vector>
+#include "error.hpp"
 class Preprocessor
 {
   public:
-    enum class error
-    {
-        file_not_exsist,
-        can_not_create_file
-    };
 
   private:
     const std::vector<std::string> include_paths;

@@ -5,11 +5,11 @@
 #include <iostream>
 #include <regex>
 #include <unordered_map>
-std::expected<file, Preprocessor::error> Preprocessor::deal_include(file src)
+std::expected<file, error> Preprocessor::deal_include(file src)
 {
     std::string out;
     std::string line;
-    
+
     // 处理include
     while (src.readline(line))
     {
@@ -60,7 +60,7 @@ std::expected<file, Preprocessor::error> Preprocessor::deal_include(file src)
     }
     return file{out, true};
 }
-std::expected<file, Preprocessor::error> Preprocessor::deal_des(file in)
+std::expected<file, error> Preprocessor::deal_des(file in)
 {
     std::string src;
     in.readalllast(src);
@@ -68,7 +68,7 @@ std::expected<file, Preprocessor::error> Preprocessor::deal_des(file in)
     std::string result = std::regex_replace(src, comment_regex, "");
     return file{result, true};
 }
-std::expected<file, Preprocessor::error> Preprocessor::deal_def(file src)
+std::expected<file, error> Preprocessor::deal_def(file src)
 {
     std::string out;
     std::string line;
@@ -152,8 +152,8 @@ Preprocessor::Preprocessor(const std::vector<std::string>& include_paths_)
     : include_paths(include_paths_)
 {
 }
-std::expected<bool, Preprocessor::error> Preprocessor::process(const std::string& src_path,
-                                                               const std::string& out_path)
+std::expected<bool, error> Preprocessor::process(const std::string& src_path,
+                                                 const std::string& out_path)
 {
     auto result = deal_include(file{src_path});
     if (!result)
@@ -178,7 +178,7 @@ std::expected<bool, Preprocessor::error> Preprocessor::process(const std::string
     res2.value().writeto(out_path);
     return true;
 }
-std::expected<bool, Preprocessor::error> Preprocessor::process(const std::string& src_path)
+std::expected<bool, error> Preprocessor::process(const std::string& src_path)
 {
     return this->process(src_path, src_path + ".pre");
 }
