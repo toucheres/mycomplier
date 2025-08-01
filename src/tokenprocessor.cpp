@@ -5,6 +5,36 @@
 #include <iostream>
 #include <regex>
 #include <unordered_map>
+#include <unordered_set>
+#include <cctype>
+
+bool Token::can_be_id()
+{
+    if (content.empty()) return false;
+    
+    // 检查是否以字母或下划线开头
+    if (!std::isalpha(content[0]) && content[0] != '_') return false;
+    
+    // 检查其余字符是否为字母、数字或下划线
+    for (size_t i = 1; i < content.size(); ++i)
+    {
+        if (!std::isalnum(content[i]) && content[i] != '_') return false;
+    }
+    
+    // 检查是否为关键字
+    static const std::unordered_set<std::string> keywords = {
+        "int", "char", "if", "else", "while", "for", "return", "void", "struct", "enum", "typedef"
+    };
+    
+    return keywords.find(content) == keywords.end();
+}
+
+std::optional<Basic_Type> Token::is_type()
+{
+    if (content == "int") return Basic_Type::INT;
+    if (content == "char") return Basic_Type::CHAR;
+    return std::nullopt;
+}
 std::expected<Tokens, error> Tokenprocessor::process(const std::string& src_path)
 {
     file in{src_path};

@@ -8,5 +8,5 @@ enum class Basic_Type
 struct Type
 {
     Basic_Type bt;
-    size_t num_lay = 0;
+    size_t ptr_lay = 0;
 };

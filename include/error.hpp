@@ -5,7 +5,10 @@ enum class error
     can_not_create_file,
     expected_fenhao,
     expected_while,
+    expected_dakuohao,
+    expected_xiaokuohao,
     doubledefine,
     illageid,
     unkowntype,
+    undefinedvar,
 };

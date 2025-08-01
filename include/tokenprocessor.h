@@ -27,7 +27,7 @@ class Tokens : public std::vector<Token>
     }
     bool prase_over()
     {
-        return pos = size();
+        return pos >= size();
     };
     Token& now()
     {
