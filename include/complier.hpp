@@ -80,6 +80,7 @@ class Complier
     static std::expected<bool, error> try_parse_fun(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_block(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_args(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_expr(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_while(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_if(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_var(Tokens& tokens, obj& obj);

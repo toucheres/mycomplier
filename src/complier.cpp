@@ -112,6 +112,41 @@ std::expected<bool, error> Complier::try_parse_args(Tokens& tokens, obj& obj)
     }
 }
 
+std::expected<bool, error> Complier::try_parse_while(Tokens& tokens, obj& obj)
+{
+    tokens.save();
+    if (auto ret = tokens.now().content == "while")
+    {
+        tokens.pos++;
+        if (auto ret2 = try_parse_expr(tokens, obj))
+        {
+            if (auto ret2 = try_parse_expr(tokens, obj))
+            {
+            }
+            else
+            {
+                tokens.load();
+                return std::unexpected(ret2.error());
+            }
+        }
+        else
+        {
+            tokens.load();
+            return std::unexpected(ret2.error());
+        }
+    }
+    else
+    {
+        tokens.load();
+        return std::unexpected(error::expected_while);
+    }
+}
+
+std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
+{
+    return std::expected<bool, error>();
+}
+
 // std::expected<bool, error> Complier::try_parse_while(Tokens& tokens, obj& obj)
 // {
 //     tokens.save();
