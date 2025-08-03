@@ -4,9 +4,9 @@
 #include <expected>
 #include <stack>
 #include <string>
+#include <tokenprocessor.h>
 #include <vector>
 #include <vm.h>
-#include <tokenprocessor.h>
 // GLOBAL = var_decl | var_def | fun_decl | fun_def
 // type = int/char [*]
 // var_decl = type id;
@@ -34,20 +34,16 @@ struct fun_def : id_def
 struct fun_defs
 {
   public:
-    enum class error
-    {
-    };
-
   private:
     std::vector<fun_def> fun_defines;
 
   public:
-    std::expected<fun_defs, error> find(const std::string& id);
-    std::expected<bool, error> push(fun_def dun_def);
+    std::expected<fun_def, error> find(const std::string& id);
+    std::expected<bool, error> push(fun_def fun_def);
 };
 struct var_defs
 {
-    // 仿照stack处理不同作用域生命
+    // 仿照stack处理不同作用域变量生命周期
   private:
     struct eachnamespace
     {
@@ -57,13 +53,16 @@ struct var_defs
             var_def var_def); // 在push中处理重定义: 每层namespace变量声明只能一次
     };
     std::vector<eachnamespace> namespace_defines;
+    size_t stack_size = 0;
+    size_t old_stack_size = 0;
 
   public:
     // 构造函数，初始化时创建全局作用域
-    var_defs() {
+    var_defs()
+    {
         namespace_defines.emplace_back(); // 创建全局作用域（第0层）
     }
-    
+
     std::expected<var_def*, error> find(const std::string& id);
     std::expected<bool, error> push(var_def var_def);
     std::expected<bool, error> push_arg(var_def var_def);
@@ -72,7 +71,7 @@ struct var_defs
 };
 struct obj
 {
-    var_defs var_defs_;  // 统一的变量定义容器，包含全局和局部变量
+    var_defs var_defs_; // 统一的变量定义容器，包含全局和局部变量
     fun_defs fun_defs_;
     std::stack<std::string> content;
     // 源在前，目标在后
@@ -90,7 +89,7 @@ class Complier
     static std::expected<bool, error> try_parse_while(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_if(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_var(Tokens& tokens, obj& obj);
-    
+
     // 辅助函数
     static bool is_binary_operator(const std::string& token);
     static bool is_number(const std::string& token);

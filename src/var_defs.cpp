@@ -1,30 +1,57 @@
 #include "complier.hpp"
 #include <algorithm>
-
+#include <iostream>
 // var_defs::eachnamespace 实现
 std::expected<var_def*, error> var_defs::eachnamespace::find(const std::string& id)
 {
     auto it = std::find_if(var_defines_namespace.begin(), var_defines_namespace.end(),
-                          [&id](const var_def& var) { return var.id == id; });
-    
+                           [&id](const var_def& var) { return var.id == id; });
+
     if (it != var_defines_namespace.end())
     {
         return &(*it);
     }
-    return std::unexpected(error::doubledefine); // 使用已定义的错误类型
+    return std::unexpected(error::doubledefined); // 使用已定义的错误类型
+}
+
+std::expected<fun_def, error> fun_defs::find(const std::string& id)
+{
+    auto ret = std::find_if(fun_defines.begin(), fun_defines.end(),
+                            [&id](fun_def fundef)
+                            {
+                                if (fundef.id == id)
+                                {
+                                    return true;
+                                }
+                                return false;
+                            });
+    if (ret != fun_defines.end())
+    {
+        return *ret;
+    }
+    return std::unexpected(error::undefinedfun);
+}
+std::expected<bool, error> fun_defs::push(fun_def fun_def)
+{
+    if (find(fun_def.id))
+    {
+        return std::unexpected(error::doubledefined);
+    }
+    fun_defines.push_back(fun_def);
+    return true;
 }
 
 std::expected<bool, error> var_defs::eachnamespace::push(var_def var_def_)
 {
     // 检查重定义
     auto it = std::find_if(var_defines_namespace.begin(), var_defines_namespace.end(),
-                          [&var_def_](const var_def& var) { return var.id == var_def_.id; });
-    
+                           [&var_def_](const var_def& var) { return var.id == var_def_.id; });
+
     if (it != var_defines_namespace.end())
     {
-        return std::unexpected(error::doubledefine);
+        return std::unexpected(error::doubledefined);
     }
-    
+
     var_defines_namespace.push_back(var_def_);
     return true;
 }
@@ -41,9 +68,9 @@ std::expected<var_def*, error> var_defs::find(const std::string& id)
             return result;
         }
     }
-    
+
     // 如果所有作用域都没找到，返回错误
-    return std::unexpected(error::doubledefine); // 使用已定义的错误类型
+    return std::unexpected(error::doubledefined); // 使用已定义的错误类型
 }
 
 std::expected<bool, error> var_defs::push(var_def var_def_)
@@ -54,8 +81,31 @@ std::expected<bool, error> var_defs::push(var_def var_def_)
         // 这种情况理论上不应该发生，因为构造函数会创建全局作用域
         namespace_defines.emplace_back();
     }
-    
-    return namespace_defines.back().push(var_def_);
+    var_def_.addr = stack_size;
+    auto ret = namespace_defines.back().push(var_def_);
+    if (ret)
+    {
+        if (var_def_.type.ptr_lay == 0)
+        {
+            stack_size += Type::size_of_type(var_def_.type.bt);
+        }
+        else
+        {
+            stack_size += Type::size_of_type(Basic_Type::INT);
+        }
+        std::cout << "addr: " << var_def_.addr << "  id: " << var_def_.id
+                  << " type: " << (int)var_def_.type.bt;
+        for (size_t i = 0; i < var_def_.type.ptr_lay; i++)
+        {
+            std::cout << "*";
+        }
+        std::cout << "\n";
+        return true;
+    }
+    else
+    {
+        return std::unexpected{ret.error()};
+    }
 }
 
 std::expected<bool, error> var_defs::push_arg(var_def var_def)
@@ -65,13 +115,14 @@ std::expected<bool, error> var_defs::push_arg(var_def var_def)
     {
         into_new_namespace();
     }
-    
+
     return namespace_defines.back().push(var_def);
 }
 
 void var_defs::into_new_namespace()
 {
     namespace_defines.emplace_back();
+    old_stack_size = stack_size;
 }
 
 void var_defs::outto_old_namespace()
@@ -80,6 +131,7 @@ void var_defs::outto_old_namespace()
     {
         namespace_defines.pop_back();
     }
+    stack_size = old_stack_size;
 }
 
 // obj 实现
@@ -88,74 +140,74 @@ void obj::pushASM(VM::ASM ASM)
     // 生成汇编指令并推入栈
     switch (ASM)
     {
-        case VM::ASM::LI:
-            content.push("LI");
-            break;
-        case VM::ASM::LC:
-            content.push("LC");
-            break;
-        case VM::ASM::SI:
-            content.push("SI");
-            break;
-        case VM::ASM::SC:
-            content.push("SC");
-            break;
-        case VM::ASM::ADD:
-            content.push("ADD");
-            break;
-        case VM::ASM::SUB:
-            content.push("SUB");
-            break;
-        case VM::ASM::MUL:
-            content.push("MUL");
-            break;
-        case VM::ASM::DIV:
-            content.push("DIV");
-            break;
-        case VM::ASM::EQ:
-            content.push("EQ");
-            break;
-        case VM::ASM::NE:
-            content.push("NE");
-            break;
-        case VM::ASM::LT:
-            content.push("LT");
-            break;
-        case VM::ASM::GT:
-            content.push("GT");
-            break;
-        case VM::ASM::LE:
-            content.push("LE");
-            break;
-        case VM::ASM::GE:
-            content.push("GE");
-            break;
-        case VM::ASM::JMP:
-            content.push("JMP");
-            break;
-        case VM::ASM::JZ:
-            content.push("JZ");
-            break;
-        case VM::ASM::JNZ:
-            content.push("JNZ");
-            break;
-        case VM::ASM::CALL:
-            content.push("CALL");
-            break;
-        case VM::ASM::RET:
-            content.push("RET");
-            break;
-        case VM::ASM::PUSH:
-            content.push("PUSH");
-            break;
-        case VM::ASM::IMM:
-            content.push("IMM");
-            break;
-        case VM::ASM::LEA:
-            content.push("LEA");
-            break;
-        default:
-            break;
+    case VM::ASM::LI:
+        content.push("LI");
+        break;
+    case VM::ASM::LC:
+        content.push("LC");
+        break;
+    case VM::ASM::SI:
+        content.push("SI");
+        break;
+    case VM::ASM::SC:
+        content.push("SC");
+        break;
+    case VM::ASM::ADD:
+        content.push("ADD");
+        break;
+    case VM::ASM::SUB:
+        content.push("SUB");
+        break;
+    case VM::ASM::MUL:
+        content.push("MUL");
+        break;
+    case VM::ASM::DIV:
+        content.push("DIV");
+        break;
+    case VM::ASM::EQ:
+        content.push("EQ");
+        break;
+    case VM::ASM::NE:
+        content.push("NE");
+        break;
+    case VM::ASM::LT:
+        content.push("LT");
+        break;
+    case VM::ASM::GT:
+        content.push("GT");
+        break;
+    case VM::ASM::LE:
+        content.push("LE");
+        break;
+    case VM::ASM::GE:
+        content.push("GE");
+        break;
+    case VM::ASM::JMP:
+        content.push("JMP");
+        break;
+    case VM::ASM::JZ:
+        content.push("JZ");
+        break;
+    case VM::ASM::JNZ:
+        content.push("JNZ");
+        break;
+    case VM::ASM::CALL:
+        content.push("CALL");
+        break;
+    case VM::ASM::RET:
+        content.push("RET");
+        break;
+    case VM::ASM::PUSH:
+        content.push("PUSH");
+        break;
+    case VM::ASM::IMM:
+        content.push("IMM");
+        break;
+    case VM::ASM::LEA:
+        content.push("LEA");
+        break;
+    default:
+        break;
     }
 }
 

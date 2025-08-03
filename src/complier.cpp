@@ -4,12 +4,14 @@
 #include "tokenprocessor.h"
 #include <algorithm>
 #include <cctype>
+#include <iostream>
 #include <string>
 #include <vector>
 
 std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
 {
     fun_def thisfun;
+    thisfun.addr = obj.content.size();
     tokens.save();
     if (auto ret = tokens.now().is_type())
     {
@@ -62,7 +64,9 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     }
 
     // 函数解析完成，退出函数作用域
+    thisfun.defined = true;
     obj.var_defs_.outto_old_namespace();
+    obj.fun_defs_.push(thisfun);
     return true;
 }
 
@@ -552,7 +556,7 @@ std::expected<bool, error> Complier::try_parse_var(Tokens& tokens, obj& obj)
         if (!push_ret)
         {
             tokens.load();
-            return std::unexpected(error::doubledefine);
+            return std::unexpected(error::doubledefined);
         }
         tokens.pos += 2; // 跳过标识符和分号
     }
@@ -621,6 +625,7 @@ std::expected<obj, error> Complier::eachFile(std::string path)
         tokens.pos++;
         if (tokens.prase_over())
         {
+            std::cerr << "fail!\n";
             break;
         }
     }

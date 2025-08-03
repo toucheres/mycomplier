@@ -16,13 +16,13 @@ struct VCPU
 
 struct Execution
 {
-    
 };
 
 class VM
 {
   private:
     VCPU cpu;
+
   public:
     enum class ASM
     {
