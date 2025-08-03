@@ -38,6 +38,15 @@ std::expected<bool, error> fun_defs::push(fun_def fun_def)
         return std::unexpected(error::doubledefined);
     }
     fun_defines.push_back(fun_def);
+
+    std::cout << "fun_def:\n";
+    std::cout << "addr:" << fun_def.addr << " id:" << fun_def.id
+              << " type:" << (int)fun_def.type.bt;
+    for (int i = 0; i < fun_def.type.ptr_lay; i++)
+    {
+        std::cout << "*";
+    }
+    std::cout << '\n';
     return true;
 }
 
@@ -93,8 +102,9 @@ std::expected<bool, error> var_defs::push(var_def var_def_)
         {
             stack_size += Type::size_of_type(Basic_Type::INT);
         }
-        std::cout << "addr: " << var_def_.addr << "  id: " << var_def_.id
-                  << " type: " << (int)var_def_.type.bt;
+        std::cout << "var: \n";
+        std::cout << "addr:" << var_def_.addr << " id:" << var_def_.id
+                  << " type:" << (int)var_def_.type.bt;
         for (size_t i = 0; i < var_def_.type.ptr_lay; i++)
         {
             std::cout << "*";
@@ -110,13 +120,33 @@ std::expected<bool, error> var_defs::push(var_def var_def_)
 
 std::expected<bool, error> var_defs::push_arg(var_def var_def)
 {
-    // 参数变量直接添加到当前作用域
+    // 参数变量直接添加到当前作用域，分配地址
     if (namespace_defines.empty())
     {
         into_new_namespace();
     }
-
-    return namespace_defines.back().push(var_def);
+    
+    var_def.addr = stack_size;
+    auto ret = namespace_defines.back().push(var_def);
+    if (ret) {
+        if (var_def.type.ptr_lay == 0)
+        {
+            stack_size += Type::size_of_type(var_def.type.bt);
+        }
+        else
+        {
+            stack_size += Type::size_of_type(Basic_Type::INT);
+        }
+        std::cout << "arg: \n";
+        std::cout << "addr:" << var_def.addr << " id:" << var_def.id
+                  << " type:" << (int)var_def.type.bt;
+        for (size_t i = 0; i < var_def.type.ptr_lay; i++)
+        {
+            std::cout << "*";
+        }
+        std::cout << "\n";
+    }
+    return ret;
 }
 
 void var_defs::into_new_namespace()
@@ -135,91 +165,91 @@ void var_defs::outto_old_namespace()
 }
 
 // obj 实现
-void obj::pushASM(VM::ASM ASM)
-{
-    // 生成汇编指令并推入栈
-    switch (ASM)
-    {
-    case VM::ASM::LI:
-        content.push("LI");
-        break;
-    case VM::ASM::LC:
-        content.push("LC");
-        break;
-    case VM::ASM::SI:
-        content.push("SI");
-        break;
-    case VM::ASM::SC:
-        content.push("SC");
-        break;
-    case VM::ASM::ADD:
-        content.push("ADD");
-        break;
-    case VM::ASM::SUB:
-        content.push("SUB");
-        break;
-    case VM::ASM::MUL:
-        content.push("MUL");
-        break;
-    case VM::ASM::DIV:
-        content.push("DIV");
-        break;
-    case VM::ASM::EQ:
-        content.push("EQ");
-        break;
-    case VM::ASM::NE:
-        content.push("NE");
-        break;
-    case VM::ASM::LT:
-        content.push("LT");
-        break;
-    case VM::ASM::GT:
-        content.push("GT");
-        break;
-    case VM::ASM::LE:
-        content.push("LE");
-        break;
-    case VM::ASM::GE:
-        content.push("GE");
-        break;
-    case VM::ASM::JMP:
-        content.push("JMP");
-        break;
-    case VM::ASM::JZ:
-        content.push("JZ");
-        break;
-    case VM::ASM::JNZ:
-        content.push("JNZ");
-        break;
-    case VM::ASM::CALL:
-        content.push("CALL");
-        break;
-    case VM::ASM::RET:
-        content.push("RET");
-        break;
-    case VM::ASM::PUSH:
-        content.push("PUSH");
-        break;
-    case VM::ASM::IMM:
-        content.push("IMM");
-        break;
-    case VM::ASM::LEA:
-        content.push("LEA");
-        break;
-    default:
-        break;
-    }
-}
+// void obj::pushASM(VM::ASM ASM)
+// {
+//     // 生成汇编指令并推入栈
+//     switch (ASM)
+//     {
+//     case VM::ASM::LI:
+//         content.push("LI");
+//         break;
+//     case VM::ASM::LC:
+//         content.push("LC");
+//         break;
+//     case VM::ASM::SI:
+//         content.push("SI");
+//         break;
+//     case VM::ASM::SC:
+//         content.push("SC");
+//         break;
+//     case VM::ASM::ADD:
+//         content.push("ADD");
+//         break;
+//     case VM::ASM::SUB:
+//         content.push("SUB");
+//         break;
+//     case VM::ASM::MUL:
+//         content.push("MUL");
+//         break;
+//     case VM::ASM::DIV:
+//         content.push("DIV");
+//         break;
+//     case VM::ASM::EQ:
+//         content.push("EQ");
+//         break;
+//     case VM::ASM::NE:
+//         content.push("NE");
+//         break;
+//     case VM::ASM::LT:
+//         content.push("LT");
+//         break;
+//     case VM::ASM::GT:
+//         content.push("GT");
+//         break;
+//     case VM::ASM::LE:
+//         content.push("LE");
+//         break;
+//     case VM::ASM::GE:
+//         content.push("GE");
+//         break;
+//     case VM::ASM::JMP:
+//         content.push("JMP");
+//         break;
+//     case VM::ASM::JZ:
+//         content.push("JZ");
+//         break;
+//     case VM::ASM::JNZ:
+//         content.push("JNZ");
+//         break;
+//     case VM::ASM::CALL:
+//         content.push("CALL");
+//         break;
+//     case VM::ASM::RET:
+//         content.push("RET");
+//         break;
+//     case VM::ASM::PUSH:
+//         content.push("PUSH");
+//         break;
+//     case VM::ASM::IMM:
+//         content.push("IMM");
+//         break;
+//     case VM::ASM::LEA:
+//         content.push("LEA");
+//         break;
+//     default:
+//         break;
+//     }
+// }
 
-void obj::pushASM(VM::ASM ASM, int arg)
-{
-    pushASM(ASM);
-    content.push(std::to_string(arg));
-}
+// void obj::pushASM(VM::ASM ASM, int arg)
+// {
+//     pushASM(ASM);
+//     content.push(std::to_string(arg));
+// }
 
-void obj::pushASM(VM::ASM ASM, int src, int obj)
-{
-    pushASM(ASM);
-    content.push(std::to_string(src));
-    content.push(std::to_string(obj));
-}
+// void obj::pushASM(VM::ASM ASM, int src, int obj)
+// {
+//     pushASM(ASM);
+//     content.push(std::to_string(src));
+//     content.push(std::to_string(obj));
+// }

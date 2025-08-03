@@ -73,7 +73,8 @@ struct obj
 {
     var_defs var_defs_; // 统一的变量定义容器，包含全局和局部变量
     fun_defs fun_defs_;
-    std::stack<std::string> content;
+    std::stack<std::string> content; // 恢复为字符串格式
+    
     // 源在前，目标在后
     void pushASM(VM::ASM ASM);
     void pushASM(VM::ASM ASM, int arg);
@@ -85,17 +86,31 @@ class Complier
     static std::expected<bool, error> try_parse_block(Tokens& tokens, obj& obj);
     static std::expected<std::vector<Type>, error> try_parse_args(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_assignment_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_logical_or_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_logical_and_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_equality_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_relational_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_additive_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_multiplicative_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_unary_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_postfix_expr(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_primary(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_while(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_if(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_return(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_var(Tokens& tokens, obj& obj);
 
     // 辅助函数
     static bool is_binary_operator(const std::string& token);
+    static bool is_assignment_operator(const std::string& token);
+    static bool is_relational_operator(const std::string& token);
+    static bool is_multiplicative_operator(const std::string& token);
+    static bool is_unary_operator(const std::string& token);
     static bool is_number(const std::string& token);
     static void generate_binary_op_asm(const std::string& op, obj& obj);
 
   public:
-    int process(std::vector<std::string> args);
+    std::expected<obj, error> process(std::vector<std::string> args);
     std::expected<obj, error> eachFile(std::string path);
 };

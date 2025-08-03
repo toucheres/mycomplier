@@ -1,6 +1,7 @@
 #pragma once
 enum class error
 {
+    failed,
     file_not_exsist,
     can_not_create_file,
     expected_fenhao,

@@ -1,76 +1,138 @@
 #pragma once
+#include <vector>
+#include <memory>
+#include <stack>
+#include <unordered_map>
+#include <string>
+
 struct VCPU
 {
-    int* code;      // code segment
-    int* code_dump; // for dump
-    int* stack;     // stack segment
-    char* data;     // data segment
+    std::vector<int> code;      // code segment
+    std::vector<int> stack;     // stack segment
+    std::vector<char> data;     // data segment
 
-    int* pc; // pc register
-    int* sp; // rsp register
-    int* bp; // rbp register
+    int pc;  // program counter
+    int sp;  // stack pointer
+    int bp;  // base pointer
 
-    int ax; // common register
+    int ax;  // accumulator register
     int cycle;
+    
+    // 构造函数
+    VCPU() : pc(0), sp(0), bp(0), ax(0), cycle(0) {
+        stack.resize(1024);  // 默认栈大小
+        data.resize(1024);   // 默认数据段大小
+    }
 };
 
 struct Execution
 {
+    enum class Status {
+        RUNNING,
+        STOPPED,
+        ERROR,
+        SYSCALL_PENDING
+    };
+    
+    Status status;
+    int exit_code;
+    std::string error_message;
+    
+    Execution() : status(Status::STOPPED), exit_code(0) {}
 };
 
 class VM
 {
   private:
-    VCPU cpu;
+    Execution exec;
+    std::unordered_map<std::string, int> external_functions;
+    
+    // 私有辅助方法
+    void push(int value);
+    int pop();
+    void execute_instruction();
+    void handle_syscall(int syscall_id);
+    bool check_bounds(int address, int size = 1);
 
   public:
+    VCPU cpu;  // 改为公有，方便测试和调试
     enum class ASM
     {
         SYSTEMCALL,
-        IMM,
-        LEA,
-        JMP,
-        JZ,
-        JNZ,
-        CALL,
-        NVAR,
-        DARG,
-        RET,
-        LI,
-        LC,
-        SI,
-        SC,
-        PUSH,
-        OR,
-        XOR,
-        AND,
-        EQ,
-        NE,
-        LT,
-        GT,
-        LE,
-        GE,
-        SHL,
-        SHR,
-        ADD,
-        SUB,
-        MUL,
-        DIV,
-        MOD,
+        IMM,        // 立即数压栈
+        LEA,        // 加载有效地址
+        JMP,        // 无条件跳转
+        JZ,         // 零跳转
+        JNZ,        // 非零跳转
+        CALL,       // 函数调用
+        NVAR,       // 新建局部变量
+        DARG,       // 删除参数
+        RET,        // 函数返回
+        LI,         // 从地址加载整数
+        LC,         // 从地址加载字符
+        SI,         // 存储整数到地址
+        SC,         // 存储字符到地址
+        PUSH,       // 压栈
+        OR,         // 逻辑或
+        XOR,        // 异或
+        AND,        // 逻辑与
+        EQ,         // 相等比较
+        NE,         // 不等比较
+        LT,         // 小于比较
+        GT,         // 大于比较
+        LE,         // 小于等于比较
+        GE,         // 大于等于比较
+        SHL,        // 左移
+        SHR,        // 右移
+        ADD,        // 加法
+        SUB,        // 减法
+        MUL,        // 乘法
+        DIV,        // 除法
+        MOD,        // 取模
     };
+    
     enum class systemcall
     {
         OPEN,
         READ,
         CLOS,
-        PRTF,
-        MALC,
-        FREE,
-        MSET,
-        MCMP,
-        EXIT,
+        PRTF,       // printf
+        MALC,       // malloc
+        FREE,       // free
+        MSET,       // memset
+        MCMP,       // memcmp
+        EXIT,       // exit
     };
-    int start()
-    {
-    }
+    
+    // 构造函数
+    VM();
+    
+    // 加载代码到虚拟机
+    void load_code(const std::vector<int>& code);
+    
+    // 从字符串格式的汇编代码加载
+    void load_assembly_string(const std::vector<std::string>& assembly);
+    
+    // 从stack格式加载汇编代码
+    void load_assembly_stack(std::stack<std::string> assembly_stack);
+    
+    // 执行虚拟机
+    int start();
+    
+    // 单步执行
+    bool step();
+    
+    // 重置虚拟机
+    void reset();
+    
+    // 获取执行状态
+    const Execution& get_execution_status() const { return exec; }
+    
+    // 调试功能
+    void dump_registers() const;
+    void dump_stack(int count = 10) const;
+    void dump_code(int start = 0, int count = 20) const;
+    
+    // 注册外部函数
+    void register_external_function(const std::string& name, int address);
 };

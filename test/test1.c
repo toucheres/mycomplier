@@ -11,8 +11,7 @@ int main()
     int b;
     test_var_a = 13;
     b = test_fun(test_var_a, 13);
-    printf("%d", b);
-    return 0;
+    return b + 1;
 }
 // TranslationUnitDecl 0x55776fe33ad8 <<invalid sloc>> <invalid sloc>
 // |-TypedefDecl 0x55776fe34308 <<invalid sloc>> <invalid sloc> implicit __int128_t '__int128'

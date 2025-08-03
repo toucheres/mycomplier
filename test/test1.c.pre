@@ -11,8 +11,7 @@ int main()
     int b;
     test_var_a = 13;
     b = test_fun(test_var_a, 13);
-    printf("%d", b);
-    return 0;
+    return b + 1;
 }
 
 

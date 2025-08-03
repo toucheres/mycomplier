@@ -43,6 +43,9 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     // 为函数创建新的作用域
     obj.var_defs_.into_new_namespace();
 
+    // 生成函数标签
+    obj.pushASM(VM::ASM::LEA, thisfun.addr); // 函数入口标签
+
     auto ret = try_parse_args(tokens, obj);
     if (!ret)
     {
@@ -66,6 +69,10 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     // 函数解析完成，退出函数作用域
     thisfun.defined = true;
     obj.var_defs_.outto_old_namespace();
+
+    // 注意：不在这里生成 RET，因为函数体中的 return 语句会生成
+    // 如果函数没有显式 return，编译器应该在语义分析阶段处理
+
     obj.fun_defs_.push(thisfun);
     return true;
 }
@@ -116,6 +123,14 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
 
         // 尝试解析 while 语句
         if (auto ret = try_parse_while(tokens, obj))
+        {
+            flag = true;
+            continue;
+        }
+        tokens.load();
+
+        // 尝试解析 return 语句
+        if (auto ret = try_parse_return(tokens, obj))
         {
             flag = true;
             continue;
@@ -317,6 +332,47 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
     return true;
 }
 
+std::expected<bool, error> Complier::try_parse_return(Tokens& tokens, obj& obj)
+{
+    tokens.save();
+    if (tokens.now().content != "return")
+    {
+        tokens.load();
+        return std::unexpected(error::expected_fenhao);
+    }
+    tokens.pos++;
+
+    // 检查是否有返回值表达式
+    if (!tokens.prase_over() && tokens.now().content != ";")
+    {
+        // 解析返回值表达式
+        auto ret = try_parse_expr(tokens, obj);
+        if (!ret)
+        {
+            tokens.load();
+            return std::unexpected(ret.error());
+        }
+    }
+    else
+    {
+        // 无返回值的 return 语句，压入 0 作为默认返回值
+        obj.pushASM(VM::ASM::IMM, 0);
+    }
+
+    // 检查分号
+    if (tokens.prase_over() || tokens.now().content != ";")
+    {
+        tokens.load();
+        return std::unexpected(error::expected_fenhao);
+    }
+    tokens.pos++;
+
+    // 生成返回指令 (表达式的结果已经在栈顶，直接返回)
+    obj.pushASM(VM::ASM::RET);
+
+    return true;
+}
+
 std::expected<bool, error> Complier::try_parse_expr(Tokens& tokens, obj& obj)
 {
     tokens.save();
@@ -328,34 +384,285 @@ std::expected<bool, error> Complier::try_parse_expr(Tokens& tokens, obj& obj)
         return std::unexpected(error::expected_fenhao);
     }
 
-    // 解析主表达式（primary expression）
-    auto ret = try_parse_primary(tokens, obj);
+    // 解析赋值表达式（最低优先级）
+    auto ret = try_parse_assignment_expr(tokens, obj);
     if (!ret)
     {
         tokens.load();
         return std::unexpected(ret.error());
     }
 
-    // 解析二元运算符表达式
-    while (!tokens.prase_over() && is_binary_operator(tokens.now().content))
-    {
-        std::string op = tokens.now().content;
-        tokens.pos++;
+    return true;
+}
 
-        auto ret2 = try_parse_primary(tokens, obj);
-        if (!ret2)
+// 解析赋值表达式
+std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, obj& obj)
+{
+    tokens.save();
+
+    // 先检查是否是简单的变量赋值: identifier = expression
+    if (tokens.now().can_be_id() && tokens.pos + 1 < tokens.size() &&
+        is_assignment_operator(tokens[tokens.pos + 1].content))
+    {
+        // 这是一个赋值表达式
+        std::string var_id = tokens.now().content;
+        tokens.pos++; // 跳过变量名
+
+        std::string op = tokens.now().content;
+        tokens.pos++; // 跳过赋值运算符
+
+        // 解析右值表达式
+        auto ret = try_parse_assignment_expr(tokens, obj);
+        if (!ret)
         {
             tokens.load();
-            return std::unexpected(ret2.error());
+            return ret;
         }
 
-        // 生成对应的汇编指令
-        generate_binary_op_asm(op, obj);
+        // 查找变量地址并生成存储指令
+        auto var_result = obj.var_defs_.find(var_id);
+        if (var_result)
+        {
+            obj.pushASM(VM::ASM::SI, var_result.value()->addr); // 存储到指定地址
+        }
+        else
+        {
+            obj.pushASM(VM::ASM::SI); // 存储到变量地址（地址待解析）
+        }
+
+        return true;
+    }
+
+    // 不是赋值表达式，按普通表达式处理
+    tokens.load();
+    return try_parse_logical_or_expr(tokens, obj);
+}
+
+// 解析逻辑或表达式
+std::expected<bool, error> Complier::try_parse_logical_or_expr(Tokens& tokens, obj& obj)
+{
+    auto ret = try_parse_logical_and_expr(tokens, obj);
+    if (!ret)
+        return ret;
+
+    while (!tokens.prase_over() && tokens.now().content == "||")
+    {
+        tokens.pos++;
+        auto ret2 = try_parse_logical_and_expr(tokens, obj);
+        if (!ret2)
+            return ret2;
+
+        obj.pushASM(VM::ASM::OR);
     }
 
     return true;
 }
 
+// 解析逻辑与表达式
+std::expected<bool, error> Complier::try_parse_logical_and_expr(Tokens& tokens, obj& obj)
+{
+    auto ret = try_parse_equality_expr(tokens, obj);
+    if (!ret)
+        return ret;
+
+    while (!tokens.prase_over() && tokens.now().content == "&&")
+    {
+        tokens.pos++;
+        auto ret2 = try_parse_equality_expr(tokens, obj);
+        if (!ret2)
+            return ret2;
+
+        obj.pushASM(VM::ASM::AND);
+    }
+
+    return true;
+}
+
+// 解析相等性表达式
+std::expected<bool, error> Complier::try_parse_equality_expr(Tokens& tokens, obj& obj)
+{
+    auto ret = try_parse_relational_expr(tokens, obj);
+    if (!ret)
+        return ret;
+
+    while (!tokens.prase_over() && (tokens.now().content == "==" || tokens.now().content == "!="))
+    {
+        std::string op = tokens.now().content;
+        tokens.pos++;
+        auto ret2 = try_parse_relational_expr(tokens, obj);
+        if (!ret2)
+            return ret2;
+
+        if (op == "==")
+            obj.pushASM(VM::ASM::EQ);
+        else if (op == "!=")
+            obj.pushASM(VM::ASM::NE);
+    }
+
+    return true;
+}
+
+// 解析关系表达式
+std::expected<bool, error> Complier::try_parse_relational_expr(Tokens& tokens, obj& obj)
+{
+    auto ret = try_parse_additive_expr(tokens, obj);
+    if (!ret)
+        return ret;
+
+    while (!tokens.prase_over() && is_relational_operator(tokens.now().content))
+    {
+        std::string op = tokens.now().content;
+        tokens.pos++;
+        auto ret2 = try_parse_additive_expr(tokens, obj);
+        if (!ret2)
+            return ret2;
+
+        if (op == "<")
+            obj.pushASM(VM::ASM::LT);
+        else if (op == ">")
+            obj.pushASM(VM::ASM::GT);
+        else if (op == "<=")
+            obj.pushASM(VM::ASM::LE);
+        else if (op == ">=")
+            obj.pushASM(VM::ASM::GE);
+    }
+
+    return true;
+}
+
+// 解析加法表达式
+std::expected<bool, error> Complier::try_parse_additive_expr(Tokens& tokens, obj& obj)
+{
+    auto ret = try_parse_multiplicative_expr(tokens, obj);
+    if (!ret)
+        return ret;
+
+    while (!tokens.prase_over() && (tokens.now().content == "+" || tokens.now().content == "-"))
+    {
+        std::string op = tokens.now().content;
+        tokens.pos++;
+        auto ret2 = try_parse_multiplicative_expr(tokens, obj);
+        if (!ret2)
+            return ret2;
+
+        if (op == "+")
+            obj.pushASM(VM::ASM::ADD);
+        else if (op == "-")
+            obj.pushASM(VM::ASM::SUB);
+    }
+
+    return true;
+}
+
+// 解析乘法表达式
+std::expected<bool, error> Complier::try_parse_multiplicative_expr(Tokens& tokens, obj& obj)
+{
+    auto ret = try_parse_unary_expr(tokens, obj);
+    if (!ret)
+        return ret;
+
+    while (!tokens.prase_over() && is_multiplicative_operator(tokens.now().content))
+    {
+        std::string op = tokens.now().content;
+        tokens.pos++;
+        auto ret2 = try_parse_unary_expr(tokens, obj);
+        if (!ret2)
+            return ret2;
+
+        if (op == "*")
+            obj.pushASM(VM::ASM::MUL);
+        else if (op == "/")
+            obj.pushASM(VM::ASM::DIV);
+        else if (op == "%")
+            obj.pushASM(VM::ASM::MOD);
+    }
+
+    return true;
+}
+
+// 解析一元表达式
+std::expected<bool, error> Complier::try_parse_unary_expr(Tokens& tokens, obj& obj)
+{
+    if (tokens.prase_over())
+    {
+        return std::unexpected(error::expected_fenhao);
+    }
+
+    // 一元运算符
+    if (is_unary_operator(tokens.now().content))
+    {
+        std::string op = tokens.now().content;
+        tokens.pos++;
+
+        auto ret = try_parse_unary_expr(tokens, obj); // 递归处理嵌套一元运算符
+        if (!ret)
+            return ret;
+
+        // 生成一元运算符汇编
+        if (op == "*")
+        {
+            // 解引用：从地址加载值
+            obj.pushASM(VM::ASM::LI);
+        }
+        else if (op == "&")
+        {
+            // 取地址：获取变量地址
+            obj.pushASM(VM::ASM::LEA);
+        }
+        else if (op == "-")
+        {
+            // 负号：0 - expr
+            obj.pushASM(VM::ASM::IMM, 0);
+            obj.pushASM(VM::ASM::SUB);
+        }
+        // TODO: 其他一元运算符 ! ~ ++ --
+
+        return true;
+    }
+
+    return try_parse_postfix_expr(tokens, obj);
+}
+
+// 解析后缀表达式（函数调用、数组访问等）
+std::expected<bool, error> Complier::try_parse_postfix_expr(Tokens& tokens, obj& obj)
+{
+    auto ret = try_parse_primary(tokens, obj);
+    if (!ret)
+        return ret;
+
+    while (!tokens.prase_over())
+    {
+        if (tokens.now().content == "[")
+        {
+            // 数组访问 expr[index]
+            tokens.pos++;
+            auto index_ret = try_parse_expr(tokens, obj);
+            if (!index_ret)
+                return index_ret;
+
+            if (tokens.prase_over() || tokens.now().content != "]")
+            {
+                return std::unexpected(error::expected_fenhao);
+            }
+            tokens.pos++;
+
+            // 生成数组访问汇编：base + index * sizeof(type)
+            obj.pushASM(VM::ASM::ADD); // 简化：假设 sizeof(type) = 1
+            obj.pushASM(VM::ASM::LI);  // 从计算出的地址加载值
+        }
+        else if (tokens.now().content == "(")
+        {
+            // 函数调用已在 try_parse_primary 中处理
+            break;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    return true;
+}
 std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
 {
     tokens.save();
@@ -435,13 +742,32 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
             }
 
             // 生成函数调用汇编
-            obj.pushASM(VM::ASM::CALL);
+            auto fun_result = obj.fun_defs_.find(id);
+            if (fun_result)
+            {
+                obj.pushASM(VM::ASM::CALL, fun_result.value().addr); // 调用指定地址的函数
+            }
+            else
+            {
+                // 未定义的函数（如 printf），生成系统调用或外部函数调用
+                obj.pushASM(VM::ASM::CALL);       // 调用外部函数（地址待链接时解析）
+                obj.pushASM(VM::ASM::SYSTEMCALL); // 标记为系统调用
+            }
             return true;
         }
         else
         {
-            // 变量引用
-            obj.pushASM(VM::ASM::LI); // 加载变量值
+            // 变量引用 - 需要查找变量地址
+            auto var_result = obj.var_defs_.find(id);
+            if (var_result)
+            {
+                obj.pushASM(VM::ASM::LI, var_result.value()->addr); // 加载指定地址的变量值
+            }
+            else
+            {
+                // 如果找不到变量，使用默认行为
+                obj.pushASM(VM::ASM::LI); // 加载变量值
+            }
             return true;
         }
     }
@@ -471,6 +797,28 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
 }
 
 // 辅助函数
+bool Complier::is_assignment_operator(const std::string& token)
+{
+    return token == "=" || token == "+=" || token == "-=" || token == "*=" || token == "/=" ||
+           token == "%=";
+}
+
+bool Complier::is_relational_operator(const std::string& token)
+{
+    return token == "<" || token == ">" || token == "<=" || token == ">=";
+}
+
+bool Complier::is_multiplicative_operator(const std::string& token)
+{
+    return token == "*" || token == "/" || token == "%";
+}
+
+bool Complier::is_unary_operator(const std::string& token)
+{
+    return token == "*" || token == "&" || token == "!" || token == "~" || token == "++" ||
+           token == "--" || token == "+" || token == "-";
+}
+
 bool Complier::is_binary_operator(const std::string& token)
 {
     return token == "+" || token == "-" || token == "*" || token == "/" || token == "==" ||
@@ -569,7 +917,7 @@ std::expected<bool, error> Complier::try_parse_var(Tokens& tokens, obj& obj)
     return true;
 }
 
-int Complier::process(std::vector<std::string> args)
+std::expected<obj, error> Complier::process(std::vector<std::string> args)
 {
     std::vector<obj> objs;
     objs.reserve(args.size());
@@ -578,13 +926,32 @@ int Complier::process(std::vector<std::string> args)
         auto ret = eachFile(each);
         if (!ret)
         {
-            return -1;
+            return std::unexpected(error::failed);
         }
         objs.push_back(ret.value());
     }
+
+    if (objs.empty())
+    {
+        std::cerr << "No objects to process" << std::endl;
+        return std::unexpected(error::failed);
+    }
+
+    // 输出字符串格式的汇编代码（原来的格式）
+    // std::stack<std::string> tp;
+    // auto size = objs[0].content.size();
+    // for (auto i = 0; i < size; objs[0].content.pop(), i++)
+    // {
+    //     tp.push(objs[0].content.top());
+    // }
+    // for (auto i = 0; i < size; i++, tp.pop())
+    // {
+    //     std::cout << tp.top() << '\n';
+    // }
+
     // 链接阶段 - 这里可以实现链接逻辑
     // 例如：合并所有 obj 的符号表、解析外部引用等
-    return 0;
+    return objs[0];
 }
 
 std::expected<obj, error> Complier::eachFile(std::string path)
