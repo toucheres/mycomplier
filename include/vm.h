@@ -4,14 +4,15 @@
 #include <stack>
 #include <unordered_map>
 #include <string>
+#include <fstream>
 
 struct VCPU
 {
-    std::vector<int> code;      // code segment
-    std::vector<int> stack;     // stack segment
-    std::vector<char> data;     // data segment
+    std::vector<std::string> assembly_code;  // 直接存储汇编指令字符串
+    std::vector<int> stack;                  // stack segment
+    std::vector<char> data;                  // data segment
 
-    int pc;  // program counter
+    int pc;  // program counter (现在是assembly_code的索引)
     int sp;  // stack pointer
     int bp;  // base pointer
 
@@ -47,12 +48,21 @@ class VM
     Execution exec;
     std::unordered_map<std::string, int> external_functions;
     
+    // 调试相关
+    bool debug_enabled;
+    std::ofstream debug_log;
+    int step_count;
+    
     // 私有辅助方法
     void push(int value);
     int pop();
     void execute_instruction();
     void handle_syscall(int syscall_id);
     bool check_bounds(int address, int size = 1);
+    
+    // 调试方法
+    void log_step_info();
+    std::string get_instruction_name(int instruction_code);
 
   public:
     VCPU cpu;  // 改为公有，方便测试和调试
@@ -110,7 +120,10 @@ class VM
     // 加载代码到虚拟机
     void load_code(const std::vector<int>& code);
     
-    // 从字符串格式的汇编代码加载
+    // 直接加载汇编指令数组（新的主要方法）
+    void load_assembly_vector(const std::vector<std::string>& assembly);
+    
+    // 从字符串格式的汇编代码加载（保留兼容性）
     void load_assembly_string(const std::vector<std::string>& assembly);
     
     // 从stack格式加载汇编代码
@@ -135,4 +148,8 @@ class VM
     
     // 注册外部函数
     void register_external_function(const std::string& name, int address);
+    
+    // 调试功能
+    void enable_debug(const std::string& log_filename = "vm_debug.log");
+    void disable_debug();
 };

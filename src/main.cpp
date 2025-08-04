@@ -13,9 +13,28 @@ int main()
         return -1;
     }
 
-    auto asms = ret.value().content;
+    // 使用新的vector接口
+    auto assembly_vector = ret.value().get_assembly_vector();
+    
+    // 输出汇编代码
+    std::cout << "Generated Assembly:" << std::endl;
+    for (size_t i = 0; i < assembly_vector.size(); ++i) {
+        std::cout << "[" << i << "] " << assembly_vector[i] << std::endl;
+    }
+    std::cout << std::endl;
+    
     VM vm;
-    vm.load_assembly_stack(asms);
-    std::cout << vm.start() << '\n';
+    
+    // 启用调试功能
+    vm.enable_debug("vm_execution.log");
+    
+    vm.load_assembly_vector(assembly_vector);
+    std::cout << "ret: " << vm.start() << '\n';
+    
+    // 关闭调试功能
+    vm.disable_debug();
+    
+    std::cout << "Debug log saved to: vm_execution.log" << std::endl;
+    
     return 0;
 }

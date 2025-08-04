@@ -73,12 +73,15 @@ struct obj
 {
     var_defs var_defs_; // 统一的变量定义容器，包含全局和局部变量
     fun_defs fun_defs_;
-    std::stack<std::string> content; // 恢复为字符串格式
+    std::vector<std::string> content; // 改为vector格式，便于调试
     
     // 源在前，目标在后
     void pushASM(VM::ASM ASM);
     void pushASM(VM::ASM ASM, int arg);
     void pushASM(VM::ASM ASM, int src, int obj);
+    
+    // 获取vector格式的汇编代码（现在直接返回content）
+    const std::vector<std::string>& get_assembly_vector() const;
 };
 class Complier
 {

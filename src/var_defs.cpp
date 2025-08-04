@@ -39,14 +39,14 @@ std::expected<bool, error> fun_defs::push(fun_def fun_def)
     }
     fun_defines.push_back(fun_def);
 
-    std::cout << "fun_def:\n";
-    std::cout << "addr:" << fun_def.addr << " id:" << fun_def.id
-              << " type:" << (int)fun_def.type.bt;
-    for (int i = 0; i < fun_def.type.ptr_lay; i++)
-    {
-        std::cout << "*";
-    }
-    std::cout << '\n';
+    // std::cout << "fun_def:\n";
+    // std::cout << "addr:" << fun_def.addr << " id:" << fun_def.id
+    //           << " type:" << (int)fun_def.type.bt;
+    // for (int i = 0; i < fun_def.type.ptr_lay; i++)
+    // {
+    //     std::cout << "*";
+    // }
+    // std::cout << '\n';
     return true;
 }
 
@@ -102,14 +102,14 @@ std::expected<bool, error> var_defs::push(var_def var_def_)
         {
             stack_size += Type::size_of_type(Basic_Type::INT);
         }
-        std::cout << "var: \n";
-        std::cout << "addr:" << var_def_.addr << " id:" << var_def_.id
-                  << " type:" << (int)var_def_.type.bt;
-        for (size_t i = 0; i < var_def_.type.ptr_lay; i++)
-        {
-            std::cout << "*";
-        }
-        std::cout << "\n";
+        // std::cout << "var: \n";
+        // std::cout << "addr:" << var_def_.addr << " id:" << var_def_.id
+        //           << " type:" << (int)var_def_.type.bt;
+        // for (size_t i = 0; i < var_def_.type.ptr_lay; i++)
+        // {
+        //     std::cout << "*";
+        // }
+        // std::cout << "\n";
         return true;
     }
     else
@@ -137,14 +137,14 @@ std::expected<bool, error> var_defs::push_arg(var_def var_def)
         {
             stack_size += Type::size_of_type(Basic_Type::INT);
         }
-        std::cout << "arg: \n";
-        std::cout << "addr:" << var_def.addr << " id:" << var_def.id
-                  << " type:" << (int)var_def.type.bt;
-        for (size_t i = 0; i < var_def.type.ptr_lay; i++)
-        {
-            std::cout << "*";
-        }
-        std::cout << "\n";
+        // std::cout << "arg: \n";
+        // std::cout << "addr:" << var_def.addr << " id:" << var_def.id
+        //           << " type:" << (int)var_def.type.bt;
+        // for (size_t i = 0; i < var_def.type.ptr_lay; i++)
+        // {
+        //     std::cout << "*";
+        // }
+        // std::cout << "\n";
     }
     return ret;
 }

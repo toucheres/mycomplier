@@ -11,7 +11,6 @@
 std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
 {
     fun_def thisfun;
-    thisfun.addr = obj.content.size();
     tokens.save();
     if (auto ret = tokens.now().is_type())
     {
@@ -43,8 +42,11 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     // 为函数创建新的作用域
     obj.var_defs_.into_new_namespace();
 
-    // 生成函数标签
-    obj.pushASM(VM::ASM::LEA, thisfun.addr); // 函数入口标签
+    // 函数地址是LEA指令的位置
+    thisfun.addr = obj.content.size();
+
+    // 生成函数标签 - LEA指令的参数指向LEA指令之后的位置
+    obj.pushASM(VM::ASM::LEA, thisfun.addr + 1);
 
     auto ret = try_parse_args(tokens, obj);
     if (!ret)
@@ -957,6 +959,10 @@ std::expected<obj, error> Complier::process(std::vector<std::string> args)
 std::expected<obj, error> Complier::eachFile(std::string path)
 {
     obj obj;
+
+    // 为程序入口点预留空间
+    obj.pushASM(VM::ASM::JMP, 0); // 临时占位，稍后会更新地址
+
     Preprocessor p;
     auto ret = p.process(path, path + ".pre");
     if (!ret)
@@ -997,5 +1003,29 @@ std::expected<obj, error> Complier::eachFile(std::string path)
         }
     }
 
+    // 更新程序入口点的跳转地址
+    auto main_fun = obj.fun_defs_.find("main");
+    if (main_fun)
+    {
+        // 使用main函数记录的地址，但这次是基于vector下标的
+        int main_addr = main_fun.value().addr;
+
+        // 更新第一条指令的参数为main函数地址
+        if (!obj.content.empty())
+        {
+            std::stack<std::string> temp_content;
+            std::string first_instruction;
+
+            // 取出第一条指令
+            first_instruction = obj.content[0];
+            auto ret = first_instruction.find_first_of("JMP");
+            if (ret != std::string::npos)
+            {
+                first_instruction.pop_back();
+                first_instruction += std::to_string(main_addr);
+                obj.content[0] = first_instruction;
+            }
+        }
+    }
     return obj;
 }
