@@ -71,7 +71,8 @@ struct var_defs
 };
 struct obj
 {
-    var_defs var_defs_; // 统一的变量定义容器，包含全局和局部变量
+    var_defs global_var_defs_; // 统一的变量定义容器，包含全局变量
+    var_defs func_var_defs_; // 统一的变量定义容器，包含函数局部变量关于函数起始的偏移
     fun_defs fun_defs_;
     std::vector<std::string> content; // 改为vector格式，便于调试
     
@@ -102,7 +103,8 @@ class Complier
     static std::expected<bool, error> try_parse_while(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_if(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_return(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_var(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_global_var(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_func_var(Tokens& tokens, obj& obj);
 
     // 辅助函数
     static bool is_binary_operator(const std::string& token);

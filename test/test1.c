@@ -9,10 +9,35 @@ int main()
 {
     int test_var_a;
     int b;
+    b = 12;
     test_var_a = 13;
-    b = test_fun(test_var_a, 13);
-    return b + 1;
+    // b = test_fun(test_var_a, 13);
+    // 12 + 13 * 2 + 14;
+    return b + test_var_a * 2 + 14;
 }
+// [0] JMP 12
+// [1] LEA 2
+// [2] IMM 100
+// [3] SI 8
+// [4] LI 0
+// [5] LI 4
+// [6] IMM 2
+// [7] MUL
+// [8] ADD
+// [9] LI 8
+// [10] ADD
+// [11] RET
+// [12] LEA 13
+// [13] IMM 13
+// [14] SI 0
+// [15] LI 0
+// [16] IMM 13
+// [17] CALL 1
+// [18] SI 4
+// [19] LI 4
+// [20] IMM 1
+// [21] ADD
+// [22] RET
 // TranslationUnitDecl 0x55776fe33ad8 <<invalid sloc>> <invalid sloc>
 // |-TypedefDecl 0x55776fe34308 <<invalid sloc>> <invalid sloc> implicit __int128_t '__int128'
 // | `-BuiltinType 0x55776fe340a0 '__int128'

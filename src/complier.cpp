@@ -40,7 +40,7 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     }
 
     // 为函数创建新的作用域
-    obj.var_defs_.into_new_namespace();
+    obj.global_var_defs_.into_new_namespace();
 
     // 函数地址是LEA指令的位置
     thisfun.addr = obj.content.size();
@@ -51,7 +51,7 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     auto ret = try_parse_args(tokens, obj);
     if (!ret)
     {
-        obj.var_defs_.outto_old_namespace(); // 退出函数作用域
+        obj.global_var_defs_.outto_old_namespace(); // 退出函数作用域
         tokens.load();
         return std::unexpected(ret.error());
     }
@@ -63,14 +63,14 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     auto ret2 = try_parse_block(tokens, obj);
     if (!ret2)
     {
-        obj.var_defs_.outto_old_namespace(); // 退出函数作用域
+        obj.global_var_defs_.outto_old_namespace(); // 退出函数作用域
         tokens.load();
         return std::unexpected(ret2.error());
     }
 
     // 函数解析完成，退出函数作用域
     thisfun.defined = true;
-    obj.var_defs_.outto_old_namespace();
+    obj.global_var_defs_.outto_old_namespace();
 
     // 注意：不在这里生成 RET，因为函数体中的 return 语句会生成
     // 如果函数没有显式 return，编译器应该在语义分析阶段处理
@@ -97,7 +97,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
         // 遇到下一个作用域
         if (tokens.now().content == "{")
         {
-            obj.var_defs_.into_new_namespace();
+            obj.global_var_defs_.into_new_namespace();
             return try_parse_block(tokens, obj);
         }
         // 检查是否到达结束大括号
@@ -108,7 +108,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
         }
 
         // 尝试解析变量声明
-        if (auto ret = try_parse_var(tokens, obj))
+        if (auto ret = try_parse_global_var(tokens, obj))
         {
             flag = true;
             continue;
@@ -209,7 +209,7 @@ std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens,
             arg.id = tokens.now().content;
             arg.type = type;
             argtypes.push_back(type);
-            obj.var_defs_.push_arg(arg);
+            obj.global_var_defs_.push_arg(arg);
             tokens.pos++;
         }
         else
@@ -422,7 +422,7 @@ std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, o
         }
 
         // 查找变量地址并生成存储指令
-        auto var_result = obj.var_defs_.find(var_id);
+        auto var_result = obj.global_var_defs_.find(var_id);
         if (var_result)
         {
             obj.pushASM(VM::ASM::SI, var_result.value()->addr); // 存储到指定地址
@@ -760,7 +760,7 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
         else
         {
             // 变量引用 - 需要查找变量地址
-            auto var_result = obj.var_defs_.find(id);
+            auto var_result = obj.global_var_defs_.find(id);
             if (var_result)
             {
                 obj.pushASM(VM::ASM::LI, var_result.value()->addr); // 加载指定地址的变量值
@@ -866,7 +866,7 @@ void Complier::generate_binary_op_asm(const std::string& op, obj& obj)
         obj.pushASM(VM::ASM::SI); // 赋值
 }
 
-std::expected<bool, error> Complier::try_parse_var(Tokens& tokens, obj& obj)
+std::expected<bool, error> Complier::try_parse_global_var(Tokens& tokens, obj& obj)
 {
     tokens.save();
 
@@ -902,7 +902,60 @@ std::expected<bool, error> Complier::try_parse_var(Tokens& tokens, obj& obj)
         var.id = tokens.now().content;
         var.defined = true;
         var.type = type;
-        auto push_ret = obj.var_defs_.push(var);
+        auto push_ret = obj.global_var_defs_.push(var);
+        if (!push_ret)
+        {
+            tokens.load();
+            return std::unexpected(error::doubledefined);
+        }
+        tokens.pos += 2; // 跳过标识符和分号
+    }
+    else
+    {
+        tokens.load();
+        return std::unexpected(error::illageid);
+    }
+
+    return true;
+}
+
+std::expected<bool, error> Complier::try_parse_func_var(Tokens& tokens, obj& obj)
+{
+    tokens.save();
+
+    // 检查边界
+    if (tokens.prase_over())
+    {
+        tokens.load();
+        return std::unexpected(error::unkowntype);
+    }
+
+    auto ret = tokens.now().is_type();
+    if (!ret)
+    {
+        tokens.load();
+        return std::unexpected(error::unkowntype);
+    }
+
+    Type type{ret.value()};
+    tokens.pos++;
+
+    // 检查指针层数
+    while (!tokens.prase_over() && tokens.now().content == "*")
+    {
+        type.ptr_lay++;
+        tokens.pos++;
+    }
+
+    // 检查标识符和分号
+    if (!tokens.prase_over() && tokens.now().can_be_id() && tokens.pos + 1 < tokens.size() &&
+        tokens[tokens.pos + 1].content == ";")
+    {
+        var_def var;
+        var.id = tokens.now().content;
+        var.defined = true;
+        var.type = type;
+        auto push_ret = obj.func_var_defs_.push(var);
         if (!push_ret)
         {
             tokens.load();
@@ -981,7 +1034,7 @@ std::expected<obj, error> Complier::eachFile(std::string path)
         tokens.save();
 
         // 尝试解析变量声明
-        if (auto result = try_parse_var(tokens, obj))
+        if (auto result = try_parse_global_var(tokens, obj))
         {
             continue;
         }

@@ -9,10 +9,35 @@ int main()
 {
     int test_var_a;
     int b;
+    b = 12;
     test_var_a = 13;
-    b = test_fun(test_var_a, 13);
-    return b + 1;
+    
+    
+    return b + test_var_a * 2 + 14;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

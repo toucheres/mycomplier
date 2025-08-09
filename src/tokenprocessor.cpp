@@ -32,7 +32,6 @@ bool Token::can_be_id()
 std::optional<Basic_Type> Token::is_type()
 {
     if (content == "int") return Basic_Type::INT;
-    if (content == "char") return Basic_Type::CHAR;
     return std::nullopt;
 }
 std::expected<Tokens, error> Tokenprocessor::process(const std::string& src_path)

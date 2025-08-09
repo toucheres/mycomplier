@@ -3,7 +3,6 @@
 enum class Basic_Type
 {
     INT,
-    CHAR
 };
 struct Type
 {
