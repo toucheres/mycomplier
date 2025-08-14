@@ -7,12 +7,29 @@
 #include <tokenprocessor.h>
 #include <vector>
 #include <vm.h>
-// GLOBAL = var_decl | var_def | fun_decl | fun_def
-// type = int/char [*]
-// var_decl = type id;
-// fun_decl = type id([type id,]);
-// fun_def = type id([type id,]){statements};
+// 只支持int[*]类型
+// 将一个int作为内存最小单位,指针,int大小均为1
+// 函数调用:
+// 调用fun(int a,int b,...)
+//caller中:
+// 计算a
+// push a    stack: a
+// 计算b
+// push b    stack: a   b
+//...
+// call addr<fun> 压入pc+1 压入bp bp=sp jump-addr<fun>  stack: a   b  ...  opc+1  obp
+//                                                                          bp
 
+    //fun中: a=bp[-n] b=bp[-(n-1)]... retaddr=bp[0] obp=bp[1]
+    //ret ax携带返回值,jump bp[0]
+
+// nargs n  弹出n个参数
+// [可选] ax->stack
+
+// 编译时的空间分配:
+// 全局var:直接访问  LEAG + 数 访问
+// funvar:bp+偏移   LEA + 数 访问
+// funvar初始stack为1,为opc+1预留位置
 struct id_def
 {
     size_t addr;
@@ -53,7 +70,8 @@ struct var_defs
             var_def var_def); // 在push中处理重定义: 每层namespace变量声明只能一次
     };
     std::vector<eachnamespace> namespace_defines;
-    size_t stack_size = 0;
+    size_t dy_stack_size = 0;
+    size_t max_stack_size = 0;
     size_t old_stack_size = 0;
 
   public:
@@ -65,9 +83,11 @@ struct var_defs
 
     std::expected<var_def*, error> find(const std::string& id);
     std::expected<bool, error> push(var_def var_def);
-    std::expected<bool, error> push_arg(var_def var_def);
+    std::expected<bool, error> push_func_args(var_def var_def);
     void into_new_namespace();
+    size_t get_max_size();
     void outto_old_namespace();
+    void clear();
 };
 struct obj
 {

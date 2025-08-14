@@ -35,46 +35,52 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     }
     else
     {
+        obj.func_var_defs_.outto_old_namespace();
         tokens.load();
         return std::unexpected(error::illageid);
     }
-
     // 为函数创建新的作用域
-    obj.global_var_defs_.into_new_namespace();
-
-    // 函数地址是LEA指令的位置
+    obj.func_var_defs_.clear();
+    obj.func_var_defs_.into_new_namespace();
     thisfun.addr = obj.content.size();
-
-    // 生成函数标签 - LEA指令的参数指向LEA指令之后的位置
-    obj.pushASM(VM::ASM::LEA, thisfun.addr + 1);
-
     auto ret = try_parse_args(tokens, obj);
     if (!ret)
     {
-        obj.global_var_defs_.outto_old_namespace(); // 退出函数作用域
+        obj.func_var_defs_.into_new_namespace();
         tokens.load();
         return std::unexpected(ret.error());
     }
     else
     {
         thisfun.argtypes = ret.value();
+        // 为返回地址预留
+        var_def retaddr{};
+        retaddr.id = "returnaddr";
+        retaddr.type = Type{Basic_Type::INT};
+        obj.func_var_defs_.push(retaddr);
+        // 为oldbp预留
+        retaddr.id = "oldbp";
+        obj.func_var_defs_.push(retaddr);
     }
+
+    obj.pushASM(VM::ASM::HOLD); // 占位
+    // std::cout << "do once\n";
+    auto nvar_pos = obj.content.size();
 
     auto ret2 = try_parse_block(tokens, obj);
     if (!ret2)
     {
-        obj.global_var_defs_.outto_old_namespace(); // 退出函数作用域
+        obj.func_var_defs_.outto_old_namespace();
+
         tokens.load();
         return std::unexpected(ret2.error());
     }
-
+    obj.func_var_defs_.outto_old_namespace();
+    obj.content[nvar_pos - 1] = std::format("NVAR {}", obj.func_var_defs_.get_max_size());
     // 函数解析完成，退出函数作用域
     thisfun.defined = true;
-    obj.global_var_defs_.outto_old_namespace();
-
     // 注意：不在这里生成 RET，因为函数体中的 return 语句会生成
     // 如果函数没有显式 return，编译器应该在语义分析阶段处理
-
     obj.fun_defs_.push(thisfun);
     return true;
 }
@@ -97,7 +103,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
         // 遇到下一个作用域
         if (tokens.now().content == "{")
         {
-            obj.global_var_defs_.into_new_namespace();
+            obj.func_var_defs_.into_new_namespace();
             return try_parse_block(tokens, obj);
         }
         // 检查是否到达结束大括号
@@ -108,7 +114,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
         }
 
         // 尝试解析变量声明
-        if (auto ret = try_parse_global_var(tokens, obj))
+        if (auto ret = try_parse_func_var(tokens, obj))
         {
             flag = true;
             continue;
@@ -209,7 +215,7 @@ std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens,
             arg.id = tokens.now().content;
             arg.type = type;
             argtypes.push_back(type);
-            obj.global_var_defs_.push_arg(arg);
+            obj.func_var_defs_.push_func_args(arg);
             tokens.pos++;
         }
         else
@@ -422,14 +428,23 @@ std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, o
         }
 
         // 查找变量地址并生成存储指令
-        auto var_result = obj.global_var_defs_.find(var_id);
+        auto var_result = obj.func_var_defs_.find(var_id);
         if (var_result)
         {
-            obj.pushASM(VM::ASM::SI, var_result.value()->addr); // 存储到指定地址
+            obj.pushASM(VM::ASM::LEA, var_result.value()->addr); // 取bp+bias
+            obj.pushASM(VM::ASM::SI);                            // 存储到指定地址
         }
         else
         {
-            obj.pushASM(VM::ASM::SI); // 存储到变量地址（地址待解析）
+            var_result = obj.global_var_defs_.find(var_id);
+            if (var_result)
+            {
+                obj.pushASM(VM::ASM::SI, var_result.value()->addr);
+            }
+            else
+            {
+                return std::unexpected(error::undefinedvar);
+            }
         }
 
         return true;
@@ -751,8 +766,7 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
             }
             else
             {
-                // 未定义的函数（如 printf），生成系统调用或外部函数调用
-                obj.pushASM(VM::ASM::CALL);       // 调用外部函数（地址待链接时解析）
+                // 未定义的函数（如 printf），生成系统调用
                 obj.pushASM(VM::ASM::SYSTEMCALL); // 标记为系统调用
             }
             return true;
@@ -760,15 +774,25 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
         else
         {
             // 变量引用 - 需要查找变量地址
-            auto var_result = obj.global_var_defs_.find(id);
+            auto var_result = obj.func_var_defs_.find(id);
+            // auto var_result = obj.global_var_defs_.find(id);
             if (var_result)
             {
-                obj.pushASM(VM::ASM::LI, var_result.value()->addr); // 加载指定地址的变量值
+                obj.pushASM(VM::ASM::LEA, var_result.value()->addr); // 压入bp+局部变量偏移
+                obj.pushASM(VM::ASM::LI);                            // 加载指定地址的变量值
             }
             else
             {
-                // 如果找不到变量，使用默认行为
-                obj.pushASM(VM::ASM::LI); // 加载变量值
+                // func局部如果找不到变量，尝试全局
+                var_result = obj.global_var_defs_.find(id);
+                if (var_result)
+                {
+                    obj.pushASM(VM::ASM::LI, var_result.value()->addr); // 加载变量值
+                }
+                else
+                {
+                    std::unexpected(error::undefinedvar);
+                }
             }
             return true;
         }

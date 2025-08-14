@@ -70,9 +70,10 @@ void VM::reset()
     // 清空栈和数据段
     std::fill(cpu.stack.begin(), cpu.stack.end(), 0);
     std::fill(cpu.data.begin(), cpu.data.end(), 0);
-    
+
     // 记录重置信息到调试日志
-    if (debug_enabled && debug_log.is_open()) {
+    if (debug_enabled && debug_log.is_open())
+    {
         debug_log << "=== VM Reset ===" << std::endl;
         debug_log << std::endl;
     }
@@ -140,7 +141,8 @@ bool VM::step()
     }
 
     // 记录调试信息（在执行指令之前）
-    if (debug_enabled) {
+    if (debug_enabled)
+    {
         step_count++;
         log_step_info();
     }
@@ -161,22 +163,25 @@ void VM::execute_instruction()
     }
 
     std::string line = cpu.assembly_code[cpu.pc++];
-    
+
     // 解析指令和参数
     size_t space_pos = line.find(' ');
     std::string instruction;
     std::string arg_str;
     int arg = 0;
     bool has_arg = false;
-    
+
     if (space_pos != std::string::npos)
     {
         instruction = line.substr(0, space_pos);
         arg_str = line.substr(space_pos + 1);
-        try {
+        try
+        {
             arg = std::stoi(arg_str);
             has_arg = true;
-        } catch (const std::exception&) {
+        }
+        catch (const std::exception&)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "Invalid argument format: " + line;
             return;
@@ -188,68 +193,104 @@ void VM::execute_instruction()
     }
 
     // 执行指令
-    if (instruction == "IMM") {
-        if (!has_arg) {
+    if (instruction == "IMM")
+    {
+        if (!has_arg)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "IMM: Missing immediate value";
             return;
         }
         push(arg);
     }
-    else if (instruction == "LEA") {
-        if (!has_arg) {
+    else if (instruction == "NVAR")
+    {
+        if (!has_arg)
+        {
+            exec.status = Execution::Status::ERROR;
+            exec.error_message = "IMM: Missing immediate value";
+            return;
+        }
+        for (size_t i = 0; i < arg; i++)
+        {
+            push(0);
+        }
+    }
+    else if (instruction == "LEA")
+    {
+        if (!has_arg)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "LEA: Missing address";
             return;
         }
-        push(arg);
+        push(arg + cpu.bp);
     }
-    else if (instruction == "LI") {
-        if (has_arg) {
+    else if (instruction == "LI")
+    {
+        if (has_arg)
+        {
             // 使用指令中的地址参数
-            if (check_bounds(arg, sizeof(int))) {
-                int value = *reinterpret_cast<int*>(&cpu.data[arg]);
+            if (check_bounds(arg, 1))
+            {
+                int value = *reinterpret_cast<int*>(&cpu.stack[arg]);
                 push(value);
             }
-        } else {
+        }
+        else
+        {
             // 从栈中获取地址
-            if (cpu.sp > 0) {
+            if (cpu.sp > 0)
+            {
                 int addr = pop();
-                if (check_bounds(addr, sizeof(int))) {
-                    int value = *reinterpret_cast<int*>(&cpu.data[addr]);
+                if (check_bounds(addr, 1))
+                {
+                    int value = *reinterpret_cast<int*>(&cpu.stack[addr]);
                     push(value);
                 }
-            } else {
+            }
+            else
+            {
                 exec.status = Execution::Status::ERROR;
                 exec.error_message = "LI: No address available";
             }
         }
     }
-    else if (instruction == "SI") {
-        if (cpu.sp < 1) {
+    else if (instruction == "SI")
+    {
+        if (cpu.sp < 1)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "SI: Not enough values on stack";
             return;
         }
-        int value = pop();
-        int addr;
-        
-        if (has_arg) {
-            addr = arg;
-        } else if (cpu.sp > 0) {
-            addr = pop();
-        } else {
+        int addr = pop();
+        int value;
+
+        if (has_arg)
+        {
+            value = arg;
+        }
+        else if (cpu.sp > 0)
+        {
+            value = pop();
+        }
+        else
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "SI: No address available";
             return;
         }
-        
-        if (check_bounds(addr, sizeof(int))) {
-            *reinterpret_cast<int*>(&cpu.data[addr]) = value;
+
+        if (check_bounds(value, sizeof(int)))
+        {
+            *reinterpret_cast<int*>(&cpu.stack[addr]) = value;
         }
     }
-    else if (instruction == "ADD") {
-        if (cpu.sp < 2) {
+    else if (instruction == "ADD")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "ADD: Not enough operands";
             return;
@@ -258,8 +299,10 @@ void VM::execute_instruction()
         int a = pop();
         push(a + b);
     }
-    else if (instruction == "SUB") {
-        if (cpu.sp < 2) {
+    else if (instruction == "SUB")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "SUB: Not enough operands";
             return;
@@ -268,8 +311,10 @@ void VM::execute_instruction()
         int a = pop();
         push(a - b);
     }
-    else if (instruction == "MUL") {
-        if (cpu.sp < 2) {
+    else if (instruction == "MUL")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "MUL: Not enough operands";
             return;
@@ -278,94 +323,119 @@ void VM::execute_instruction()
         int a = pop();
         push(a * b);
     }
-    else if (instruction == "DIV") {
-        if (cpu.sp < 2) {
+    else if (instruction == "DIV")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "DIV: Not enough operands";
             return;
         }
         int b = pop();
         int a = pop();
-        if (b == 0) {
+        if (b == 0)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "Division by zero";
             return;
         }
         push(a / b);
     }
-    else if (instruction == "JMP") {
-        if (!has_arg) {
+    else if (instruction == "JMP")
+    {
+        if (!has_arg)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "JMP: Missing target address";
             return;
         }
         cpu.pc = arg;
     }
-    else if (instruction == "JZ") {
-        if (!has_arg) {
+    else if (instruction == "JZ")
+    {
+        if (!has_arg)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "JZ: Missing target address";
             return;
         }
-        if (cpu.sp > 0) {
+        if (cpu.sp > 0)
+        {
             int value = pop();
-            if (value == 0) {
+            if (value == 0)
+            {
                 cpu.pc = arg;
             }
-        } else {
+        }
+        else
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "JZ: No value on stack";
         }
     }
-    else if (instruction == "JNZ") {
-        if (!has_arg) {
+    else if (instruction == "JNZ")
+    {
+        if (!has_arg)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "JNZ: Missing target address";
             return;
         }
-        if (cpu.sp > 0) {
+        if (cpu.sp > 0)
+        {
             int value = pop();
-            if (value != 0) {
+            if (value != 0)
+            {
                 cpu.pc = arg;
             }
-        } else {
+        }
+        else
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "JNZ: No value on stack";
         }
     }
-    else if (instruction == "CALL") {
-        if (!has_arg) {
+    else if (instruction == "CALL")
+    {
+        if (!has_arg)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "CALL: Missing function address";
             return;
         }
-        push(cpu.pc);  // 保存返回地址
+        push(cpu.pc); // 保存下一条返回地址,pc先自增再执行指令，无需加1
+        push(cpu.bp); // 保存旧bp
         cpu.pc = arg;
     }
-    else if (instruction == "RET") {
-        if (cpu.sp > 0) {
-            int value = pop();
-            
-            // 检查这个值是否是合理的代码地址
-            if (value >= 0 && value < static_cast<int>(cpu.assembly_code.size())) {
-                // 看起来是返回地址，跳转过去
-                cpu.pc = value;
-            } else {
-                // 不是有效的代码地址，可能是返回值，程序结束
-                exec.exit_code = value;
-                exec.status = Execution::Status::STOPPED;
-            }
-        } else {
-            // 栈为空，程序结束
+    // call addr<fun> 压入pc+1 压入bp bp=sp jump-addr<fun>  stack: a   b  ...  opc+1  obp
+    //                                                                          bp
+    else if (instruction == "RET")
+    {
+        if (cpu.bp != 0)
+        {
+            cpu.pc = cpu.stack[cpu.bp];     // retaddr
+            cpu.ax = pop();                 // 临时存储返回值到ax
+            cpu.sp = cpu.bp;                // 恢复sp
+            cpu.bp = cpu.stack[cpu.sp + 1]; // 恢复bp
+            pop();                          // 弹出opc+1
+            push(cpu.ax);                   // 推入ret
+        }
+        else
+        {
+            // main函数ret
+            exec.exit_code = pop();
             exec.status = Execution::Status::STOPPED;
         }
     }
-    else if (instruction == "DARG") {
+    else if (instruction == "DARG")
+    {
         // 删除参数 - 这里实现为空操作
         // 在实际编译器中，这可能涉及栈指针的调整
     }
-    else if (instruction == "EQ") {
-        if (cpu.sp < 2) {
+    else if (instruction == "EQ")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "EQ: Not enough operands";
             return;
@@ -374,8 +444,10 @@ void VM::execute_instruction()
         int a = pop();
         push(a == b ? 1 : 0);
     }
-    else if (instruction == "NE") {
-        if (cpu.sp < 2) {
+    else if (instruction == "NE")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "NE: Not enough operands";
             return;
@@ -384,8 +456,10 @@ void VM::execute_instruction()
         int a = pop();
         push(a != b ? 1 : 0);
     }
-    else if (instruction == "LT") {
-        if (cpu.sp < 2) {
+    else if (instruction == "LT")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "LT: Not enough operands";
             return;
@@ -394,8 +468,10 @@ void VM::execute_instruction()
         int a = pop();
         push(a < b ? 1 : 0);
     }
-    else if (instruction == "GT") {
-        if (cpu.sp < 2) {
+    else if (instruction == "GT")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "GT: Not enough operands";
             return;
@@ -404,8 +480,10 @@ void VM::execute_instruction()
         int a = pop();
         push(a > b ? 1 : 0);
     }
-    else if (instruction == "LE") {
-        if (cpu.sp < 2) {
+    else if (instruction == "LE")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "LE: Not enough operands";
             return;
@@ -414,8 +492,10 @@ void VM::execute_instruction()
         int a = pop();
         push(a <= b ? 1 : 0);
     }
-    else if (instruction == "GE") {
-        if (cpu.sp < 2) {
+    else if (instruction == "GE")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "GE: Not enough operands";
             return;
@@ -424,8 +504,10 @@ void VM::execute_instruction()
         int a = pop();
         push(a >= b ? 1 : 0);
     }
-    else if (instruction == "AND") {
-        if (cpu.sp < 2) {
+    else if (instruction == "AND")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "AND: Not enough operands";
             return;
@@ -434,8 +516,10 @@ void VM::execute_instruction()
         int a = pop();
         push(a && b ? 1 : 0);
     }
-    else if (instruction == "OR") {
-        if (cpu.sp < 2) {
+    else if (instruction == "OR")
+    {
+        if (cpu.sp < 2)
+        {
             exec.status = Execution::Status::ERROR;
             exec.error_message = "OR: Not enough operands";
             return;
@@ -444,7 +528,8 @@ void VM::execute_instruction()
         int a = pop();
         push(a || b ? 1 : 0);
     }
-    else {
+    else
+    {
         exec.status = Execution::Status::ERROR;
         exec.error_message = "Unknown instruction: " + instruction;
     }
@@ -566,17 +651,21 @@ void VM::enable_debug(const std::string& log_filename)
 {
     debug_enabled = true;
     step_count = 0;
-    
-    if (debug_log.is_open()) {
+
+    if (debug_log.is_open())
+    {
         debug_log.close();
     }
-    
+
     debug_log.open(log_filename, std::ios::out | std::ios::trunc);
-    if (debug_log.is_open()) {
+    if (debug_log.is_open())
+    {
         debug_log << "=== VM Debug Log Started ===" << std::endl;
         debug_log << "Log file: " << log_filename << std::endl;
         debug_log << std::endl;
-    } else {
+    }
+    else
+    {
         std::cerr << "Warning: Could not open debug log file: " << log_filename << std::endl;
         debug_enabled = false;
     }
@@ -584,7 +673,8 @@ void VM::enable_debug(const std::string& log_filename)
 
 void VM::disable_debug()
 {
-    if (debug_enabled && debug_log.is_open()) {
+    if (debug_enabled && debug_log.is_open())
+    {
         debug_log << "=== VM Debug Log Ended ===" << std::endl;
         debug_log.close();
     }
@@ -593,55 +683,91 @@ void VM::disable_debug()
 
 std::string VM::get_instruction_name(int instruction_code)
 {
-    switch (static_cast<ASM>(instruction_code)) {
-        case ASM::SYSTEMCALL: return "SYSTEMCALL";
-        case ASM::IMM: return "IMM";
-        case ASM::LEA: return "LEA";
-        case ASM::JMP: return "JMP";
-        case ASM::JZ: return "JZ";
-        case ASM::JNZ: return "JNZ";
-        case ASM::CALL: return "CALL";
-        case ASM::NVAR: return "NVAR";
-        case ASM::DARG: return "DARG";
-        case ASM::RET: return "RET";
-        case ASM::LI: return "LI";
-        case ASM::LC: return "LC";
-        case ASM::SI: return "SI";
-        case ASM::SC: return "SC";
-        case ASM::PUSH: return "PUSH";
-        case ASM::OR: return "OR";
-        case ASM::XOR: return "XOR";
-        case ASM::AND: return "AND";
-        case ASM::EQ: return "EQ";
-        case ASM::NE: return "NE";
-        case ASM::LT: return "LT";
-        case ASM::GT: return "GT";
-        case ASM::LE: return "LE";
-        case ASM::GE: return "GE";
-        case ASM::SHL: return "SHL";
-        case ASM::SHR: return "SHR";
-        case ASM::ADD: return "ADD";
-        case ASM::SUB: return "SUB";
-        case ASM::MUL: return "MUL";
-        case ASM::DIV: return "DIV";
-        case ASM::MOD: return "MOD";
-        default: return "UNKNOWN(" + std::to_string(instruction_code) + ")";
+    switch (static_cast<ASM>(instruction_code))
+    {
+    case ASM::SYSTEMCALL:
+        return "SYSTEMCALL";
+    case ASM::IMM:
+        return "IMM";
+    case ASM::LEA:
+        return "LEA";
+    case ASM::JMP:
+        return "JMP";
+    case ASM::JZ:
+        return "JZ";
+    case ASM::JNZ:
+        return "JNZ";
+    case ASM::CALL:
+        return "CALL";
+    case ASM::NVAR:
+        return "NVAR";
+    case ASM::DARG:
+        return "DARG";
+    case ASM::RET:
+        return "RET";
+    case ASM::LI:
+        return "LI";
+    case ASM::LC:
+        return "LC";
+    case ASM::SI:
+        return "SI";
+    case ASM::SC:
+        return "SC";
+    case ASM::PUSH:
+        return "PUSH";
+    case ASM::OR:
+        return "OR";
+    case ASM::XOR:
+        return "XOR";
+    case ASM::AND:
+        return "AND";
+    case ASM::EQ:
+        return "EQ";
+    case ASM::NE:
+        return "NE";
+    case ASM::LT:
+        return "LT";
+    case ASM::GT:
+        return "GT";
+    case ASM::LE:
+        return "LE";
+    case ASM::GE:
+        return "GE";
+    case ASM::SHL:
+        return "SHL";
+    case ASM::SHR:
+        return "SHR";
+    case ASM::ADD:
+        return "ADD";
+    case ASM::SUB:
+        return "SUB";
+    case ASM::MUL:
+        return "MUL";
+    case ASM::DIV:
+        return "DIV";
+    case ASM::MOD:
+        return "MOD";
+    default:
+        return "UNKNOWN(" + std::to_string(instruction_code) + ")";
     }
 }
 
 void VM::log_step_info()
 {
-    if (!debug_enabled || !debug_log.is_open()) {
+    if (!debug_enabled || !debug_log.is_open())
+    {
         return;
     }
-    
+
     debug_log << "=== Step " << step_count << " ===" << std::endl;
-    
+
     // 记录即将执行的指令
-    if (cpu.pc < static_cast<int>(cpu.assembly_code.size())) {
-        debug_log << "Next Instruction: [" << cpu.pc << "] " << cpu.assembly_code[cpu.pc] << std::endl;
+    if (cpu.pc < static_cast<int>(cpu.assembly_code.size()))
+    {
+        debug_log << "Next Instruction: [" << cpu.pc << "] " << cpu.assembly_code[cpu.pc]
+                  << std::endl;
     }
-    
+
     // 记录CPU寄存器状态
     debug_log << "CPU Registers:" << std::endl;
     debug_log << "  PC: " << cpu.pc << std::endl;
@@ -649,39 +775,56 @@ void VM::log_step_info()
     debug_log << "  BP: " << cpu.bp << std::endl;
     debug_log << "  AX: " << cpu.ax << std::endl;
     debug_log << "  Cycle: " << cpu.cycle << std::endl;
-    
+
     // 记录执行状态
     debug_log << "Execution Status: ";
-    switch (exec.status) {
-        case Execution::Status::RUNNING: debug_log << "RUNNING"; break;
-        case Execution::Status::STOPPED: debug_log << "STOPPED"; break;
-        case Execution::Status::ERROR: debug_log << "ERROR - " << exec.error_message; break;
-        case Execution::Status::SYSCALL_PENDING: debug_log << "SYSCALL_PENDING"; break;
+    switch (exec.status)
+    {
+    case Execution::Status::RUNNING:
+        debug_log << "RUNNING";
+        break;
+    case Execution::Status::STOPPED:
+        debug_log << "STOPPED";
+        break;
+    case Execution::Status::ERROR:
+        debug_log << "ERROR - " << exec.error_message;
+        break;
+    case Execution::Status::SYSCALL_PENDING:
+        debug_log << "SYSCALL_PENDING";
+        break;
     }
     debug_log << std::endl;
-    
+
     // 记录栈状态 (显示前10个元素)
     debug_log << "Stack (top 10 entries):" << std::endl;
-    if (cpu.sp == 0) {
+    if (cpu.sp == 0)
+    {
         debug_log << "  (empty)" << std::endl;
-    } else {
+    }
+    else
+    {
         int start = std::max(0, cpu.sp - 10);
-        for (int i = start; i < cpu.sp; i++) {
+        for (int i = start; i < cpu.sp; i++)
+        {
             debug_log << "  [" << std::setw(3) << i << "] " << cpu.stack[i];
-            if (i == cpu.sp - 1) debug_log << " <- SP";
-            if (i == cpu.bp) debug_log << " <- BP";
+            if (i == cpu.sp - 1)
+                debug_log << " <- SP";
+            if (i == cpu.bp)
+                debug_log << " <- BP";
             debug_log << std::endl;
         }
     }
-    
+
     // 记录内存状态 (显示前16个字节的数据段)
     debug_log << "Data Segment (first 16 bytes):" << std::endl;
-    for (int i = 0; i < 16 && i < static_cast<int>(cpu.data.size()); i += 4) {
-        if (i + 3 < static_cast<int>(cpu.data.size())) {
+    for (int i = 0; i < 16 && i < static_cast<int>(cpu.data.size()); i += 4)
+    {
+        if (i + 3 < static_cast<int>(cpu.data.size()))
+        {
             int value = *reinterpret_cast<int*>(&cpu.data[i]);
             debug_log << "  [" << std::setw(3) << i << "] " << value << std::endl;
         }
     }
-    
+
     debug_log << std::endl;
 }
