@@ -10,7 +10,7 @@ struct VCPU
 {
     std::vector<std::string> assembly_code; // 直接存储汇编指令字符串
     std::vector<int> stack;                 // stack segment
-    std::vector<char> data;                 // data segment
+    std::vector<int> data;                 // data segment
 
     int pc; // program counter (现在是assembly_code的索引)
     int sp; // stack pointer

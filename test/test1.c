@@ -1,4 +1,11 @@
-
+int a;
+int b;
+int main()
+{
+    a = 1;
+    b = 2;
+    return a + b;
+}
 // [0] JMP 12
 // [1] LEA 2
 // [2] IMM 100

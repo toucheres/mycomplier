@@ -228,14 +228,14 @@ void VM::execute_instruction()
     }
     else if (instruction == "LI")
     {
+        int value;
+        int addr;
         if (has_arg)
         {
-            // 使用指令中的地址参数
-            if (check_bounds(arg, 1))
-            {
-                int value = *reinterpret_cast<int*>(&cpu.stack[arg]);
-                push(value);
-            }
+            addr = arg;
+            value = *reinterpret_cast<int*>(&cpu.data[addr]);
+            push(value);
+            return;
         }
         else
         {
@@ -258,32 +258,19 @@ void VM::execute_instruction()
     }
     else if (instruction == "SI")
     {
-        if (cpu.sp < 1)
-        {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "SI: Not enough values on stack";
-            return;
-        }
-        int addr = pop();
         int value;
-
+        int addr;
         if (has_arg)
         {
-            value = arg;
-        }
-        else if (cpu.sp > 0)
-        {
+            addr = arg;
             value = pop();
+            *reinterpret_cast<int*>(&cpu.data[addr]) = value;
+            return;
         }
         else
         {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "SI: No address available";
-            return;
-        }
-
-        if (check_bounds(value, sizeof(int)))
-        {
+            addr = pop();
+            value = pop();
             *reinterpret_cast<int*>(&cpu.stack[addr]) = value;
         }
     }
