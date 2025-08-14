@@ -4,7 +4,7 @@
 class file
 {
     std::vector<char> content;
-    mutable size_t pos = 0;
+    mutable int pos = 0;
     std::string path;
 
   public:
@@ -13,16 +13,16 @@ class file
     const std::string& getpath();
     explicit file(const std::string& path);
     explicit file(const std::string& content_str, bool from_str);
-    size_t size() const;
+    int size() const;
     file(const file& copy);
     file(file&& move);
-    bool setpos(size_t where);
-    size_t getpos();
+    bool setpos(int where);
+    int getpos();
     bool readline(std::string& out) const;
     bool readalllast(std::string& out) const;
-    bool readnum(std::string& out, size_t num) const;
+    bool readnum(std::string& out, int num) const;
     bool readuntil(const std::string& what, std::string& out) const;
-    bool unread(size_t num) const;
-    bool insert(const std::string& in, size_t where);
+    bool unread(int num) const;
+    bool insert(const std::string& in, int where);
     bool insert(const std::string& in);
 };

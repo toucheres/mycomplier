@@ -102,14 +102,6 @@ std::expected<bool, error> var_defs::push(var_def var_def_)
         {
             dy_stack_size += Type::size_of_type(Basic_Type::INT);
         }
-        // std::cout << "var: \n";
-        // std::cout << "addr:" << var_def_.addr << " id:" << var_def_.id
-        //           << " type:" << (int)var_def_.type.bt;
-        // for (size_t i = 0; i < var_def_.type.ptr_lay; i++)
-        // {
-        //     std::cout << "*";
-        // }
-        // std::cout << "\n";
         return true;
     }
     else
@@ -118,38 +110,30 @@ std::expected<bool, error> var_defs::push(var_def var_def_)
     }
 }
 
-std::expected<bool, error> var_defs::push_func_args(var_def var_def)
-{
-    // 参数变量直接添加到当前作用域，分配地址
-    if (namespace_defines.empty())
-    {
-        into_new_namespace();
-    }
+// std::expected<bool, error> var_defs::push_func_args(var_def var_def)
+// {
+//     // 参数变量直接添加到当前作用域，分配地址
+//     if (namespace_defines.empty())
+//     {
+//         into_new_namespace();
+//     }
 
-    var_def.addr = dy_stack_size;
-    auto ret = namespace_defines.back().push(var_def);
-    if (ret)
-    {
-        if (var_def.type.ptr_lay == 0)
-        {
-            dy_stack_size += Type::size_of_type(var_def.type.bt);
-        }
-        else
-        {
-            dy_stack_size += Type::size_of_type(Basic_Type::INT);
-        }
-        // std::cout << "arg: \n";
-        // std::cout << "addr:" << var_def.addr << " id:" << var_def.id
-        //           << " type:" << (int)var_def.type.bt;
-        // for (size_t i = 0; i < var_def.type.ptr_lay; i++)
-        // {
-        //     std::cout << "*";
-        // }
-        // std::cout << "\n";
-        return true;
-    }
-    return ret;
-}
+//     var_def.addr = dy_stack_size;
+//     auto ret = namespace_defines.back().push(var_def);
+//     if (ret)
+//     {
+//         if (var_def.type.ptr_lay == 0)
+//         {
+//             dy_stack_size += Type::size_of_type(var_def.type.bt);
+//         }
+//         else
+//         {
+//             dy_stack_size += Type::size_of_type(Basic_Type::INT);
+//         }
+//         return true;
+//     }
+//     return ret;
+// }
 void var_defs::clear()
 {
     dy_stack_size = 0;
@@ -157,13 +141,25 @@ void var_defs::clear()
     old_stack_size = 0;
     namespace_defines.clear();
 }
+std::expected<bool, error> var_defs::push_func_args(std::vector<var_def> var_defs)
+{
+    for (int i = 0; i < var_defs.size(); i++)
+    {
+        var_defs[i].addr = i - var_defs.size();
+        if (!namespace_defines[0].push(var_defs[i]))
+        {
+            return std::unexpected(error::undefinedvar);
+        }
+    }
+    return true;
+}
 void var_defs::into_new_namespace()
 {
     namespace_defines.emplace_back();
     old_stack_size = dy_stack_size;
 }
 
-size_t var_defs::get_max_size()
+int var_defs::get_max_size()
 {
     return max_stack_size;
 }

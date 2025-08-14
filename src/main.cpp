@@ -18,7 +18,7 @@ int main()
     
     // 输出汇编代码
     std::cout << "Generated Assembly:" << std::endl;
-    for (size_t i = 0; i < assembly_vector.size(); ++i) {
+    for (int i = 0; i < assembly_vector.size(); ++i) {
         std::cout << "[" << i << "] " << assembly_vector[i] << std::endl;
     }
     std::cout << std::endl;

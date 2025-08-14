@@ -116,7 +116,7 @@ std::expected<file, error> Preprocessor::deal_def(file src)
                     // 替换宏
                     for (const auto& def : defines)
                     {
-                        size_t pos = 0;
+                        int pos = 0;
                         while ((pos = line.find(def.first, pos)) != std::string::npos)
                         {
                             line.replace(pos, def.first.length(), def.second);
@@ -134,7 +134,7 @@ std::expected<file, error> Preprocessor::deal_def(file src)
             {
                 for (const auto& def : defines)
                 {
-                    size_t pos = 0;
+                    int pos = 0;
                     while ((pos = line.find(def.first, pos)) != std::string::npos)
                     {
                         line.replace(pos, def.first.length(), def.second);

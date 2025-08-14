@@ -36,7 +36,7 @@ bool file::readform(const std::string& path)
     return true;
 }
 
-size_t file::size() const
+int file::size() const
 {
     return content.size();
 }
@@ -49,7 +49,7 @@ file::file(file&& move) : content(std::move(move.content)), pos(move.pos)
 {
 }
 
-bool file::setpos(size_t where)
+bool file::setpos(int where)
 {
     if (where < size())
     {
@@ -59,7 +59,7 @@ bool file::setpos(size_t where)
     return false;
 }
 
-size_t file::getpos()
+int file::getpos()
 {
     return pos;
 }
@@ -69,7 +69,7 @@ bool file::readline(std::string& out) const
     if (pos >= content.size())
         return false;
     out.clear();
-    size_t i = pos;
+    int i = pos;
     while (i < content.size())
     {
         char c = content[i];
@@ -92,13 +92,13 @@ bool file::readalllast(std::string& out) const
     return this->readnum(out, this->size() - pos);
 }
 
-bool file::readnum(std::string& out, size_t num) const
+bool file::readnum(std::string& out, int num) const
 {
     if (pos >= content.size())
         return false;
     out.clear();
-    size_t remain = content.size() - pos;
-    size_t n = std::min(num, remain);
+    int remain = content.size() - pos;
+    int n = std::min(num, remain);
     out.assign(content.begin() + pos, content.begin() + pos + n);
     pos += n;
     return n > 0;
@@ -109,7 +109,7 @@ bool file::readuntil(const std::string& what, std::string& out) const
     if (pos >= content.size())
         return false;
     out.clear();
-    size_t i = pos;
+    int i = pos;
     while (i + what.size() <= content.size())
     {
         if (std::equal(what.begin(), what.end(), content.begin() + i))
@@ -123,7 +123,7 @@ bool file::readuntil(const std::string& what, std::string& out) const
     return !out.empty();
 }
 
-bool file::unread(size_t num) const
+bool file::unread(int num) const
 {
     if (num > pos)
         return false;
@@ -131,7 +131,7 @@ bool file::unread(size_t num) const
     return true;
 }
 
-bool file::insert(const std::string& in, size_t where)
+bool file::insert(const std::string& in, int where)
 {
     if (where > content.size())
         return false;

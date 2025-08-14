@@ -16,7 +16,7 @@ bool Token::can_be_id()
     if (!std::isalpha(content[0]) && content[0] != '_') return false;
     
     // 检查其余字符是否为字母、数字或下划线
-    for (size_t i = 1; i < content.size(); ++i)
+    for (int i = 1; i < content.size(); ++i)
     {
         if (!std::isalnum(content[i]) && content[i] != '_') return false;
     }

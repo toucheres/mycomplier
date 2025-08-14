@@ -191,6 +191,7 @@ std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens,
         return {};
     }
     std::vector<Type> argtypes;
+    std::vector<var_def> args;
     do
     {
         auto ret = tokens.now().is_type();
@@ -215,7 +216,7 @@ std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens,
             arg.id = tokens.now().content;
             arg.type = type;
             argtypes.push_back(type);
-            obj.func_var_defs_.push_func_args(arg);
+            args.push_back(arg);
             tokens.pos++;
         }
         else
@@ -232,6 +233,7 @@ std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens,
         else if (tokens.now().content == ")")
         {
             tokens.pos++;
+            obj.func_var_defs_.push_func_args(args);
             return argtypes;
         }
         else

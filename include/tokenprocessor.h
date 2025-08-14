@@ -15,8 +15,8 @@ struct Token
 class Tokens : public std::vector<Token>
 {
   public:
-    size_t pos = 0;
-    size_t last_pos = 0;
+    int pos = 0;
+    int last_pos = 0;
     inline void save()
     {
         last_pos = pos;
@@ -37,7 +37,7 @@ class Tokens : public std::vector<Token>
 class TokenStream
 {
     Tokens tokens;
-    size_t pos = 0;
+    int pos = 0;
 
   public:
     TokenStream(Tokens tokens);

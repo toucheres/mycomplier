@@ -7,6 +7,6 @@ enum class Basic_Type
 struct Type
 {
     Basic_Type bt;
-    size_t ptr_lay = 0;
-    static size_t size_of_type(Basic_Type type);
+    int ptr_lay = 0;
+    static int size_of_type(Basic_Type type);
 };

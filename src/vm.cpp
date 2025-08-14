@@ -165,7 +165,7 @@ void VM::execute_instruction()
     std::string line = cpu.assembly_code[cpu.pc++];
 
     // 解析指令和参数
-    size_t space_pos = line.find(' ');
+    int space_pos = line.find(' ');
     std::string instruction;
     std::string arg_str;
     int arg = 0;
@@ -211,7 +211,7 @@ void VM::execute_instruction()
             exec.error_message = "IMM: Missing immediate value";
             return;
         }
-        for (size_t i = 0; i < arg; i++)
+        for (int i = 0; i < arg; i++)
         {
             push(0);
         }
@@ -390,8 +390,10 @@ void VM::execute_instruction()
             exec.error_message = "CALL: Missing function address";
             return;
         }
+        int tp = cpu.bp;
+        cpu.bp = cpu.sp;
         push(cpu.pc); // 保存下一条返回地址,pc先自增再执行指令，无需加1
-        push(cpu.bp); // 保存旧bp
+        push(tp);     // 保存旧bp
         cpu.pc = arg;
     }
     // call addr<fun> 压入pc+1 压入bp bp=sp jump-addr<fun>  stack: a   b  ...  opc+1  obp
@@ -400,12 +402,13 @@ void VM::execute_instruction()
     {
         if (cpu.bp != 0)
         {
-            cpu.pc = cpu.stack[cpu.bp];     // retaddr
-            cpu.ax = pop();                 // 临时存储返回值到ax
-            cpu.sp = cpu.bp;                // 恢复sp
-            cpu.bp = cpu.stack[cpu.sp + 1]; // 恢复bp
-            pop();                          // 弹出opc+1
-            push(cpu.ax);                   // 推入ret
+            int tp_retaddr = cpu.stack[cpu.bp];
+            int tp_oldbp = cpu.stack[cpu.bp + 1];
+            int retv = cpu.ax = pop();
+            cpu.pc = tp_retaddr;
+            cpu.sp = cpu.bp;
+            cpu.bp = tp_oldbp;
+            push(retv);
         }
         else
         {
