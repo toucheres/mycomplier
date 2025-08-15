@@ -29,6 +29,12 @@ void obj::pushASM(VM::ASM asm_code)
     case VM::ASM::NVAR:
         content.push_back("NVAR");
         break;
+    case VM::ASM::HOLD:
+        content.push_back("HOLD");
+        break;
+    case VM::ASM::UP:
+        content.push_back("UP");
+        break;
     case VM::ASM::DARG:
         content.push_back("DARG");
         break;
@@ -113,6 +119,9 @@ void obj::pushASM(VM::ASM asm_code, int arg)
         break;
     case VM::ASM::LEA:
         content.push_back("LEA " + std::to_string(arg));
+        break;
+    case VM::ASM::UP:
+        content.push_back("UP " + std::to_string(arg));
         break;
     case VM::ASM::JMP:
         content.push_back("JMP " + std::to_string(arg));

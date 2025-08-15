@@ -1,14 +1,24 @@
-int add(int a, int b)
+int c;
+int d;
+int e;
+int f;
+int add_2(int in)
 {
-    return a + b;
+    int n;
+    n = 2;
+    return in + n;
+}
+int add(int in)
+{
+    int a;
+    a = 1;
+    return add_2(in) + a;
 }
 int main()
 {
-    int a;
-    a = 2;
     int b;
-    b = add(1, a);
-    return b;
+    b = 10;
+    return add(b) + 1;
 }
 
 

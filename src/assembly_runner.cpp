@@ -54,19 +54,5 @@ public:
         
         VM vm;
         vm.load_assembly_string(test_code);
-        
-        // 初始化一些测试数据
-        vm.cpu.data[0] = 10;  // a = 10
-        *reinterpret_cast<int*>(&vm.cpu.data[0]) = 10;
-        *reinterpret_cast<int*>(&vm.cpu.data[4]) = 20;  // b = 20
-        
-        std::cout << "=== 简单测试 ===" << std::endl;
-        std::cout << "初始数据: a=10, b=20" << std::endl;
-        std::cout << "预期结果: 10 + 20*2 + 100 = 160" << std::endl;
-        
-        int result = vm.start();
-        std::cout << "执行结果: " << result << std::endl;
-        vm.dump_registers();
-        vm.dump_stack(5);
     }
 };

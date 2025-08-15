@@ -626,7 +626,19 @@ std::expected<bool, error> Complier::try_parse_unary_expr(Tokens& tokens, obj& o
         else if (op == "&")
         {
             // 取地址：获取变量地址
-            obj.pushASM(VM::ASM::LEA);
+            auto name = tokens.now();
+            auto ret = obj.func_var_defs_.find(name.content);
+            if (ret)
+            {
+                obj.pushASM(VM::ASM::LEA, ret.value()->addr);
+                return true;
+            }
+            ret = obj.global_var_defs_.find(name.content);
+            if (ret)
+            {
+                obj.pushASM(VM::ASM::PUSH, ret.value()->addr);
+                return true;
+            }
         }
         else if (op == "-")
         {
@@ -1040,7 +1052,8 @@ std::expected<obj, error> Complier::eachFile(std::string path)
     obj obj;
 
     // 为程序入口点预留空间
-    obj.pushASM(VM::ASM::JMP, 0); // 临时占位，稍后会更新地址
+    obj.pushASM(VM::ASM::HOLD); // 临时占位，稍后分配globalvar
+    obj.pushASM(VM::ASM::HOLD); // 临时占位，稍后更新main地址
 
     Preprocessor p;
     auto ret = p.process(path, path + ".pre");
@@ -1082,29 +1095,14 @@ std::expected<obj, error> Complier::eachFile(std::string path)
         }
     }
 
+    auto gsize = obj.global_var_defs_.get_max_size();
+    obj.content[0] = std::format("UP {}", gsize + 1);// 防止全局为空影响ret时对bp的判断
+
     // 更新程序入口点的跳转地址
     auto main_fun = obj.fun_defs_.find("main");
     if (main_fun)
     {
-        // 使用main函数记录的地址，但这次是基于vector下标的
-        int main_addr = main_fun.value().addr;
-
-        // 更新第一条指令的参数为main函数地址
-        if (!obj.content.empty())
-        {
-            std::stack<std::string> temp_content;
-            std::string first_instruction;
-
-            // 取出第一条指令
-            first_instruction = obj.content[0];
-            auto ret = first_instruction.find_first_of("JMP");
-            if (ret != std::string::npos)
-            {
-                first_instruction.pop_back();
-                first_instruction += std::to_string(main_addr);
-                obj.content[0] = first_instruction;
-            }
-        }
+        obj.content[1] = std::format("JMP {}", main_fun.value().addr);
     }
     return obj;
 }

@@ -10,7 +10,7 @@ struct VCPU
 {
     std::vector<std::string> assembly_code; // 直接存储汇编指令字符串
     std::vector<int> stack;                 // stack segment
-    std::vector<int> data;                 // data segment
+    // std::vector<int> data;                  // data segment
 
     int pc; // program counter (现在是assembly_code的索引)
     int sp; // stack pointer
@@ -23,7 +23,7 @@ struct VCPU
     VCPU() : pc(0), sp(0), bp(0), ax(0), cycle(0)
     {
         stack.resize(1024); // 默认栈大小
-        data.resize(1024);  // 默认数据段大小
+        // data.resize(1024);  // 默认数据段大小
     }
 };
 
@@ -32,6 +32,7 @@ struct Execution
     enum class Status
     {
         RUNNING,
+        WARING,
         STOPPED,
         ERROR,
         SYSCALL_PENDING
@@ -103,6 +104,7 @@ class VM
         MUL,  // 乘法
         DIV,  // 除法
         MOD,  // 取模
+        UP,   //  bp,sp += arg，预留
         HOLD, // 占位
     };
 

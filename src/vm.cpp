@@ -69,7 +69,7 @@ void VM::reset()
 
     // 清空栈和数据段
     std::fill(cpu.stack.begin(), cpu.stack.end(), 0);
-    std::fill(cpu.data.begin(), cpu.data.end(), 0);
+    // std::fill(cpu.data.begin(), cpu.data.end(), 0);
 
     // 记录重置信息到调试日志
     if (debug_enabled && debug_log.is_open())
@@ -103,7 +103,7 @@ int VM::pop()
 
 bool VM::check_bounds(int address, int size)
 {
-    if (address < 0 || address + size > static_cast<int>(cpu.data.size()))
+    if (address < 0 || address + size > static_cast<int>(cpu.stack.size()))
     {
         exec.status = Execution::Status::ERROR;
         exec.error_message = "Memory access out of bounds: address " + std::to_string(address);
@@ -226,6 +226,15 @@ void VM::execute_instruction()
         }
         push(arg + cpu.bp);
     }
+    else if (instruction == "UP")
+    {
+        if (!has_arg)
+        {
+            arg = pop();
+        }
+        cpu.bp += arg;
+        cpu.sp += arg;
+    }
     else if (instruction == "LI")
     {
         int value;
@@ -233,7 +242,7 @@ void VM::execute_instruction()
         if (has_arg)
         {
             addr = arg;
-            value = *reinterpret_cast<int*>(&cpu.data[addr]);
+            value = *reinterpret_cast<int*>(&cpu.stack[addr]);
             push(value);
             return;
         }
@@ -264,7 +273,7 @@ void VM::execute_instruction()
         {
             addr = arg;
             value = pop();
-            *reinterpret_cast<int*>(&cpu.data[addr]) = value;
+            *reinterpret_cast<int*>(&cpu.stack[addr]) = value;
             return;
         }
         else
@@ -273,6 +282,11 @@ void VM::execute_instruction()
             value = pop();
             *reinterpret_cast<int*>(&cpu.stack[addr]) = value;
         }
+    }
+    else if (instruction == "HOLD")
+    {
+        // exec.status = Execution::Status::WARING;
+        // exec.error_message = "HOLD: not been instead!";
     }
     else if (instruction == "ADD")
     {
@@ -400,17 +414,14 @@ void VM::execute_instruction()
     //                                                                          bp
     else if (instruction == "RET")
     {
-        if (cpu.bp != 0)
-        {
-            int tp_retaddr = cpu.stack[cpu.bp];
-            int tp_oldbp = cpu.stack[cpu.bp + 1];
-            int retv = cpu.ax = pop();
-            cpu.pc = tp_retaddr;
-            cpu.sp = cpu.bp;
-            cpu.bp = tp_oldbp;
-            push(retv);
-        }
-        else
+        int tp_retaddr = cpu.stack[cpu.bp];
+        int tp_oldbp = cpu.stack[cpu.bp + 1];
+        int retv = cpu.ax = pop();
+        cpu.pc = tp_retaddr;
+        cpu.sp = cpu.bp;
+        cpu.bp = tp_oldbp;
+        push(retv);
+        if (cpu.bp == 0)
         {
             // main函数ret
             exec.exit_code = pop();
@@ -806,15 +817,15 @@ void VM::log_step_info()
     }
 
     // 记录内存状态 (显示前16个字节的数据段)
-    debug_log << "Data Segment (first 16 bytes):" << std::endl;
-    for (int i = 0; i < 16 && i < static_cast<int>(cpu.data.size()); i += 4)
-    {
-        if (i + 3 < static_cast<int>(cpu.data.size()))
-        {
-            int value = *reinterpret_cast<int*>(&cpu.data[i]);
-            debug_log << "  [" << std::setw(3) << i << "] " << value << std::endl;
-        }
-    }
+    // debug_log << "Data Segment (first 16 bytes):" << std::endl;
+    // for (int i = 0; i < 16 && i < static_cast<int>(cpu.data.size()); i += 4)
+    // {
+    //     if (i + 3 < static_cast<int>(cpu.data.size()))
+    //     {
+    //         int value = *reinterpret_cast<int*>(&cpu.data[i]);
+    //         debug_log << "  [" << std::setw(3) << i << "] " << value << std::endl;
+    //     }
+    // }
 
     debug_log << std::endl;
 }
