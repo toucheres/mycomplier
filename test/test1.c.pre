@@ -1,41 +1,19 @@
-int c;
-int d;
-int e;
-int f;
-int add_2(int in)
-{
-    int n;
-    n = 2;
-    return in + n;
-}
-int add(int in)
-{
-    int a;
-    a = 1;
-    return add_2(in) + a;
-}
 int main()
 {
-    int b;
-    b = 10;
-    return add(b) + 1;
+    int i;
+    int ret;
+    i = 1;
+    if (i == 0)
+    {
+        ret = 10;
+    }
+    else
+    {
+        if (i == 1 && 1)
+        {
+            ret = 100;
+        }
+    }
+
+    return ret;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -311,6 +311,8 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
         tokens.load();
         return std::unexpected(ret.error());
     }
+    obj.pushASM(VM::ASM::HOLD);
+    auto flag = obj.content.size();
 
     if (tokens.now().content != ")")
     {
@@ -326,7 +328,7 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
         tokens.load();
         return std::unexpected(ret2.error());
     }
-
+    obj.content[flag - 1] = std::format("JZ {}", obj.content.size());
     // 可选的 else 分支
     if (tokens.now().content == "else")
     {
@@ -1096,7 +1098,7 @@ std::expected<obj, error> Complier::eachFile(std::string path)
     }
 
     auto gsize = obj.global_var_defs_.get_max_size();
-    obj.content[0] = std::format("UP {}", gsize + 1);// 防止全局为空影响ret时对bp的判断
+    obj.content[0] = std::format("UP {}", gsize + 1); // 防止全局为空影响ret时对bp的判断
 
     // 更新程序入口点的跳转地址
     auto main_fun = obj.fun_defs_.find("main");
