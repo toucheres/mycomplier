@@ -287,6 +287,21 @@ std::expected<bool, error> Complier::try_parse_while(Tokens& tokens, obj& obj)
     return true;
 }
 
+// if(exp)
+// {
+//     do1
+// }
+// else
+// {
+//      do2
+// }
+// 计算exp
+//  jnz else
+//  do1
+//  jump end
+//else: 
+//  do2
+//end:
 std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
 {
     tokens.save();
@@ -321,13 +336,15 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
     }
     tokens.pos++;
 
-    // 解析 then 分支
     auto ret2 = try_parse_block(tokens, obj);
     if (!ret2)
     {
         tokens.load();
         return std::unexpected(ret2.error());
     }
+    obj.pushASM(VM::ASM::HOLD);     // 主分支跳转end
+    auto pos_if_end = obj.content.size();
+
     obj.content[flag - 1] = std::format("JZ {}", obj.content.size());
     // 可选的 else 分支
     if (tokens.now().content == "else")
@@ -340,7 +357,7 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
             return std::unexpected(ret3.error());
         }
     }
-
+    obj.content[pos_if_end - 1] = std::format("JMP {}", obj.content.size());
     return true;
 }
 
