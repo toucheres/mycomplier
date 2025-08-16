@@ -801,10 +801,11 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
                 // 局部变量 arg1 arg2 ...
                 // obj.pushASM(VM::ASM::MOVE, (int)VCPU::stack_cpu::STACK,
                 // (int)VCPU::stack_cpu::AX);
-                for (int i = 0; i < arg_count; i++)
-                {
-                    obj.pushASM(VM::ASM::POP);
-                }
+                obj.pushASM(VM::ASM::DARG, arg_count);
+                // for (int i = 0; i < arg_count; i++)
+                // {
+                //     obj.pushASM(VM::ASM::POP);
+                // }
                 obj.pushASM(VM::ASM::PUSH);
             }
             else

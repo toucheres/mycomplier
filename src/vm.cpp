@@ -369,6 +369,14 @@ void VM::execute_instruction()
             *reinterpret_cast<int*>(&cpu.stack[addr]) = value;
         }
     }
+    else if (instruction == "DARG")
+    {
+        int num = args[0];
+        for (int i = 0; i < num; i++)
+        {
+            pop();
+        }
+    }
     else if (instruction == "HOLD")
     {
         // 占位指令，不执行任何操作
@@ -387,7 +395,7 @@ void VM::execute_instruction()
     }
     else if (instruction == "POP")
     {
-        pop();
+        cpu.ax = pop();
     }
     else if (instruction == "PUSH")
     {

@@ -13,5 +13,5 @@ int fun(int in)
 
 int main()
 {
-    return fun(4);
+    return fun(5);
 }

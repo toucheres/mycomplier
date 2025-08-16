@@ -9,28 +9,28 @@
 #include <vm.h>
 #include <map>
 // 只支持int[*]类型
-// 将一个int作为内存最小单位,指针,int大小均为1
+// 将一个int作为内存最小单位 指针,int大小均为1
 // 函数调用:
 // 调用fun(int a,int b,...)
 // caller中:
 // 计算a
-// push a    stack: a
+// lea&li a    stack: a
 // 计算b
-// push b    stack: a   b
+// lea&li b    stack: a   b
 //...
 // call addr<fun> 压入pc+1 压入bp bp=sp jump-addr<fun>  stack: a   b  ...  opc+1  obp
 //                                                                          bp
 
-// fun中: a=bp[-n] b=bp[-(n-1)]... retaddr=bp[0] obp=bp[1]
-// ret ax携带返回值,jump bp[0]
-// nargs n  分配n个参数
+    // fun中: a=bp[-n] b=bp[-(n-1)]... retaddr=bp[0] obp=bp[1]
+    // nargs n  分配n个参数
+    // ret ax携带返回值,jump bp[0]
 
 // dargs n 弹出n个参数
-// [可选] ax->stack
+// [可选] push ax->stack压回返回值
 
 // 编译时的空间分配:
-// 全局var:直接访问  LEAG + 数 访问
-// funvar:bp+偏移   LEA + 数 访问
+// 全局var:直接访问  IMM + 数 LI 访问
+// funvar:bp+偏移   LEA + 数 LI 访问
 // funvar初始stack为1,为opc+1预留位置
 struct id_def
 {

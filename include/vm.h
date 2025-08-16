@@ -68,7 +68,6 @@ class VM
         JNZ,  // 非零跳转
         CALL, // 函数调用
         NVAR, // 新建局部变量
-        DARG, // 删除参数
         RET,  // 函数返回
         LI,   // 从地址加载整数
         LC,   // 从地址加载字符
@@ -76,7 +75,7 @@ class VM
         SC,   // 存储字符到地址
         MOVE, // 在栈顶，寄存器间复制 [TODO]未完成
         PUSH, // ax压栈
-        POP,  // 出栈
+        POP,  // 出栈到ax
         OR,   // 逻辑或
         XOR,  // 异或
         AND,  // 逻辑与
@@ -93,8 +92,9 @@ class VM
         MUL,  // 乘法
         DIV,  // 除法
         MOD,  // 取模
-        UP,   //  bp,sp += arg，预留
+        UP,   //  bp,sp += arg，为.data 动态内存预留
         HOLD, // 占位
+        DARG, // 弹出参数
     };
 
   private:
@@ -150,6 +150,7 @@ class VM
             {"SC", ASM::SC},
             {"PUSH", ASM::PUSH},
             {"POP", ASM::POP},
+            {"DARG", ASM::DARG},
             {"OR", ASM::OR},
             {"XOR", ASM::XOR},
             {"AND", ASM::AND},
@@ -197,6 +198,7 @@ class VM
             {VM::ASM::SC, ASMmeta{"SC", 10}}, // 同SI，但存储字符
             {VM::ASM::PUSH, ASMmeta{"PUSH", 0}}, // 当前实现无参数，推送ax
             {VM::ASM::POP, ASMmeta{"POP", 0}},
+            {VM::ASM::DARG , ASMmeta{"DARG", 1}},
             {VM::ASM::OR, ASMmeta{"OR", 0}},
             {VM::ASM::XOR, ASMmeta{"XOR", 0}},
             {VM::ASM::AND, ASMmeta{"AND", 0}},
