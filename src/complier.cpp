@@ -42,7 +42,11 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     // 为函数创建新的作用域
     obj.func_var_defs_.clear();
     obj.func_var_defs_.into_new_namespace();
+    // 在解析函数体前推入thisfun以支持递归
     thisfun.addr = obj.content.size();
+    thisfun.defined = true;
+    obj.fun_defs_.push(thisfun);
+
     auto ret = try_parse_args(tokens, obj);
     if (!ret)
     {
@@ -78,10 +82,7 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     obj.func_var_defs_.outto_old_namespace();
     obj.content[nvar_pos - 1] = std::format("NVAR {}", obj.func_var_defs_.get_max_size());
     // 函数解析完成，退出函数作用域
-    thisfun.defined = true;
-    // 注意：不在这里生成 RET，因为函数体中的 return 语句会生成
-    // 如果函数没有显式 return，编译器应该在语义分析阶段处理
-    obj.fun_defs_.push(thisfun);
+
     return true;
 }
 
@@ -299,9 +300,9 @@ std::expected<bool, error> Complier::try_parse_while(Tokens& tokens, obj& obj)
 //  jnz else
 //  do1
 //  jump end
-//else: 
+// else:
 //  do2
-//end:
+// end:
 std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
 {
     tokens.save();
@@ -342,7 +343,7 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
         tokens.load();
         return std::unexpected(ret2.error());
     }
-    obj.pushASM(VM::ASM::HOLD);     // 主分支跳转end
+    obj.pushASM(VM::ASM::HOLD); // 主分支跳转end
     auto pos_if_end = obj.content.size();
 
     obj.content[flag - 1] = std::format("JZ {}", obj.content.size());
@@ -796,6 +797,12 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
             if (fun_result)
             {
                 obj.pushASM(VM::ASM::CALL, fun_result.value().addr); // 调用指定地址的函数
+                // [TODO] 清理args
+                // 局部变量 arg1 arg2 ... retvalue
+                // for (int i = 0; i < arg_count; i++)
+                // {
+                //     obj.pushASM(VM::ASM::POP);
+                // }
             }
             else
             {

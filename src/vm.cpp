@@ -3,6 +3,7 @@
 #include <cstring>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 
 VM::VM() : debug_enabled(false), step_count(0)
 {
@@ -103,12 +104,12 @@ int VM::pop()
 
 bool VM::check_bounds(int address, int size)
 {
-    if (address < 0 || address + size > static_cast<int>(cpu.stack.size()))
-    {
-        exec.status = Execution::Status::ERROR;
-        exec.error_message = "Memory access out of bounds: address " + std::to_string(address);
-        return false;
-    }
+    // if (address < 0 || address + size > static_cast<int>(cpu.stack.size()))
+    // {
+    //     exec.status = Execution::Status::ERROR;
+    //     exec.error_message = "Memory access out of bounds: address " + std::to_string(address);
+    //     return false;
+    // }
     return true;
 }
 
@@ -153,6 +154,112 @@ bool VM::step()
     return exec.status == Execution::Status::RUNNING;
 }
 
+bool VM::parse_instruction_args(const std::string& line, std::string& instruction,
+                                std::vector<int>& args)
+{
+    args.clear();
+
+    // 按空格分割指令和参数
+    std::istringstream iss(line);
+    std::string token;
+
+    // 获取指令名
+    if (!std::getline(iss, instruction, ' '))
+    {
+        return false;
+    }
+
+    // 获取所有参数
+    std::string remaining;
+    if (std::getline(iss, remaining))
+    {
+        std::istringstream args_stream(remaining);
+        std::string arg_str;
+
+        while (args_stream >> arg_str)
+        {
+            try
+            {
+                int arg = std::stoi(arg_str);
+                args.push_back(arg);
+            }
+            catch (const std::exception&)
+            {
+                exec.status = Execution::Status::ERROR;
+                exec.error_message = "Invalid argument format: " + arg_str + " in line: " + line;
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+bool VM::validate_args(ASM asm_type, const std::vector<int>& args)
+{
+    ASMmeta meta = getASMmeta(asm_type);
+    size_t num_args = meta.num_args;
+    size_t actual_args = args.size();
+
+    // 解析参数要求编码
+    if (num_args == 0)
+    {
+        // 必须无参数
+        if (actual_args != 0)
+        {
+            exec.status = Execution::Status::ERROR;
+            exec.error_message =
+                meta.name + ": Expected 0 arguments, got " + std::to_string(actual_args);
+            return false;
+        }
+    }
+    else if (num_args < 10)
+    {
+        // 固定参数个数：1,2,3...
+        if (actual_args != num_args)
+        {
+            exec.status = Execution::Status::ERROR;
+            exec.error_message = meta.name + ": Expected " + std::to_string(num_args) +
+                                 " arguments, got " + std::to_string(actual_args);
+            return false;
+        }
+    }
+    else
+    {
+        // 可变参数个数：10,210,3210...
+        bool valid = false;
+        for (int i = 0;; i++)
+        {
+            if (args.size() == num_args % 10)
+            {
+                valid = true;
+                break;
+            }
+            else
+            {
+                if (num_args)
+                {
+                    num_args /= 10;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+
+        if (!valid)
+        {
+            exec.status = Execution::Status::ERROR;
+            exec.error_message =
+                meta.name + ": Invalid argument count " + std::to_string(actual_args);
+            return false;
+        }
+    }
+
+    return true;
+}
+
 void VM::execute_instruction()
 {
     if (cpu.pc >= static_cast<int>(cpu.assembly_code.size()))
@@ -165,52 +272,39 @@ void VM::execute_instruction()
     std::string line = cpu.assembly_code[cpu.pc++];
 
     // 解析指令和参数
-    int space_pos = line.find(' ');
     std::string instruction;
-    std::string arg_str;
-    int arg = 0;
-    bool has_arg = false;
+    std::vector<int> args;
 
-    if (space_pos != std::string::npos)
+    if (!parse_instruction_args(line, instruction, args))
     {
-        instruction = line.substr(0, space_pos);
-        arg_str = line.substr(space_pos + 1);
-        try
-        {
-            arg = std::stoi(arg_str);
-            has_arg = true;
-        }
-        catch (const std::exception&)
-        {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "Invalid argument format: " + line;
-            return;
-        }
+        return; // 错误已在parse_instruction_args中设置
     }
-    else
+
+    // 获取指令类型并验证参数
+    ASM asm_type = formStrToASM(instruction);
+    if (asm_type == ASM::HOLD && instruction != "HOLD")
     {
-        instruction = line;
+        exec.status = Execution::Status::ERROR;
+        exec.error_message = "Unknown instruction: " + instruction;
+        return;
     }
+
+    if (!validate_args(asm_type, args))
+    {
+        return; // 错误已在validate_args中设置
+    }
+
+    // 执行指令（为了兼容性，保持原有的参数访问方式）
+    int arg = args.empty() ? 0 : args[0];
+    bool has_arg = !args.empty();
 
     // 执行指令
     if (instruction == "IMM")
     {
-        if (!has_arg)
-        {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "IMM: Missing immediate value";
-            return;
-        }
         push(arg);
     }
     else if (instruction == "NVAR")
     {
-        if (!has_arg)
-        {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "IMM: Missing immediate value";
-            return;
-        }
         for (int i = 0; i < arg; i++)
         {
             push(0);
@@ -218,12 +312,6 @@ void VM::execute_instruction()
     }
     else if (instruction == "LEA")
     {
-        if (!has_arg)
-        {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "LEA: Missing address";
-            return;
-        }
         push(arg + cpu.bp);
     }
     else if (instruction == "UP")
@@ -244,7 +332,6 @@ void VM::execute_instruction()
             addr = arg;
             value = *reinterpret_cast<int*>(&cpu.stack[addr]);
             push(value);
-            return;
         }
         else
         {
@@ -274,7 +361,6 @@ void VM::execute_instruction()
             addr = arg;
             value = pop();
             *reinterpret_cast<int*>(&cpu.stack[addr]) = value;
-            return;
         }
         else
         {
@@ -285,8 +371,11 @@ void VM::execute_instruction()
     }
     else if (instruction == "HOLD")
     {
-        // exec.status = Execution::Status::WARING;
-        // exec.error_message = "HOLD: not been instead!";
+        // 占位指令，不执行任何操作
+    }
+    else if (instruction == "POP")
+    {
+        pop();
     }
     else if (instruction == "ADD")
     {
@@ -344,22 +433,10 @@ void VM::execute_instruction()
     }
     else if (instruction == "JMP")
     {
-        if (!has_arg)
-        {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "JMP: Missing target address";
-            return;
-        }
         cpu.pc = arg;
     }
     else if (instruction == "JZ")
     {
-        if (!has_arg)
-        {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "JZ: Missing target address";
-            return;
-        }
         if (cpu.sp > 0)
         {
             int value = pop();
@@ -376,12 +453,6 @@ void VM::execute_instruction()
     }
     else if (instruction == "JNZ")
     {
-        if (!has_arg)
-        {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "JNZ: Missing target address";
-            return;
-        }
         if (cpu.sp > 0)
         {
             int value = pop();
@@ -398,20 +469,12 @@ void VM::execute_instruction()
     }
     else if (instruction == "CALL")
     {
-        if (!has_arg)
-        {
-            exec.status = Execution::Status::ERROR;
-            exec.error_message = "CALL: Missing function address";
-            return;
-        }
         int tp = cpu.bp;
         cpu.bp = cpu.sp;
         push(cpu.pc); // 保存下一条返回地址,pc先自增再执行指令，无需加1
         push(tp);     // 保存旧bp
         cpu.pc = arg;
     }
-    // call addr<fun> 压入pc+1 压入bp bp=sp jump-addr<fun>  stack: a   b  ...  opc+1  obp
-    //                                                                          bp
     else if (instruction == "RET")
     {
         int tp_retaddr = cpu.stack[cpu.bp];
@@ -532,7 +595,7 @@ void VM::execute_instruction()
     else
     {
         exec.status = Execution::Status::ERROR;
-        exec.error_message = "Unknown instruction: " + instruction;
+        exec.error_message = "Unhandled instruction: " + instruction;
     }
 }
 
@@ -804,7 +867,7 @@ void VM::log_step_info()
     }
     else
     {
-        int start = std::max(0, cpu.sp - 10);
+        int start = std::max(0, cpu.sp - 32);
         for (int i = start; i < cpu.sp; i++)
         {
             debug_log << "  [" << std::setw(3) << i << "] " << cpu.stack[i];

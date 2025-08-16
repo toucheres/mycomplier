@@ -32,6 +32,9 @@ void obj::pushASM(VM::ASM asm_code)
     case VM::ASM::HOLD:
         content.push_back("HOLD");
         break;
+    case VM::ASM::POP:
+        content.push_back("POP");
+        break;
     case VM::ASM::UP:
         content.push_back("UP");
         break;

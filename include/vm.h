@@ -49,28 +49,7 @@ struct Execution
 
 class VM
 {
-  private:
-    Execution exec;
-    std::unordered_map<std::string, int> external_functions;
-
-    // 调试相关
-    bool debug_enabled;
-    std::ofstream debug_log;
-    int step_count;
-
-    // 私有辅助方法
-    void push(int value);
-    int pop();
-    void execute_instruction();
-    void handle_syscall(int syscall_id);
-    bool check_bounds(int address, int size = 1);
-
-    // 调试方法
-    void log_step_info();
-    std::string get_instruction_name(int instruction_code);
-
   public:
-    VCPU cpu; // 改为公有，方便测试和调试
     enum class ASM
     {
         SYSTEMCALL,
@@ -88,6 +67,7 @@ class VM
         SI,   // 存储整数到地址
         SC,   // 存储字符到地址
         PUSH, // 压栈
+        POP,  // 出栈
         OR,   // 逻辑或
         XOR,  // 异或
         AND,  // 逻辑与
@@ -108,6 +88,131 @@ class VM
         HOLD, // 占位
     };
 
+  private:
+    Execution exec;
+    std::unordered_map<std::string, int> external_functions;
+
+    // 调试相关
+    bool debug_enabled;
+    std::ofstream debug_log;
+    int step_count;
+
+    // 私有辅助方法
+    void push(int value);
+    int pop();
+    void execute_instruction();
+    void handle_syscall(int syscall_id);
+    bool check_bounds(int address, int size = 1);
+
+    // 新增：参数解析和验证
+    bool parse_instruction_args(const std::string& line, std::string& instruction,
+                                std::vector<int>& args);
+    bool validate_args(VM::ASM asm_type, const std::vector<int>& args);
+
+    // 调试方法
+    void log_step_info();
+    std::string get_instruction_name(int instruction_code);
+
+  public:
+    VCPU cpu; // 改为公有，方便测试和调试
+
+    struct ASMmeta
+    {
+        std::string name;
+        size_t num_args = 0; // 1为1个  2为2个...  10为0个或1个 210为0个或1个或2个...
+    };
+    ASM formStrToASM(const std::string& str)
+    {
+        static const std::unordered_map<std::string, ASM> name_map{
+            {"SYSTEMCALL", ASM::SYSTEMCALL},
+            {"IMM", ASM::IMM},
+            {"LEA", ASM::LEA},
+            {"JMP", ASM::JMP},
+            {"JZ", ASM::JZ},
+            {"JNZ", ASM::JNZ},
+            {"CALL", ASM::CALL},
+            {"NVAR", ASM::NVAR},
+            {"DARG", ASM::DARG},
+            {"RET", ASM::RET},
+            {"LI", ASM::LI},
+            {"LC", ASM::LC},
+            {"SI", ASM::SI},
+            {"SC", ASM::SC},
+            {"PUSH", ASM::PUSH},
+            {"POP", ASM::POP},
+            {"OR", ASM::OR},
+            {"XOR", ASM::XOR},
+            {"AND", ASM::AND},
+            {"EQ", ASM::EQ},
+            {"NE", ASM::NE},
+            {"LT", ASM::LT},
+            {"GT", ASM::GT},
+            {"LE", ASM::LE},
+            {"GE", ASM::GE},
+            {"SHL", ASM::SHL},
+            {"SHR", ASM::SHR},
+            {"ADD", ASM::ADD},
+            {"SUB", ASM::SUB},
+            {"MUL", ASM::MUL},
+            {"DIV", ASM::DIV},
+            {"MOD", ASM::MOD},
+            {"UP", ASM::UP},
+            {"HOLD", ASM::HOLD},
+        };
+
+        auto it = name_map.find(str);
+        if (it != name_map.end())
+        {
+            return it->second;
+        }
+        return ASM::HOLD; // 未知指令返回HOLD作为占位符
+    }
+    ASMmeta getASMmeta(VM::ASM ASM)
+    {
+        static const std::unordered_map<VM::ASM, ASMmeta> ASM_META{
+            {VM::ASM::SYSTEMCALL, ASMmeta{"SYSTEMCALL", 1}},
+            {VM::ASM::IMM, ASMmeta{"IMM", 1}},
+            {VM::ASM::LEA, ASMmeta{"LEA", 1}},
+            {VM::ASM::JMP, ASMmeta{"JMP", 1}},
+            {VM::ASM::JZ, ASMmeta{"JZ", 1}},
+            {VM::ASM::JNZ, ASMmeta{"JNZ", 1}},
+            {VM::ASM::CALL, ASMmeta{"CALL", 1}},
+            {VM::ASM::NVAR, ASMmeta{"NVAR", 1}},
+            {VM::ASM::DARG, ASMmeta{"DARG", 1}},
+            {VM::ASM::RET, ASMmeta{"RET", 0}},
+            {VM::ASM::LI, ASMmeta{"LI", 10}}, // 可选参数：有参数时直接访问地址，无参数时从栈取地址
+            {VM::ASM::LC, ASMmeta{"LC", 10}}, // 同LI，但加载字符
+            {VM::ASM::SI, ASMmeta{"SI", 10}}, // 可选参数：有参数时直接写地址，无参数时从栈取地址
+            {VM::ASM::SC, ASMmeta{"SC", 10}}, // 同SI，但存储字符
+            {VM::ASM::PUSH, ASMmeta{"PUSH", 0}}, // 当前实现无参数，推送ax
+            {VM::ASM::POP, ASMmeta{"POP", 0}},
+            {VM::ASM::OR, ASMmeta{"OR", 0}},
+            {VM::ASM::XOR, ASMmeta{"XOR", 0}},
+            {VM::ASM::AND, ASMmeta{"AND", 0}},
+            {VM::ASM::EQ, ASMmeta{"EQ", 0}},
+            {VM::ASM::NE, ASMmeta{"NE", 0}},
+            {VM::ASM::LT, ASMmeta{"LT", 0}},
+            {VM::ASM::GT, ASMmeta{"GT", 0}},
+            {VM::ASM::LE, ASMmeta{"LE", 0}},
+            {VM::ASM::GE, ASMmeta{"GE", 0}},
+            {VM::ASM::SHL, ASMmeta{"SHL", 0}},
+            {VM::ASM::SHR, ASMmeta{"SHR", 0}},
+            {VM::ASM::ADD, ASMmeta{"ADD", 0}},
+            {VM::ASM::SUB, ASMmeta{"SUB", 0}},
+            {VM::ASM::MUL, ASMmeta{"MUL", 0}},
+            {VM::ASM::DIV, ASMmeta{"DIV", 0}},
+            {VM::ASM::MOD, ASMmeta{"MOD", 0}},
+            {VM::ASM::UP, ASMmeta{"UP", 10}}, // 可选参数：有参数时直接使用，无参数时从栈取
+            {VM::ASM::HOLD, ASMmeta{"HOLD", 0}},
+        };
+
+        auto it = ASM_META.find(ASM);
+        if (it != ASM_META.end())
+        {
+            return it->second;
+        }
+        return ASMmeta{"UNKNOWN", 0};
+    }
     enum class systemcall
     {
         OPEN,

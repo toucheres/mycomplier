@@ -1,19 +1,8 @@
+int a;
 int main()
 {
-    int i;
-    int ret;
-    i = 1;
-    if (i == 0)
-    {
-        ret = 10;
-    }
-    else
-    {
-        if (i == 1 && 1)
-        {
-            ret = 100;
-        }
-    }
-
-    return ret;
+    int b;
+    a = 12;
+    b = 33;
+    return a + b * 2;
 }

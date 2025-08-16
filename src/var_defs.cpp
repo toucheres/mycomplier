@@ -16,16 +16,16 @@ std::expected<var_def*, error> var_defs::eachnamespace::find(const std::string& 
 
 std::expected<fun_def, error> fun_defs::find(const std::string& id)
 {
-    auto ret = std::find_if(fun_defines.begin(), fun_defines.end(),
-                            [&id](fun_def fundef)
-                            {
-                                if (fundef.id == id)
-                                {
-                                    return true;
-                                }
-                                return false;
-                            });
-    if (ret != fun_defines.end())
+    std::optional<fun_def> ret;
+    for (const auto& each : fun_defines)
+    {
+        if (each.id == id)
+        {
+            ret = each;
+            break;
+        }
+    }
+    if (ret)
     {
         return *ret;
     }

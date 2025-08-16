@@ -7,6 +7,7 @@
 #include <tokenprocessor.h>
 #include <vector>
 #include <vm.h>
+#include <map>
 // 只支持int[*]类型
 // 将一个int作为内存最小单位,指针,int大小均为1
 // 函数调用:
@@ -98,6 +99,7 @@ struct obj
     std::vector<std::string> content; // 改为vector格式，便于调试
 
     // 源在前，目标在后
+
     void pushASM(VM::ASM ASM);
     void pushASM(VM::ASM ASM, int arg);
     void pushASM(VM::ASM ASM, int src, int obj);
