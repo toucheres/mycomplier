@@ -1,8 +1,10 @@
-int a;
+
+int add(int in, int in1)
+{
+    return in + 1;
+}
+
 int main()
 {
-    int b;
-    a = 12;
-    b = 33;
-    return a + b * 2;
+    return 1 + add(3, 2);
 }

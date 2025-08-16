@@ -656,7 +656,7 @@ std::expected<bool, error> Complier::try_parse_unary_expr(Tokens& tokens, obj& o
             ret = obj.global_var_defs_.find(name.content);
             if (ret)
             {
-                obj.pushASM(VM::ASM::PUSH, ret.value()->addr);
+                obj.pushASM(VM::ASM::IMM, ret.value()->addr);
                 return true;
             }
         }
@@ -798,11 +798,14 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
             {
                 obj.pushASM(VM::ASM::CALL, fun_result.value().addr); // 调用指定地址的函数
                 // [TODO] 清理args
-                // 局部变量 arg1 arg2 ... retvalue
-                // for (int i = 0; i < arg_count; i++)
-                // {
-                //     obj.pushASM(VM::ASM::POP);
-                // }
+                // 局部变量 arg1 arg2 ...
+                // obj.pushASM(VM::ASM::MOVE, (int)VCPU::stack_cpu::STACK,
+                // (int)VCPU::stack_cpu::AX);
+                for (int i = 0; i < arg_count; i++)
+                {
+                    obj.pushASM(VM::ASM::POP);
+                }
+                obj.pushASM(VM::ASM::PUSH);
             }
             else
             {

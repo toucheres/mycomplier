@@ -23,8 +23,9 @@
 
 // fun中: a=bp[-n] b=bp[-(n-1)]... retaddr=bp[0] obp=bp[1]
 // ret ax携带返回值,jump bp[0]
+// nargs n  分配n个参数
 
-// nargs n  弹出n个参数
+// dargs n 弹出n个参数
 // [可选] ax->stack
 
 // 编译时的空间分配:

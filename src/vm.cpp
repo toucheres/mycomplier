@@ -373,9 +373,25 @@ void VM::execute_instruction()
     {
         // 占位指令，不执行任何操作
     }
+    else if (instruction == "MOVE")
+    {
+        static int* cpu_reg[4];
+        cpu_reg[(int)VCPU::stack_cpu::AX] = &cpu.ax;
+        cpu_reg[(int)VCPU::stack_cpu::BP] = &cpu.bp;
+        cpu_reg[(int)VCPU::stack_cpu::PC] = &cpu.pc;
+        cpu_reg[(int)VCPU::stack_cpu::SP] = &cpu.sp;
+        cpu_reg[(int)VCPU::stack_cpu::STACK] = &cpu.stack[cpu.stack.size() - 1];
+        int src = args[0];
+        int des = args[1];
+        *cpu_reg[src] = *cpu_reg[des];
+    }
     else if (instruction == "POP")
     {
         pop();
+    }
+    else if (instruction == "PUSH")
+    {
+        push(cpu.ax);
     }
     else if (instruction == "ADD")
     {
@@ -479,11 +495,10 @@ void VM::execute_instruction()
     {
         int tp_retaddr = cpu.stack[cpu.bp];
         int tp_oldbp = cpu.stack[cpu.bp + 1];
-        int retv = cpu.ax = pop();
+        cpu.ax = pop();
         cpu.pc = tp_retaddr;
         cpu.sp = cpu.bp;
         cpu.bp = tp_oldbp;
-        push(retv);
         if (cpu.bp == 0)
         {
             // main函数ret

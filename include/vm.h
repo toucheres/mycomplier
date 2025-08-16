@@ -25,6 +25,14 @@ struct VCPU
         stack.resize(1024); // 默认栈大小
         // data.resize(1024);  // 默认数据段大小
     }
+    enum class stack_cpu
+    {
+        PC,
+        SP,
+        BP,
+        AX,
+        STACK
+    };
 };
 
 struct Execution
@@ -66,7 +74,8 @@ class VM
         LC,   // 从地址加载字符
         SI,   // 存储整数到地址
         SC,   // 存储字符到地址
-        PUSH, // 压栈
+        MOVE, // 在栈顶，寄存器间复制 [TODO]未完成
+        PUSH, // ax压栈
         POP,  // 出栈
         OR,   // 逻辑或
         XOR,  // 异或
@@ -134,6 +143,7 @@ class VM
             {"NVAR", ASM::NVAR},
             {"DARG", ASM::DARG},
             {"RET", ASM::RET},
+            {"MOVE", ASM::MOVE},
             {"LI", ASM::LI},
             {"LC", ASM::LC},
             {"SI", ASM::SI},
@@ -167,7 +177,7 @@ class VM
         }
         return ASM::HOLD; // 未知指令返回HOLD作为占位符
     }
-    ASMmeta getASMmeta(VM::ASM ASM)
+    static ASMmeta getASMmeta(VM::ASM ASM)
     {
         static const std::unordered_map<VM::ASM, ASMmeta> ASM_META{
             {VM::ASM::SYSTEMCALL, ASMmeta{"SYSTEMCALL", 1}},
@@ -180,6 +190,7 @@ class VM
             {VM::ASM::NVAR, ASMmeta{"NVAR", 1}},
             {VM::ASM::DARG, ASMmeta{"DARG", 1}},
             {VM::ASM::RET, ASMmeta{"RET", 0}},
+            {VM::ASM::MOVE, ASMmeta{"MOVE", 2}},
             {VM::ASM::LI, ASMmeta{"LI", 10}}, // 可选参数：有参数时直接访问地址，无参数时从栈取地址
             {VM::ASM::LC, ASMmeta{"LC", 10}}, // 同LI，但加载字符
             {VM::ASM::SI, ASMmeta{"SI", 10}}, // 可选参数：有参数时直接写地址，无参数时从栈取地址
