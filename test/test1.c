@@ -1,10 +1,17 @@
 
-int add(int in, int in1)
+int fun(int in)
 {
-    return in + 1;
+    if (in == 1)
+    {
+        return 1;
+    }
+    else
+    {
+        return in * fun(in - 1);
+    }
 }
 
 int main()
 {
-    return 1 + add(3, 2);
+    return fun(4);
 }

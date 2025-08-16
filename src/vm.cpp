@@ -502,7 +502,7 @@ void VM::execute_instruction()
         if (cpu.bp == 0)
         {
             // main函数ret
-            exec.exit_code = pop();
+            exec.exit_code = cpu.ax;
             exec.status = Execution::Status::STOPPED;
         }
     }
