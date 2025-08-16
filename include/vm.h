@@ -69,6 +69,7 @@ class VM
         CALL, // 函数调用
         NVAR, // 新建局部变量
         RET,  // 函数返回
+        EXIT, // main函数返回
         LI,   // 从地址加载整数
         LC,   // 从地址加载字符
         SI,   // 存储整数到地址
@@ -143,6 +144,7 @@ class VM
             {"NVAR", ASM::NVAR},
             {"DARG", ASM::DARG},
             {"RET", ASM::RET},
+            {"EXIT", ASM::EXIT},
             {"MOVE", ASM::MOVE},
             {"LI", ASM::LI},
             {"LC", ASM::LC},
@@ -191,6 +193,7 @@ class VM
             {VM::ASM::NVAR, ASMmeta{"NVAR", 1}},
             {VM::ASM::DARG, ASMmeta{"DARG", 1}},
             {VM::ASM::RET, ASMmeta{"RET", 0}},
+            {VM::ASM::EXIT , ASMmeta{"EXIT", 0}},
             {VM::ASM::MOVE, ASMmeta{"MOVE", 2}},
             {VM::ASM::LI, ASMmeta{"LI", 10}}, // 可选参数：有参数时直接访问地址，无参数时从栈取地址
             {VM::ASM::LC, ASMmeta{"LC", 10}}, // 同LI，但加载字符
@@ -198,7 +201,7 @@ class VM
             {VM::ASM::SC, ASMmeta{"SC", 10}}, // 同SI，但存储字符
             {VM::ASM::PUSH, ASMmeta{"PUSH", 0}}, // 当前实现无参数，推送ax
             {VM::ASM::POP, ASMmeta{"POP", 0}},
-            {VM::ASM::DARG , ASMmeta{"DARG", 1}},
+            {VM::ASM::DARG, ASMmeta{"DARG", 1}},
             {VM::ASM::OR, ASMmeta{"OR", 0}},
             {VM::ASM::XOR, ASMmeta{"XOR", 0}},
             {VM::ASM::AND, ASMmeta{"AND", 0}},

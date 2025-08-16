@@ -80,7 +80,7 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
         return std::unexpected(ret2.error());
     }
     obj.func_var_defs_.outto_old_namespace();
-    obj.content[nvar_pos - 1] = std::format("NVAR {}", obj.func_var_defs_.get_max_size());
+    obj.content[nvar_pos - 1] = std::format("NVAR {}", obj.func_var_defs_.get_max_size() - 2);
     // 函数解析完成，退出函数作用域
 
     return true;
@@ -1084,6 +1084,7 @@ std::expected<obj, error> Complier::eachFile(std::string path)
     // 为程序入口点预留空间
     obj.pushASM(VM::ASM::HOLD); // 临时占位，稍后分配globalvar
     obj.pushASM(VM::ASM::HOLD); // 临时占位，稍后更新main地址
+    obj.pushASM(VM::ASM::HOLD); // 临时占位，稍后ret
 
     Preprocessor p;
     auto ret = p.process(path, path + ".pre");
@@ -1126,13 +1127,16 @@ std::expected<obj, error> Complier::eachFile(std::string path)
     }
 
     auto gsize = obj.global_var_defs_.get_max_size();
-    obj.content[0] = std::format("UP {}", gsize + 1); // 防止全局为空影响ret时对bp的判断
+    obj.content[0] =
+        std::format("UP {}", gsize); // 防止全局为空影响ret时对bp的判断->使用exit指令而非依赖bp值
 
     // 更新程序入口点的跳转地址
     auto main_fun = obj.fun_defs_.find("main");
     if (main_fun)
     {
-        obj.content[1] = std::format("JMP {}", main_fun.value().addr);
+        // obj.content[1] = std::format("call {}", main_fun.value().addr);
+        obj.content[1] = std::format("CALL {}", main_fun.value().addr);
+        obj.content[2] = std::format("EXIT");
     }
     return obj;
 }

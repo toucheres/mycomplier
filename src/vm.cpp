@@ -514,6 +514,21 @@ void VM::execute_instruction()
             exec.status = Execution::Status::STOPPED;
         }
     }
+    else if (instruction == "EXIT")
+    {
+        // int tp_retaddr = cpu.stack[cpu.bp];
+        // int tp_oldbp = cpu.stack[cpu.bp + 1];
+        // cpu.ax = pop();
+        // cpu.pc = tp_retaddr;
+        // cpu.sp = cpu.bp;
+        // cpu.bp = tp_oldbp;
+        // if (cpu.bp == 0)
+        // {
+        //     // main函数ret
+            exec.exit_code = cpu.ax;
+            exec.status = Execution::Status::STOPPED;
+        // }
+    }
     else if (instruction == "DARG")
     {
         // 删除参数 - 这里实现为空操作
@@ -792,6 +807,8 @@ std::string VM::get_instruction_name(int instruction_code)
         return "DARG";
     case ASM::RET:
         return "RET";
+    case ASM::EXIT:
+        return "EXIT";
     case ASM::LI:
         return "LI";
     case ASM::LC:

@@ -1,6 +1,7 @@
-
+int a;
 int fun(int in)
 {
+    int ss;
     if (in == 1)
     {
         return 1;
@@ -13,5 +14,6 @@ int fun(int in)
 
 int main()
 {
-    return fun(5);
+    a = 3;
+    return fun(a);
 }
