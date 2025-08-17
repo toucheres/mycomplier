@@ -383,15 +383,15 @@ void VM::execute_instruction()
     }
     else if (instruction == "MOVE")
     {
-        static int* cpu_reg[4];
+        static int* cpu_reg[5];
         cpu_reg[(int)VCPU::stack_cpu::AX] = &cpu.ax;
         cpu_reg[(int)VCPU::stack_cpu::BP] = &cpu.bp;
         cpu_reg[(int)VCPU::stack_cpu::PC] = &cpu.pc;
         cpu_reg[(int)VCPU::stack_cpu::SP] = &cpu.sp;
-        cpu_reg[(int)VCPU::stack_cpu::STACK] = &cpu.stack[cpu.stack.size() - 1];
-        int src = args[0];
-        int des = args[1];
-        *cpu_reg[src] = *cpu_reg[des];
+        cpu_reg[(int)VCPU::stack_cpu::STACK] = &cpu.stack[cpu.sp - 1];
+        int* src_addr = cpu_reg[args[0]];
+        int* des_addr = cpu_reg[args[1]];
+        *des_addr = *src_addr;
     }
     else if (instruction == "POP")
     {
@@ -525,8 +525,8 @@ void VM::execute_instruction()
         // if (cpu.bp == 0)
         // {
         //     // main函数ret
-            exec.exit_code = cpu.ax;
-            exec.status = Execution::Status::STOPPED;
+        exec.exit_code = cpu.ax;
+        exec.status = Execution::Status::STOPPED;
         // }
     }
     else if (instruction == "DARG")

@@ -632,7 +632,7 @@ std::expected<bool, error> Complier::try_parse_unary_expr(Tokens& tokens, obj& o
     {
         std::string op = tokens.now().content;
         tokens.pos++;
-
+        //[TODO] 先尝试 左值op+find左值 在其余op+parse
         auto ret = try_parse_unary_expr(tokens, obj); // 递归处理嵌套一元运算符
         if (!ret)
             return ret;
@@ -797,7 +797,6 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
             if (fun_result)
             {
                 obj.pushASM(VM::ASM::CALL, fun_result.value().addr); // 调用指定地址的函数
-                // [TODO] 清理args
                 // 局部变量 arg1 arg2 ...
                 // obj.pushASM(VM::ASM::MOVE, (int)VCPU::stack_cpu::STACK,
                 // (int)VCPU::stack_cpu::AX);
