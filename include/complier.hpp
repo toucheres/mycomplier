@@ -2,12 +2,12 @@
 #include "enums.h"
 #include "error.hpp"
 #include <expected>
+#include <map>
 #include <stack>
 #include <string>
 #include <tokenprocessor.h>
 #include <vector>
 #include <vm.h>
-#include <map>
 // 只支持int[*]类型
 // 将一个int作为内存最小单位 指针,int大小均为1
 // 函数调用:
@@ -21,9 +21,9 @@
 // call addr<fun> 压入pc+1 压入bp bp=sp jump-addr<fun>  stack: a   b  ...  opc+1  obp
 //                                                                          bp
 
-    // fun中: a=bp[-n] b=bp[-(n-1)]... retaddr=bp[0] obp=bp[1]
-    // nargs n  分配n个参数
-    // ret ax携带返回值,jump bp[0]
+// fun中: a=bp[-n] b=bp[-(n-1)]... retaddr=bp[0] obp=bp[1]
+// nargs n  分配n个参数
+// ret ax携带返回值,jump bp[0]
 
 // dargs n 弹出n个参数
 // [可选] push ax->stack压回返回值
@@ -104,7 +104,24 @@ struct obj
     void pushASM(VM::ASM ASM);
     void pushASM(VM::ASM ASM, int arg);
     void pushASM(VM::ASM ASM, int src, int obj);
-
+    std::vector<int> records;
+    void save()
+    {
+        records.push_back(content.size());
+    }
+    void unsave()
+    {
+        records.pop_back();
+    }
+    void load()
+    {
+        int times = content.size() - records.back();
+        records.pop_back();
+        for (int i = 0; i < times; i++)
+        {
+            content.pop_back();
+        }
+    }
     // 获取vector格式的汇编代码（现在直接返回content）
     const std::vector<std::string>& get_assembly_vector() const;
 };
@@ -129,6 +146,7 @@ class Complier
     static std::expected<bool, error> try_parse_return(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_global_var(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_func_var(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_left_var_and_get_addr(Tokens& tokens, obj& obj);
 
     // 辅助函数
     static bool is_binary_operator(const std::string& token);
@@ -137,7 +155,7 @@ class Complier
     static bool is_multiplicative_operator(const std::string& token);
     static bool is_unary_operator(const std::string& token);
     static bool is_number(const std::string& token);
-    static void generate_binary_op_asm(const std::string& op, obj& obj);
+    // static void generate_binary_op_asm(const std::string& op, obj& obj);
 
   public:
     std::expected<obj, error> process(std::vector<std::string> args);

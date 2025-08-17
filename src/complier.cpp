@@ -430,6 +430,7 @@ std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, o
 {
     tokens.save();
 
+    // [TODO]基于左值解析的赋值
     // 先检查是否是简单的变量赋值: identifier = expression
     if (tokens.now().can_be_id() && tokens.pos + 1 < tokens.size() &&
         is_assignment_operator(tokens[tokens.pos + 1].content))
@@ -633,6 +634,20 @@ std::expected<bool, error> Complier::try_parse_unary_expr(Tokens& tokens, obj& o
         std::string op = tokens.now().content;
         tokens.pos++;
         //[TODO] 先尝试 左值op+find左值 在其余op+parse
+
+        if (op == "&")
+        {
+            auto lret = try_parse_left_var_and_get_addr(tokens, obj);
+            if (lret)
+            {
+                return true;
+            }
+            else
+            {
+                return std::unexpected(error::expected_left_value);
+            }
+        }
+
         auto ret = try_parse_unary_expr(tokens, obj); // 递归处理嵌套一元运算符
         if (!ret)
             return ret;
@@ -643,23 +658,23 @@ std::expected<bool, error> Complier::try_parse_unary_expr(Tokens& tokens, obj& o
             // 解引用：从地址加载值
             obj.pushASM(VM::ASM::LI);
         }
-        else if (op == "&")
-        {
-            // 取地址：获取变量地址
-            auto name = tokens.now();
-            auto ret = obj.func_var_defs_.find(name.content);
-            if (ret)
-            {
-                obj.pushASM(VM::ASM::LEA, ret.value()->addr);
-                return true;
-            }
-            ret = obj.global_var_defs_.find(name.content);
-            if (ret)
-            {
-                obj.pushASM(VM::ASM::IMM, ret.value()->addr);
-                return true;
-            }
-        }
+        // else if (op == "&")
+        // {
+        //     // 取地址：获取变量地址
+        //     auto name = tokens.now();
+        //     auto ret = obj.func_var_defs_.find(name.content);
+        //     if (ret)
+        //     {
+        //         obj.pushASM(VM::ASM::LEA, ret.value()->addr);
+        //         return true;
+        //     }
+        //     ret = obj.global_var_defs_.find(name.content);
+        //     if (ret)
+        //     {
+        //         obj.pushASM(VM::ASM::IMM, ret.value()->addr);
+        //         return true;
+        //     }
+        // }
         else if (op == "-")
         {
             // 负号：0 - expr
@@ -907,31 +922,31 @@ bool Complier::is_number(const std::string& token)
     return true;
 }
 
-void Complier::generate_binary_op_asm(const std::string& op, obj& obj)
-{
-    if (op == "+")
-        obj.pushASM(VM::ASM::ADD);
-    else if (op == "-")
-        obj.pushASM(VM::ASM::SUB);
-    else if (op == "*")
-        obj.pushASM(VM::ASM::MUL);
-    else if (op == "/")
-        obj.pushASM(VM::ASM::DIV);
-    else if (op == "==")
-        obj.pushASM(VM::ASM::EQ);
-    else if (op == "!=")
-        obj.pushASM(VM::ASM::NE);
-    else if (op == "<")
-        obj.pushASM(VM::ASM::LT);
-    else if (op == ">")
-        obj.pushASM(VM::ASM::GT);
-    else if (op == "<=")
-        obj.pushASM(VM::ASM::LE);
-    else if (op == ">=")
-        obj.pushASM(VM::ASM::GE);
-    else if (op == "=")
-        obj.pushASM(VM::ASM::SI); // 赋值
-}
+// void Complier::generate_binary_op_asm(const std::string& op, obj& obj)
+// {
+//     if (op == "+")
+//         obj.pushASM(VM::ASM::ADD);
+//     else if (op == "-")
+//         obj.pushASM(VM::ASM::SUB);
+//     else if (op == "*")
+//         obj.pushASM(VM::ASM::MUL);
+//     else if (op == "/")
+//         obj.pushASM(VM::ASM::DIV);
+//     else if (op == "==")
+//         obj.pushASM(VM::ASM::EQ);
+//     else if (op == "!=")
+//         obj.pushASM(VM::ASM::NE);
+//     else if (op == "<")
+//         obj.pushASM(VM::ASM::LT);
+//     else if (op == ">")
+//         obj.pushASM(VM::ASM::GT);
+//     else if (op == "<=")
+//         obj.pushASM(VM::ASM::LE);
+//     else if (op == ">=")
+//         obj.pushASM(VM::ASM::GE);
+//     else if (op == "=")
+//         obj.pushASM(VM::ASM::SI); // 赋值
+// }
 
 std::expected<bool, error> Complier::try_parse_global_var(Tokens& tokens, obj& obj)
 {
@@ -1037,6 +1052,27 @@ std::expected<bool, error> Complier::try_parse_func_var(Tokens& tokens, obj& obj
     }
 
     return true;
+}
+
+std::expected<bool, error> Complier::try_parse_left_var_and_get_addr(Tokens& tokens, obj& obj)
+{
+    //[TODO]数组的声明
+    auto name = tokens.now().content;
+    tokens.pos++;
+    auto ret = obj.func_var_defs_.find(name);
+    if (ret)
+    {
+        obj.pushASM(VM::ASM::LEA, ret.value()->addr);
+        return true;
+    }
+    ret = obj.global_var_defs_.find(name);
+    if (ret)
+    {
+        obj.pushASM(VM::ASM::IMM, ret.value()->addr);
+        return true;
+    }
+    tokens.pos--;
+    return std::unexpected(error::expected_left_value);
 }
 
 std::expected<obj, error> Complier::process(std::vector<std::string> args)
