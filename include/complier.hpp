@@ -43,6 +43,13 @@ struct id_def
 struct var_def : id_def
 {
     int defult_value = 0;
+    enum class valtype
+    {
+        rightval,
+        globalval,
+        funcval
+    };
+    valtype lr = valtype::rightval;
 };
 
 struct fun_def : id_def
@@ -67,7 +74,7 @@ struct var_defs
     struct eachnamespace
     {
         std::vector<var_def> var_defines_namespace;
-        std::expected<var_def*, error> find(const std::string& id);
+        std::expected<var_def, error> find(const std::string& id);
         std::expected<bool, error> push(
             var_def var_def); // 在push中处理重定义: 每层namespace变量声明只能一次
     };
@@ -83,7 +90,7 @@ struct var_defs
         namespace_defines.emplace_back(); // 创建全局作用域（第0层）
     }
 
-    std::expected<var_def*, error> find(const std::string& id);
+    std::expected<var_def, error> find(const std::string& id);
     std::expected<bool, error> push(var_def var_def);
     // std::expected<bool, error> push_func_args(var_def var_def);
     std::expected<bool, error> push_func_args(std::vector<var_def> var_def);
@@ -104,24 +111,26 @@ struct obj
     void pushASM(VM::ASM ASM);
     void pushASM(VM::ASM ASM, int arg);
     void pushASM(VM::ASM ASM, int src, int obj);
-    std::vector<int> records;
-    void save()
-    {
-        records.push_back(content.size());
-    }
-    void unsave()
-    {
-        records.pop_back();
-    }
-    void load()
-    {
-        int times = content.size() - records.back();
-        records.pop_back();
-        for (int i = 0; i < times; i++)
-        {
-            content.pop_back();
-        }
-    }
+    int pos;
+    int getpos();
+    bool setpos(int);
+    // void save()
+    // {
+    //     records.push_back(content.size());
+    // }
+    // void unsave()
+    // {
+    //     records.pop_back();
+    // }
+    // void load()
+    // {
+    //     int times = content.size() - records.back();
+    //     records.pop_back();
+    //     for (int i = 0; i < times; i++)
+    //     {
+    //         content.pop_back();
+    //     }
+    // }
     // 获取vector格式的汇编代码（现在直接返回content）
     const std::vector<std::string>& get_assembly_vector() const;
 };
@@ -132,7 +141,7 @@ class Complier
     static std::expected<std::vector<Type>, error> try_parse_args(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_expr(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_assignment_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_logical_or_expr(Tokens& tokens, obj& obj);
+    static std::expected<bool, error> try_parse_left_or_right_value_and_get_value(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_logical_and_expr(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_equality_expr(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_relational_expr(Tokens& tokens, obj& obj);

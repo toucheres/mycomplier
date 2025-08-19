@@ -11,7 +11,7 @@
 std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
 {
     fun_def thisfun;
-    tokens.save();
+    int startpos = tokens.pos;
     if (auto ret = tokens.now().is_type())
     {
         Type rettype{ret.value()};
@@ -25,7 +25,7 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     }
     else
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::unkowntype);
     }
     if (tokens.now().can_be_id())
@@ -36,7 +36,7 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     else
     {
         obj.func_var_defs_.outto_old_namespace();
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::illageid);
     }
     // 为函数创建新的作用域
@@ -51,7 +51,7 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     if (!ret)
     {
         obj.func_var_defs_.into_new_namespace();
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(ret.error());
     }
     else
@@ -61,6 +61,7 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
         var_def retaddr{};
         retaddr.id = "returnaddr";
         retaddr.type = Type{Basic_Type::INT};
+        retaddr.lr == var_def::valtype::funcval;
         obj.func_var_defs_.push(retaddr);
         // 为oldbp预留
         retaddr.id = "oldbp";
@@ -76,7 +77,7 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
     {
         obj.func_var_defs_.outto_old_namespace();
 
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(ret2.error());
     }
     obj.func_var_defs_.outto_old_namespace();
@@ -88,10 +89,10 @@ std::expected<bool, error> Complier::try_parse_fun(Tokens& tokens, obj& obj)
 
 std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    int startpos = tokens.pos;
     if (!(tokens.now().content == "{"))
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
     tokens.pos++; // 跳过开始的 '{'
@@ -100,7 +101,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
     do
     {
         flag = false;
-        tokens.save();
+        int startpos = tokens.pos;
         // 遇到下一个作用域
         if (tokens.now().content == "{")
         {
@@ -120,7 +121,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
             flag = true;
             continue;
         }
-        tokens.load();
+        tokens.pos = startpos;
 
         // 尝试解析 if 语句
         if (auto ret = try_parse_if(tokens, obj))
@@ -128,7 +129,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
             flag = true;
             continue;
         }
-        tokens.load();
+        tokens.pos = startpos;
 
         // 尝试解析 while 语句
         if (auto ret = try_parse_while(tokens, obj))
@@ -136,7 +137,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
             flag = true;
             continue;
         }
-        tokens.load();
+        tokens.pos = startpos;
 
         // 尝试解析 return 语句
         if (auto ret = try_parse_return(tokens, obj))
@@ -144,7 +145,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
             flag = true;
             continue;
         }
-        tokens.load();
+        tokens.pos = startpos;
 
         // 尝试解析表达式语句
         if (auto ret = try_parse_expr(tokens, obj))
@@ -156,7 +157,7 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
                 continue;
             }
         }
-        tokens.load();
+        tokens.pos = startpos;
 
         // 如果所有解析都失败，说明遇到了不认识的token
         // 为了避免无限循环，我们需要跳过这个token
@@ -177,10 +178,10 @@ std::expected<bool, error> Complier::try_parse_block(Tokens& tokens, obj& obj)
 
 std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    int startpos = tokens.pos;
     if (tokens.now().content != "(")
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
     tokens.pos++;
@@ -198,7 +199,7 @@ std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens,
         auto ret = tokens.now().is_type();
         if (!ret)
         {
-            tokens.load();
+            tokens.pos = startpos;
             return std::unexpected(error::unkowntype);
         }
         tokens.pos++;
@@ -222,7 +223,7 @@ std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens,
         }
         else
         {
-            tokens.load();
+            tokens.pos = startpos;
             return std::unexpected(error::illageid);
         }
 
@@ -239,7 +240,7 @@ std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens,
         }
         else
         {
-            tokens.load();
+            tokens.pos = startpos;
             return std::unexpected(error::expected_fenhao);
         }
     } while (true);
@@ -247,10 +248,10 @@ std::expected<std::vector<Type>, error> Complier::try_parse_args(Tokens& tokens,
 
 std::expected<bool, error> Complier::try_parse_while(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    int startpos = tokens.pos;
     if (tokens.now().content != "while")
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_while);
     }
     tokens.pos++;
@@ -258,7 +259,7 @@ std::expected<bool, error> Complier::try_parse_while(Tokens& tokens, obj& obj)
     // 解析条件表达式 (expression)
     if (tokens.now().content != "(")
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
     tokens.pos++;
@@ -266,13 +267,13 @@ std::expected<bool, error> Complier::try_parse_while(Tokens& tokens, obj& obj)
     auto ret = try_parse_expr(tokens, obj);
     if (!ret)
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(ret.error());
     }
 
     if (tokens.now().content != ")")
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
     tokens.pos++;
@@ -281,7 +282,7 @@ std::expected<bool, error> Complier::try_parse_while(Tokens& tokens, obj& obj)
     auto ret2 = try_parse_block(tokens, obj);
     if (!ret2)
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(ret2.error());
     }
 
@@ -305,10 +306,10 @@ std::expected<bool, error> Complier::try_parse_while(Tokens& tokens, obj& obj)
 // end:
 std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    int startpos = tokens.pos;
     if (tokens.now().content != "if")
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
     tokens.pos++;
@@ -316,7 +317,7 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
     // 解析条件表达式 (expression)
     if (tokens.now().content != "(")
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
     tokens.pos++;
@@ -324,7 +325,7 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
     auto ret = try_parse_expr(tokens, obj);
     if (!ret)
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(ret.error());
     }
     obj.pushASM(VM::ASM::HOLD);
@@ -332,7 +333,7 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
 
     if (tokens.now().content != ")")
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
     tokens.pos++;
@@ -340,7 +341,7 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
     auto ret2 = try_parse_block(tokens, obj);
     if (!ret2)
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(ret2.error());
     }
     obj.pushASM(VM::ASM::HOLD); // 主分支跳转end
@@ -354,7 +355,7 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
         auto ret3 = try_parse_block(tokens, obj);
         if (!ret3)
         {
-            tokens.load();
+            tokens.pos = startpos;
             return std::unexpected(ret3.error());
         }
     }
@@ -364,10 +365,10 @@ std::expected<bool, error> Complier::try_parse_if(Tokens& tokens, obj& obj)
 
 std::expected<bool, error> Complier::try_parse_return(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    int startpos = tokens.pos;
     if (tokens.now().content != "return")
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
     tokens.pos++;
@@ -379,7 +380,7 @@ std::expected<bool, error> Complier::try_parse_return(Tokens& tokens, obj& obj)
         auto ret = try_parse_expr(tokens, obj);
         if (!ret)
         {
-            tokens.load();
+            tokens.pos = startpos;
             return std::unexpected(ret.error());
         }
     }
@@ -392,7 +393,7 @@ std::expected<bool, error> Complier::try_parse_return(Tokens& tokens, obj& obj)
     // 检查分号
     if (tokens.prase_over() || tokens.now().content != ";")
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
     tokens.pos++;
@@ -405,12 +406,12 @@ std::expected<bool, error> Complier::try_parse_return(Tokens& tokens, obj& obj)
 
 std::expected<bool, error> Complier::try_parse_expr(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    int startpos = tokens.pos;
 
     // 检查边界
     if (tokens.prase_over())
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
 
@@ -418,7 +419,7 @@ std::expected<bool, error> Complier::try_parse_expr(Tokens& tokens, obj& obj)
     auto ret = try_parse_assignment_expr(tokens, obj);
     if (!ret)
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(ret.error());
     }
 
@@ -428,7 +429,33 @@ std::expected<bool, error> Complier::try_parse_expr(Tokens& tokens, obj& obj)
 // 解析赋值表达式
 std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    // auto startpos = tokens.pos;
+    // auto ret = try_parse_left_var_and_get_addr(tokens, obj);
+    // if (ret && is_assignment_operator(tokens[tokens.pos + 1].content))
+    // {
+    //     tokens.pos++;
+    //     obj.save();
+    //     if (ret.value().lr == var_def::vartype::funcval)
+    //     {
+    //         obj.pushASM(VM::ASM::LEA, ret.value().addr);
+    //     }
+    //     else
+    //     {
+    //         obj.pushASM(VM::ASM::IMM, ret.value().addr);
+    //     }
+    //     if (auto ret2 = try_parse_assignment_expr(tokens, obj); !ret2)
+    //     {
+    //         tokens.pos = startpos;
+    //         return ret2;
+    //     }
+    //     // if (ret.value().type.ptr_lay == 0 && ret.value().type.bt == Basic_Type::CHAR)
+    //     // {}else{
+    //     obj.pushASM(VM::ASM::SI); // 存储到指定地址
+    // }
+    // tokens.pos = startpos;
+    // return try_parse_rightVal_and_get_value(tokens, obj);
+    // //...
+    int startpos = tokens.pos;
 
     // [TODO]基于左值解析的赋值
     // 先检查是否是简单的变量赋值: identifier = expression
@@ -446,7 +473,7 @@ std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, o
         auto ret = try_parse_assignment_expr(tokens, obj);
         if (!ret)
         {
-            tokens.load();
+            tokens.pos = startpos;
             return ret;
         }
 
@@ -454,7 +481,7 @@ std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, o
         auto var_result = obj.func_var_defs_.find(var_id);
         if (var_result)
         {
-            obj.pushASM(VM::ASM::LEA, var_result.value()->addr); // 取bp+bias
+            obj.pushASM(VM::ASM::LEA, var_result.value().addr); // 取bp+bias
             obj.pushASM(VM::ASM::SI);                            // 存储到指定地址
         }
         else
@@ -462,7 +489,7 @@ std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, o
             var_result = obj.global_var_defs_.find(var_id);
             if (var_result)
             {
-                obj.pushASM(VM::ASM::SI, var_result.value()->addr);
+                obj.pushASM(VM::ASM::SI, var_result.value().addr);
             }
             else
             {
@@ -474,12 +501,12 @@ std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, o
     }
 
     // 不是赋值表达式，按普通表达式处理
-    tokens.load();
-    return try_parse_logical_or_expr(tokens, obj);
+    tokens.pos = startpos;
+    return try_parse_left_or_right_value_and_get_value(tokens, obj);
 }
 
 // 解析逻辑或表达式
-std::expected<bool, error> Complier::try_parse_logical_or_expr(Tokens& tokens, obj& obj)
+std::expected<bool, error> Complier::try_parse_left_or_right_value_and_get_value(Tokens& tokens, obj& obj)
 {
     auto ret = try_parse_logical_and_expr(tokens, obj);
     if (!ret)
@@ -665,13 +692,13 @@ std::expected<bool, error> Complier::try_parse_unary_expr(Tokens& tokens, obj& o
         //     auto ret = obj.func_var_defs_.find(name.content);
         //     if (ret)
         //     {
-        //         obj.pushASM(VM::ASM::LEA, ret.value()->addr);
+        //         obj.pushASM(VM::ASM::LEA, ret.value().addr);
         //         return true;
         //     }
         //     ret = obj.global_var_defs_.find(name.content);
         //     if (ret)
         //     {
-        //         obj.pushASM(VM::ASM::IMM, ret.value()->addr);
+        //         obj.pushASM(VM::ASM::IMM, ret.value().addr);
         //         return true;
         //     }
         // }
@@ -731,12 +758,12 @@ std::expected<bool, error> Complier::try_parse_postfix_expr(Tokens& tokens, obj&
 }
 std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    int startpos = tokens.pos;
 
     // 检查边界
     if (tokens.prase_over())
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::expected_fenhao);
     }
 
@@ -769,14 +796,14 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
                     auto ret = try_parse_expr(tokens, obj);
                     if (!ret)
                     {
-                        tokens.load();
+                        tokens.pos = startpos;
                         return std::unexpected(ret.error());
                     }
                     arg_count++;
 
                     if (tokens.prase_over())
                     {
-                        tokens.load();
+                        tokens.pos = startpos;
                         return std::unexpected(error::expected_fenhao);
                     }
 
@@ -791,7 +818,7 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
                     }
                     else
                     {
-                        tokens.load();
+                        tokens.pos = startpos;
                         return std::unexpected(error::expected_fenhao);
                     }
                 } while (true);
@@ -803,7 +830,7 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
             }
             else
             {
-                tokens.load();
+                tokens.pos = startpos;
                 return std::unexpected(error::expected_fenhao);
             }
 
@@ -836,7 +863,7 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
             // auto var_result = obj.global_var_defs_.find(id);
             if (var_result)
             {
-                obj.pushASM(VM::ASM::LEA, var_result.value()->addr); // 压入bp+局部变量偏移
+                obj.pushASM(VM::ASM::LEA, var_result.value().addr); // 压入bp+局部变量偏移
                 obj.pushASM(VM::ASM::LI);                            // 加载指定地址的变量值
             }
             else
@@ -845,7 +872,7 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
                 var_result = obj.global_var_defs_.find(id);
                 if (var_result)
                 {
-                    obj.pushASM(VM::ASM::LI, var_result.value()->addr); // 加载变量值
+                    obj.pushASM(VM::ASM::LI, var_result.value().addr); // 加载变量值
                 }
                 else
                 {
@@ -863,20 +890,20 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
         auto ret = try_parse_expr(tokens, obj);
         if (!ret)
         {
-            tokens.load();
+            tokens.pos = startpos;
             return std::unexpected(ret.error());
         }
 
         if (tokens.prase_over() || tokens.now().content != ")")
         {
-            tokens.load();
+            tokens.pos = startpos;
             return std::unexpected(error::expected_fenhao);
         }
         tokens.pos++;
         return true;
     }
 
-    tokens.load();
+    tokens.pos = startpos;
     return std::unexpected(error::expected_fenhao);
 }
 
@@ -950,19 +977,19 @@ bool Complier::is_number(const std::string& token)
 
 std::expected<bool, error> Complier::try_parse_global_var(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    int startpos = tokens.pos;
 
     // 检查边界
     if (tokens.prase_over())
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::unkowntype);
     }
 
     auto ret = tokens.now().is_type();
     if (!ret)
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::unkowntype);
     }
 
@@ -984,17 +1011,18 @@ std::expected<bool, error> Complier::try_parse_global_var(Tokens& tokens, obj& o
         var.id = tokens.now().content;
         var.defined = true;
         var.type = type;
+        var.lr = var_def::valtype::globalval;
         auto push_ret = obj.global_var_defs_.push(var);
         if (!push_ret)
         {
-            tokens.load();
+            tokens.pos = startpos;
             return std::unexpected(error::doubledefined);
         }
         tokens.pos += 2; // 跳过标识符和分号
     }
     else
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::illageid);
     }
 
@@ -1003,19 +1031,19 @@ std::expected<bool, error> Complier::try_parse_global_var(Tokens& tokens, obj& o
 
 std::expected<bool, error> Complier::try_parse_func_var(Tokens& tokens, obj& obj)
 {
-    tokens.save();
+    int startpos = tokens.pos;
 
     // 检查边界
     if (tokens.prase_over())
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::unkowntype);
     }
 
     auto ret = tokens.now().is_type();
     if (!ret)
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::unkowntype);
     }
 
@@ -1037,17 +1065,18 @@ std::expected<bool, error> Complier::try_parse_func_var(Tokens& tokens, obj& obj
         var.id = tokens.now().content;
         var.defined = true;
         var.type = type;
+        var.lr = var_def::valtype::funcval;
         auto push_ret = obj.func_var_defs_.push(var);
         if (!push_ret)
         {
-            tokens.load();
+            tokens.pos = startpos;
             return std::unexpected(error::doubledefined);
         }
         tokens.pos += 2; // 跳过标识符和分号
     }
     else
     {
-        tokens.load();
+        tokens.pos = startpos;
         return std::unexpected(error::illageid);
     }
 
@@ -1062,13 +1091,13 @@ std::expected<bool, error> Complier::try_parse_left_var_and_get_addr(Tokens& tok
     auto ret = obj.func_var_defs_.find(name);
     if (ret)
     {
-        obj.pushASM(VM::ASM::LEA, ret.value()->addr);
+        obj.pushASM(VM::ASM::LEA, ret.value().addr);
         return true;
     }
     ret = obj.global_var_defs_.find(name);
     if (ret)
     {
-        obj.pushASM(VM::ASM::IMM, ret.value()->addr);
+        obj.pushASM(VM::ASM::IMM, ret.value().addr);
         return true;
     }
     tokens.pos--;
@@ -1136,7 +1165,7 @@ std::expected<obj, error> Complier::eachFile(std::string path)
 
     while (!tokens.prase_over())
     {
-        tokens.save();
+        int startpos = tokens.pos;
 
         // 尝试解析变量声明
         if (auto result = try_parse_global_var(tokens, obj))
@@ -1144,7 +1173,7 @@ std::expected<obj, error> Complier::eachFile(std::string path)
             continue;
         }
 
-        tokens.load();
+        tokens.pos = startpos;
 
         // 尝试解析函数定义
         if (auto result = try_parse_fun(tokens, obj))

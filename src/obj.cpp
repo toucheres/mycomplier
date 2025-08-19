@@ -10,6 +10,7 @@ void obj::pushASM(VM::ASM asm_code)
         throw;
     }
     content.push_back(ret.name);
+    pos++;
 }
 
 void obj::pushASM(VM::ASM asm_code, int arg)
@@ -20,6 +21,7 @@ void obj::pushASM(VM::ASM asm_code, int arg)
         throw;
     }
     content.push_back(std::format("{} {}", ret.name, arg));
+    pos++;
 }
 
 void obj::pushASM(VM::ASM asm_code, int src, int dest)
@@ -30,6 +32,7 @@ void obj::pushASM(VM::ASM asm_code, int src, int dest)
         throw;
     }
     content.push_back(std::format("{} {} {}", ret.name, src, dest));
+    pos++;
 }
 
 const std::vector<std::string>& obj::get_assembly_vector() const

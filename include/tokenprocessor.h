@@ -16,15 +16,15 @@ class Tokens : public std::vector<Token>
 {
   public:
     int pos = 0;
-    int last_pos = 0;
-    inline void save()
-    {
-        last_pos = pos;
-    }
-    inline void load()
-    {
-        pos = last_pos;
-    }
+    // int last_pos = 0;
+    // inline void save()
+    // {
+    //     last_pos = pos;
+    // }
+    // inline void load()
+    // {
+    //     pos = last_pos;
+    // }
     bool prase_over()
     {
         return pos >= size();

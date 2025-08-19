@@ -1,4 +1,5 @@
 #include "file.hpp"
+#include "complier.hpp"
 #include <algorithm>
 #include <fstream>
 file::file(const std::string& content_str, bool from_str) : path("")
@@ -64,6 +65,20 @@ int file::getpos()
     return pos;
 }
 
+int obj::getpos()
+{
+    return pos;
+}
+bool obj::setpos(int in)
+{
+    int dif = in - pos;
+    for (int i = 0; i < dif; i++)
+    {
+        content.pop_back();
+    }
+    pos = dif;
+    return true;
+}
 bool file::readline(std::string& out) const
 {
     if (pos >= content.size())

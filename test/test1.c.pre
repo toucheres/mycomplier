@@ -1,3 +1,4 @@
+int gtp;
 int fun(int a)
 {
     int tp;
@@ -7,7 +8,9 @@ int fun(int a)
     }
     else
     {
-        return a * fun(a - 1);
+        gtp = a * fun(a - 1);
+        tp = gtp;
+        return tp;
     }
 }
 int main()

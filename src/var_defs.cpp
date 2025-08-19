@@ -2,14 +2,14 @@
 #include <algorithm>
 #include <iostream>
 // var_defs::eachnamespace 实现
-std::expected<var_def*, error> var_defs::eachnamespace::find(const std::string& id)
+std::expected<var_def, error> var_defs::eachnamespace::find(const std::string& id)
 {
     auto it = std::find_if(var_defines_namespace.begin(), var_defines_namespace.end(),
                            [&id](const var_def& var) { return var.id == id; });
 
     if (it != var_defines_namespace.end())
     {
-        return &(*it);
+        return (*it);
     }
     return std::unexpected(error::doubledefined); // 使用已定义的错误类型
 }
@@ -66,7 +66,7 @@ std::expected<bool, error> var_defs::eachnamespace::push(var_def var_def_)
 }
 
 // var_defs 实现
-std::expected<var_def*, error> var_defs::find(const std::string& id)
+std::expected<var_def, error> var_defs::find(const std::string& id)
 {
     max_stack_size = std::max(max_stack_size, dy_stack_size);
     // 从当前作用域向上查找（从最内层到最外层，包括全局作用域）
