@@ -427,86 +427,111 @@ std::expected<bool, error> Complier::try_parse_expr(Tokens& tokens, obj& obj)
 }
 
 // 解析赋值表达式
+// [0] UP 1
+// [1] CALL 3
+// [2] EXIT
+// [3] NVAR 0
+// [4] IMM 0
+// [5] LI 0
+// [6] IMM 12
+// [7] IMM 0
+// [8] LI 0
+// [9] RET
+
+// [0] UP 1
+// [1] CALL 3
+// [2] EXIT
+// [3] NVAR 0
+// [4] IMM 12
+// [5] SI 0
+// [6] LI 0
+// [7] RET
 std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, obj& obj)
 {
-    // auto startpos = tokens.pos;
-    // auto ret = try_parse_left_var_and_get_addr(tokens, obj);
-    // if (ret && is_assignment_operator(tokens[tokens.pos + 1].content))
-    // {
-    //     tokens.pos++;
-    //     obj.save();
-    //     if (ret.value().lr == var_def::vartype::funcval)
-    //     {
-    //         obj.pushASM(VM::ASM::LEA, ret.value().addr);
-    //     }
-    //     else
-    //     {
-    //         obj.pushASM(VM::ASM::IMM, ret.value().addr);
-    //     }
-    //     if (auto ret2 = try_parse_assignment_expr(tokens, obj); !ret2)
-    //     {
-    //         tokens.pos = startpos;
-    //         return ret2;
-    //     }
-    //     // if (ret.value().type.ptr_lay == 0 && ret.value().type.bt == Basic_Type::CHAR)
-    //     // {}else{
-    //     obj.pushASM(VM::ASM::SI); // 存储到指定地址
-    // }
-    // tokens.pos = startpos;
-    // return try_parse_rightVal_and_get_value(tokens, obj);
-    // //...
-    int startpos = tokens.pos;
-
-    // [TODO]基于左值解析的赋值
-    // 先检查是否是简单的变量赋值: identifier = expression
-    if (tokens.now().can_be_id() && tokens.pos + 1 < tokens.size() &&
-        is_assignment_operator(tokens[tokens.pos + 1].content))
+    auto startpos = tokens.pos;
+    auto objstartpos = obj.getpos();
+    auto ret = try_parse_left_var_and_get_addr(tokens, obj);
+    if (ret && is_assignment_operator(tokens.now().content))
     {
-        // 这是一个赋值表达式
-        std::string var_id = tokens.now().content;
-        tokens.pos++; // 跳过变量名
-
-        std::string op = tokens.now().content;
-        tokens.pos++; // 跳过赋值运算符
-
-        // 解析右值表达式
-        auto ret = try_parse_assignment_expr(tokens, obj);
-        if (!ret)
+        tokens.pos++;
+        if (auto ret2 = try_parse_assignment_expr(tokens, obj); !ret2)
         {
             tokens.pos = startpos;
-            return ret;
+            obj.setpos(objstartpos);
+            return ret2;
         }
-
-        // 查找变量地址并生成存储指令
-        auto var_result = obj.func_var_defs_.find(var_id);
-        if (var_result)
+        if (ret.value().lr == var_def::valtype ::funcval)
         {
-            obj.pushASM(VM::ASM::LEA, var_result.value().addr); // 取bp+bias
-            obj.pushASM(VM::ASM::SI);                            // 存储到指定地址
+            obj.pushASM(VM::ASM::LEA, ret.value().addr);
+            obj.pushASM(VM::ASM::SI); // 存储到指定地址
         }
         else
         {
-            var_result = obj.global_var_defs_.find(var_id);
-            if (var_result)
-            {
-                obj.pushASM(VM::ASM::SI, var_result.value().addr);
-            }
-            else
-            {
-                return std::unexpected(error::undefinedvar);
-            }
+            obj.pushASM(VM::ASM::SI, ret.value().addr);
         }
 
+        // if (ret.value().type.ptr_lay == 0 && ret.value().type.bt == Basic_Type::CHAR)
+        // {}else{
+        // obj.pushASM(VM::ASM::SI); // 存储到指定地址
         return true;
     }
-
-    // 不是赋值表达式，按普通表达式处理
     tokens.pos = startpos;
+    obj.setpos(objstartpos);
     return try_parse_left_or_right_value_and_get_value(tokens, obj);
+    //...
+    // int startpos = tokens.pos;
+
+    // // [TODO]基于左值解析的赋值
+    // // 先检查是否是简单的变量赋值: identifier = expression
+    // if (tokens.now().can_be_id() && tokens.pos + 1 < tokens.size() &&
+    //     is_assignment_operator(tokens[tokens.pos + 1].content))
+    // {
+    //     // 这是一个赋值表达式
+    //     std::string var_id = tokens.now().content;
+    //     tokens.pos++; // 跳过变量名
+
+    //     std::string op = tokens.now().content;
+    //     tokens.pos++; // 跳过赋值运算符
+
+    //     // 解析右值表达式
+    //     auto ret = try_parse_assignment_expr(tokens, obj);
+    //     if (!ret)
+    //     {
+    //         tokens.pos = startpos;
+    //         return ret;
+    //     }
+
+    //     // 查找变量地址并生成存储指令
+    //     auto var_result = obj.func_var_defs_.find(var_id);
+    //     if (var_result)
+    //     {
+    //         obj.pushASM(VM::ASM::LEA, var_result.value().addr); // 取bp+bias
+    //         obj.pushASM(VM::ASM::SI);                           // 存储到指定地址
+    //     }
+    //     else
+    //     {
+    //         var_result = obj.global_var_defs_.find(var_id);
+    //         if (var_result)
+    //         {
+    //             obj.pushASM(VM::ASM::SI, var_result.value().addr);
+    //         }
+    //         else
+    //         {
+    //             return std::unexpected(error::undefinedvar);
+    //         }
+    //     }
+
+    //     return true;
+    // }
+
+    // // 不是赋值表达式，按普通表达式处理
+    // tokens.pos = startpos;
+    // return try_parse_left_or_right_value_and_get_value(tokens, obj);
 }
 
 // 解析逻辑或表达式
-std::expected<bool, error> Complier::try_parse_left_or_right_value_and_get_value(Tokens& tokens, obj& obj)
+std::expected<bool, error> Complier::try_parse_left_or_right_value_and_get_value(Tokens& tokens,
+                                                                                 obj& obj)
 {
     auto ret = try_parse_logical_and_expr(tokens, obj);
     if (!ret)
@@ -864,7 +889,7 @@ std::expected<bool, error> Complier::try_parse_primary(Tokens& tokens, obj& obj)
             if (var_result)
             {
                 obj.pushASM(VM::ASM::LEA, var_result.value().addr); // 压入bp+局部变量偏移
-                obj.pushASM(VM::ASM::LI);                            // 加载指定地址的变量值
+                obj.pushASM(VM::ASM::LI);                           // 加载指定地址的变量值
             }
             else
             {
@@ -1083,7 +1108,7 @@ std::expected<bool, error> Complier::try_parse_func_var(Tokens& tokens, obj& obj
     return true;
 }
 
-std::expected<bool, error> Complier::try_parse_left_var_and_get_addr(Tokens& tokens, obj& obj)
+std::expected<var_def, error> Complier::try_parse_left_var_and_get_addr(Tokens& tokens, obj& obj)
 {
     //[TODO]数组的声明
     auto name = tokens.now().content;
@@ -1091,14 +1116,14 @@ std::expected<bool, error> Complier::try_parse_left_var_and_get_addr(Tokens& tok
     auto ret = obj.func_var_defs_.find(name);
     if (ret)
     {
-        obj.pushASM(VM::ASM::LEA, ret.value().addr);
-        return true;
+        // obj.pushASM(VM::ASM::LEA, ret.value().addr);
+        return ret.value();
     }
     ret = obj.global_var_defs_.find(name);
     if (ret)
     {
-        obj.pushASM(VM::ASM::IMM, ret.value().addr);
-        return true;
+        // obj.pushASM(VM::ASM::IMM, ret.value().addr);
+        return ret.value();
     }
     tokens.pos--;
     return std::unexpected(error::expected_left_value);

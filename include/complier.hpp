@@ -111,7 +111,7 @@ struct obj
     void pushASM(VM::ASM ASM);
     void pushASM(VM::ASM ASM, int arg);
     void pushASM(VM::ASM ASM, int src, int obj);
-    int pos;
+    int pos = 0;
     int getpos();
     bool setpos(int);
     // void save()
@@ -155,7 +155,7 @@ class Complier
     static std::expected<bool, error> try_parse_return(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_global_var(Tokens& tokens, obj& obj);
     static std::expected<bool, error> try_parse_func_var(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_left_var_and_get_addr(Tokens& tokens, obj& obj);
+    static std::expected<var_def, error> try_parse_left_var_and_get_addr(Tokens& tokens, obj& obj);
 
     // 辅助函数
     static bool is_binary_operator(const std::string& token);
