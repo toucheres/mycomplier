@@ -473,60 +473,11 @@ std::expected<bool, error> Complier::try_parse_assignment_expr(Tokens& tokens, o
         // if (ret.value().type.ptr_lay == 0 && ret.value().type.bt == Basic_Type::CHAR)
         // {}else{
         // obj.pushASM(VM::ASM::SI); // 存储到指定地址
-        return true;
+        return true; // 赋值解析成功，不回退
     }
     tokens.pos = startpos;
     obj.setpos(objstartpos);
     return try_parse_left_or_right_value_and_get_value(tokens, obj);
-    //...
-    // int startpos = tokens.pos;
-
-    // // [TODO]基于左值解析的赋值
-    // // 先检查是否是简单的变量赋值: identifier = expression
-    // if (tokens.now().can_be_id() && tokens.pos + 1 < tokens.size() &&
-    //     is_assignment_operator(tokens[tokens.pos + 1].content))
-    // {
-    //     // 这是一个赋值表达式
-    //     std::string var_id = tokens.now().content;
-    //     tokens.pos++; // 跳过变量名
-
-    //     std::string op = tokens.now().content;
-    //     tokens.pos++; // 跳过赋值运算符
-
-    //     // 解析右值表达式
-    //     auto ret = try_parse_assignment_expr(tokens, obj);
-    //     if (!ret)
-    //     {
-    //         tokens.pos = startpos;
-    //         return ret;
-    //     }
-
-    //     // 查找变量地址并生成存储指令
-    //     auto var_result = obj.func_var_defs_.find(var_id);
-    //     if (var_result)
-    //     {
-    //         obj.pushASM(VM::ASM::LEA, var_result.value().addr); // 取bp+bias
-    //         obj.pushASM(VM::ASM::SI);                           // 存储到指定地址
-    //     }
-    //     else
-    //     {
-    //         var_result = obj.global_var_defs_.find(var_id);
-    //         if (var_result)
-    //         {
-    //             obj.pushASM(VM::ASM::SI, var_result.value().addr);
-    //         }
-    //         else
-    //         {
-    //             return std::unexpected(error::undefinedvar);
-    //         }
-    //     }
-
-    //     return true;
-    // }
-
-    // // 不是赋值表达式，按普通表达式处理
-    // tokens.pos = startpos;
-    // return try_parse_left_or_right_value_and_get_value(tokens, obj);
 }
 
 // 解析逻辑或表达式
@@ -692,6 +643,14 @@ std::expected<bool, error> Complier::try_parse_unary_expr(Tokens& tokens, obj& o
             auto lret = try_parse_left_var_and_get_addr(tokens, obj);
             if (lret)
             {
+                if (lret.value().lr == var_def::valtype::globalval)
+                {
+                    obj.pushASM(VM::ASM::IMM, lret.value().addr);
+                }
+                else
+                {
+                    obj.pushASM(VM::ASM::LEA, lret.value().addr);
+                }
                 return true;
             }
             else
@@ -1045,10 +1004,28 @@ std::expected<bool, error> Complier::try_parse_global_var(Tokens& tokens, obj& o
         }
         tokens.pos += 2; // 跳过标识符和分号
     }
+    else if (!tokens.prase_over() && tokens.now().can_be_id() && tokens.pos + 1 < tokens.size() &&
+             tokens[tokens.pos + 1].content == "=")
+    {
+        // 带初始化的声明
+        var_def var;
+        var.id = tokens.now().content;
+        var.defined = true;
+        var.type = type;
+        var.lr = var_def::valtype::globalval;
+        auto push_ret = obj.global_var_defs_.push(var);
+        if (!push_ret)
+        {
+            tokens.pos = startpos;
+            return std::unexpected(error::doubledefined);
+        }
+        return try_parse_expr(tokens, obj);
+        // tokens.pos += 2; // 跳过标识符和分号
+    }
     else
     {
         tokens.pos = startpos;
-        return std::unexpected(error::illageid);
+        return std::unexpected(error::expected_fenhao);
     }
 
     return true;
@@ -1099,12 +1076,29 @@ std::expected<bool, error> Complier::try_parse_func_var(Tokens& tokens, obj& obj
         }
         tokens.pos += 2; // 跳过标识符和分号
     }
+    else if (!tokens.prase_over() && tokens.now().can_be_id() && tokens.pos + 1 < tokens.size() &&
+             tokens[tokens.pos + 1].content == "=")
+    {
+        // 带初始化的声明
+        var_def var;
+        var.id = tokens.now().content;
+        var.defined = true;
+        var.type = type;
+        var.lr = var_def::valtype::funcval;
+        auto push_ret = obj.func_var_defs_.push(var);
+        if (!push_ret)
+        {
+            tokens.pos = startpos;
+            return std::unexpected(error::doubledefined);
+        }
+        return try_parse_expr(tokens, obj);
+        // tokens.pos += 2; // 跳过标识符和分号
+    }
     else
     {
         tokens.pos = startpos;
-        return std::unexpected(error::illageid);
+        return std::unexpected(error::expected_fenhao);
     }
-
     return true;
 }
 

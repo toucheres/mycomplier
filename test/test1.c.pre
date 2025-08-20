@@ -1,9 +1,9 @@
-int gtp2;
-int gtp1;
-int gtp;
+int func(int in)
+{
+    return in + 1;
+}
 int main()
 {
-    gtp = 12;
-    gtp1 = 1 + 2 * gtp;
-    return gtp1;
+    int a = func(3 * 2);
+    return a;
 }
