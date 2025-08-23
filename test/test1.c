@@ -1,5 +1,10 @@
-int main(int** arg1,int arg2)
+int func(int arg)
+{
+    return 1;
+}
+int main()
 {
     int a;
-    a = 1 + 2 * 3;
+    a = func(12);
+    return a;
 }

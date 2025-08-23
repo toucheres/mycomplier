@@ -22,6 +22,7 @@ struct VCPU
     {
         stack.resize(1024); // 默认memery大小
     }
+    inline static const constexpr size_t size_word = 4;
 };
 
 struct VM

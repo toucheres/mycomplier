@@ -27,6 +27,7 @@ GlobalVarDecl   <- VarDecl
 Identifier <- < [a-zA-Z_][a-zA-Z0-9_]* >
 Number         <- < [0-9]+ >
 String         <- '"' < (!'"' .)* > '"'
+# 形参
 Args           <- Expression (',' Expression)*
 ASSIGN         <- < '=' / '+=' / '-=' / '*=' / '/=' / '%=' / '&=' / '|=' / '^=' / '<<=' / '>>=' >
   
@@ -37,6 +38,7 @@ VarDecl    <- 'extern' Type Identifier ';'
 # 函数声明/定义
 FuncDef     <- Type Identifier '(' FunArgs? ')' Block
 FuncDecl    <- Type Identifier '(' FunArgs? ')' ';'
+#实参
 FunArgs     <- Arg (',' Arg)*
 Arg         <- Type Identifier
 Block       <- '{' Statement* '}'

@@ -58,7 +58,6 @@ struct ASM
         JNZ,
         PUSH, // ax->stack
         POP,  // stack->ax
-        CALL,
         NARG,
         RET,
         DARG,
@@ -103,44 +102,9 @@ struct Type
         return pointer_level > 0;
     }
     std::string to_string() const;
+    size_t getsize() const;
     Type(std::shared_ptr<peg::Ast> astnode);
     Type() = default;
-};
-
-
-// 符号表条目
-struct SymbolEntry
-{
-    std::string name;
-    Type type;
-    int address;
-    bool is_function;
-    bool is_defined; // 声明vs定义
-};
-
-// 符号表
-class SymbolTable
-{
-  private:
-    std::vector<std::unordered_map<std::string, SymbolEntry>> scopes;
-    int current_global_address = 0;
-    int current_local_address = 0;
-
-  public:
-    SymbolTable()
-    {
-        scopes.emplace_back();
-    } // 全局作用域
-
-    void enter_scope();
-    void exit_scope();
-
-    bool add_symbol(const std::string& name, const Type& type, bool is_function, bool is_defined);
-    std::optional<SymbolEntry> lookup(const std::string& name) const;
-    std::optional<SymbolEntry> lookup_in_current_scope(const std::string& name) const;
-
-    int allocate_global();
-    int allocate_local();
 };
 struct Identifi
 {
@@ -152,37 +116,70 @@ struct Identifi
 struct varDef : Identifi
 {
     varDef(std::shared_ptr<peg::Ast> astnode);
+    size_t get_addr_in_mem(size_t posnow);
+    varDef() = default;
 };
-struct argDef
-{
-    std::string name;
-    Type type;
-    argDef(std::shared_ptr<peg::Ast> astnode);
-};
+// struct argDef
+// {
+//     std::string name;
+//     Type type;
+//     argDef(std::shared_ptr<peg::Ast> astnode);
+// };
 struct funcDef : Identifi
 {
     std::vector<std::string> asms;
-    std::vector<argDef> args;
+    std::vector<varDef> args;
+    std::vector<std::vector<varDef>> funcvar_stack;
+    size_t max_stack_size = VCPU::size_word * 2;
+    size_t stack_size_now = VCPU::size_word * 2;
+    void enter_scope();
+    void exit_scope();
+    const varDef* lookup_var(const std::string& name) const;
+    const varDef* add_var(const varDef& vardef);
+    bool add_arg(std::vector<varDef>& vardef);
     funcDef() = default;
+};
+
+// 符号表
+class SymbolTable
+{
+  private:
+    std::unordered_map<std::string, varDef> globalvar;
+    std::unordered_map<std::string, funcDef> globalfuncdef;
+    int globalvarsize;
+
+  public:
+    SymbolTable() = default;
+    // 全局变量与函数定义
+    varDef* add_global_symbol(const varDef& vardef);
+    funcDef* add_global_symbol(const funcDef& funcdef);
+    // 查找
+    varDef* lookup_var(const std::string& name);
+    funcDef* lookup_fun(const std::string& name);
 };
 
 struct OBJ
 {
+    std::string name;
     // AST 根节点
     std::shared_ptr<peg::Ast> program;
     // 符号表
     SymbolTable symbol_table;
-    // 汇编代码
-    std::unordered_map<std::string, funcDef> funname_codes;
-    // 位置追踪
-    int pos = 0;
+    // 全局偏移
+    int bias = 0;
     // 代码生成接口
     std::expected<bool, error> generate_code();
-    std::expected<bool, error> generate_code(std::shared_ptr<peg::Ast> astnode, std::string funname,
+    std::expected<bool, error> generate_expression(std::shared_ptr<peg::Ast> expr,
+                                                        funcDef* func);
+    // [TODO] deep替换为外层向内层传递信息
+    std::expected<bool, error> generate_code(std::shared_ptr<peg::Ast> astnode, funcDef* funname,
                                              size_t deep);
-    OBJ(std::shared_ptr<peg::Ast> root) : program(root)
+    OBJ(std::shared_ptr<peg::Ast> root, std::string inname) : program(root), name(inname)
     {
-        funname_codes.emplace("__global_init", funcDef{});
+        funcDef __global_init_fun{};
+        __global_init_fun.name = "__global_init_" + inname;
+        __global_init_fun.is_defined = true;
+        symbol_table.add_global_symbol(__global_init_fun);
     }
 };
 struct linker
