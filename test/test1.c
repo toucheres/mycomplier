@@ -1,4 +1,5 @@
-int main()
+int main(int** arg1,int arg2)
 {
-    1 + 2 * 3;
+    int a;
+    a = 1 + 2 * 3;
 }

@@ -1,15 +1,5 @@
-#pragma once
-#include "enums.h"
-#include "error.hpp"
-#include <expected>
-#include <map>
-#include <stack>
-#include <string>
-#include <tokenprocessor.h>
-#include <vector>
-#include <vm.h>
-// 只支持int[*]类型
-// 将一个int作为内存最小单位 指针,int大小均为1
+// 只支持int/char[*]类型
+// 将一个char作为内存最小单位 指针,int大小均为4
 // 函数调用:
 // 调用fun(int a,int b,...)
 // caller中:
@@ -21,7 +11,7 @@
 // call addr<fun> 压入pc+1 压入bp bp=sp jump-addr<fun>  stack: a   b  ...  opc+1  obp
 //                                                                          bp
 
-// fun中: a=bp[-n] b=bp[-(n-1)]... retaddr=bp[0] obp=bp[1]
+// fun中: a=bp[-(n*4)] b=bp[-((n-1)*4)]... retaddr=bp[0] obp=bp[4]
 // nargs n  分配n个参数
 // ret ax携带返回值,jump bp[0]
 
@@ -31,142 +21,175 @@
 // 编译时的空间分配:
 // 全局var:直接访问  IMM + 数 LI 访问
 // funvar:bp+偏移   LEA + 数 LI 访问
-// funvar初始stack为1,为opc+1预留位置
-struct id_def
+// funvar初始stack大小为8,为 obp opc+1预留位置
+#pragma once
+#include "error.hpp"
+#include <expected>
+#include <map>
+#include <memory>
+#include <optional>
+#include <peglib.h>
+#include <stack>
+#include <string>
+#include <variant>
+#include <vector>
+#include <vm.h>
+// AST 节点基类
+struct ASM
 {
-    int addr;
-    std::string id;
-    Type type;
-    bool defined = false;
-};
-
-struct var_def : id_def
-{
-    int defult_value = 0;
-    enum class valtype
+    std::string content;
+    enum class basic_asm
     {
-        rightval,
-        globalval,
-        funcval
+        MOVE, // MOVE ax stack;ax值替换栈顶值
+        IMM,  // 立即数
+        LEA,
+        LI,
+        LC,
+        SI,
+        SC,
+        ADD,
+        SUB,
+        MUL,
+        DIV,
+        MOD,
+        CALL,
+        JMP,
+        JZ,
+        JNZ,
+        PUSH, // ax->stack
+        POP,  // stack->ax
+        CALL,
+        NARG,
+        RET,
+        DARG,
+        SYSTEMCALL
     };
-    valtype lr = valtype::rightval;
-};
-
-struct fun_def : id_def
-{
-    std::vector<Type> argtypes;
-    std::vector<var_def> vars;
-};
-struct fun_defs
-{
-  public:
-  private:
-    std::vector<fun_def> fun_defines;
-
-  public:
-    std::expected<fun_def, error> find(const std::string& id);
-    std::expected<bool, error> push(fun_def fun_def);
-};
-struct var_defs
-{
-    // 仿照stack处理不同作用域变量生命周期
-  private:
-    struct eachnamespace
+    enum class SYSTEMCALL_Type
     {
-        std::vector<var_def> var_defines_namespace;
-        std::expected<var_def, error> find(const std::string& id);
-        std::expected<bool, error> push(
-            var_def var_def); // 在push中处理重定义: 每层namespace变量声明只能一次
     };
-    std::vector<eachnamespace> namespace_defines;
-    int dy_stack_size = 0;
-    int max_stack_size = 0;
-    int old_stack_size = 0;
-
-  public:
-    // 构造函数，初始化时创建全局作用域
-    var_defs()
+    ASM(basic_asm basm, auto&&... args)
     {
-        namespace_defines.emplace_back(); // 创建全局作用域（第0层）
     }
-
-    std::expected<var_def, error> find(const std::string& id);
-    std::expected<bool, error> push(var_def var_def);
-    // std::expected<bool, error> push_func_args(var_def var_def);
-    std::expected<bool, error> push_func_args(std::vector<var_def> var_def);
-    void into_new_namespace();
-    int get_max_size();
-    void outto_old_namespace();
-    void clear();
+    ASM(std::string in) : content(in)
+    {
+    }
+    operator std::string()
+    {
+        return content;
+    }
 };
-struct obj
+
+// struct ASTNode
+// {
+//     virtual ~ASTNode() = default;
+//     // 代码生成方法
+//     virtual void generate(std::vector<std::string>& code) const = 0;
+// };
+
+// 类型表示
+struct Type
 {
-    var_defs global_var_defs_; // 统一的变量定义容器，包含全局变量
-    var_defs func_var_defs_;   // 统一的变量定义容器，包含函数局部变量关于函数起始的偏移
-    fun_defs fun_defs_;
-    std::vector<std::string> content; // 改为vector格式，便于调试
+    enum class BasicType
+    {
+        Int,
+        Char,
+        Void
+    };
+    BasicType basic_type;
+    int pointer_level = 0; // 指针层级
 
-    // 源在前，目标在后
-
-    void pushASM(VM::ASM ASM);
-    void pushASM(VM::ASM ASM, int arg);
-    void pushASM(VM::ASM ASM, int src, int obj);
-    int pos = 0;
-    int getpos();
-    bool setpos(int);
-    // void save()
-    // {
-    //     records.push_back(content.size());
-    // }
-    // void unsave()
-    // {
-    //     records.pop_back();
-    // }
-    // void load()
-    // {
-    //     int times = content.size() - records.back();
-    //     records.pop_back();
-    //     for (int i = 0; i < times; i++)
-    //     {
-    //         content.pop_back();
-    //     }
-    // }
-    // 获取vector格式的汇编代码（现在直接返回content）
-    const std::vector<std::string>& get_assembly_vector() const;
+    bool is_pointer() const
+    {
+        return pointer_level > 0;
+    }
+    std::string to_string() const;
+    Type(std::shared_ptr<peg::Ast> astnode);
+    Type() = default;
 };
-class Complier
-{
-    static std::expected<bool, error> try_parse_fun(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_block(Tokens& tokens, obj& obj);
-    static std::expected<std::vector<Type>, error> try_parse_args(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_assignment_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_left_or_right_value_and_get_value(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_logical_and_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_equality_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_relational_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_additive_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_multiplicative_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_unary_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_postfix_expr(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_primary(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_while(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_if(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_return(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_global_var(Tokens& tokens, obj& obj);
-    static std::expected<bool, error> try_parse_func_var(Tokens& tokens, obj& obj);
-    static std::expected<var_def, error> try_parse_left_var_and_get_addr(Tokens& tokens, obj& obj);
 
-    // 辅助函数
-    static bool is_binary_operator(const std::string& token);
-    static bool is_assignment_operator(const std::string& token);
-    static bool is_relational_operator(const std::string& token);
-    static bool is_multiplicative_operator(const std::string& token);
-    static bool is_unary_operator(const std::string& token);
-    static bool is_number(const std::string& token);
-    // static void generate_binary_op_asm(const std::string& op, obj& obj);
+
+// 符号表条目
+struct SymbolEntry
+{
+    std::string name;
+    Type type;
+    int address;
+    bool is_function;
+    bool is_defined; // 声明vs定义
+};
+
+// 符号表
+class SymbolTable
+{
+  private:
+    std::vector<std::unordered_map<std::string, SymbolEntry>> scopes;
+    int current_global_address = 0;
+    int current_local_address = 0;
 
   public:
-    std::expected<obj, error> process(std::vector<std::string> args);
-    std::expected<obj, error> eachFile(std::string path);
+    SymbolTable()
+    {
+        scopes.emplace_back();
+    } // 全局作用域
+
+    void enter_scope();
+    void exit_scope();
+
+    bool add_symbol(const std::string& name, const Type& type, bool is_function, bool is_defined);
+    std::optional<SymbolEntry> lookup(const std::string& name) const;
+    std::optional<SymbolEntry> lookup_in_current_scope(const std::string& name) const;
+
+    int allocate_global();
+    int allocate_local();
+};
+struct Identifi
+{
+    std::string name;
+    Type type;
+    bool is_defined;
+    int addr;
+};
+struct varDef : Identifi
+{
+    varDef(std::shared_ptr<peg::Ast> astnode);
+};
+struct argDef
+{
+    std::string name;
+    Type type;
+    argDef(std::shared_ptr<peg::Ast> astnode);
+};
+struct funcDef : Identifi
+{
+    std::vector<std::string> asms;
+    std::vector<argDef> args;
+    funcDef() = default;
+};
+
+struct OBJ
+{
+    // AST 根节点
+    std::shared_ptr<peg::Ast> program;
+    // 符号表
+    SymbolTable symbol_table;
+    // 汇编代码
+    std::unordered_map<std::string, funcDef> funname_codes;
+    // 位置追踪
+    int pos = 0;
+    // 代码生成接口
+    std::expected<bool, error> generate_code();
+    std::expected<bool, error> generate_code(std::shared_ptr<peg::Ast> astnode, std::string funname,
+                                             size_t deep);
+    OBJ(std::shared_ptr<peg::Ast> root) : program(root)
+    {
+        funname_codes.emplace("__global_init", funcDef{});
+    }
+};
+struct linker
+{
+    static std::expected<std::vector<std::string>, error> process(std::vector<OBJ>& objs);
+};
+struct complier
+{
+    static std::expected<std::vector<std::string>, error> process(std::vector<std::string> paths);
 };
