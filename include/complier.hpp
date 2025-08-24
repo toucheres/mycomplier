@@ -142,7 +142,7 @@ struct Type
     {
         return pointer_level > 0;
     }
-    bool operator==(const Type& other)
+    bool operator==(const Type& other) const
     {
         return other.basic_type == this->basic_type && other.pointer_level == this->pointer_level;
     }

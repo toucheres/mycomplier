@@ -126,6 +126,7 @@ std::expected<bool, error> OBJ::generate_code()
     return generate_code(program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
 }
 // [TODO] 修正generate_expression
+// [TODO] 检查类型安全
 std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> expr, funcDef* func)
 {
     if (!expr)
@@ -196,7 +197,6 @@ std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
             {
                 // 左值均以LI/LC从内存中加载，去掉加载指令后栈顶即为addr
                 func->asms.pop_back();
-                return lrettype;
             }
             else
             {
@@ -485,6 +485,7 @@ std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
     // 理论上不会到这
     return rettype;
 }
+// [TODO] 完善GlobalVarDef
 std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode, funcDef* func,
                                               size_t deep)
 {
