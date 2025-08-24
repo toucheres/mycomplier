@@ -64,22 +64,31 @@ _  <- [ \t\r\n]*
 %whitespace <- [ \t\r\n]*
 
 # 表达式
-Expression     <- Assignment
-Assignment     <- Conditional (ASSIGN Assignment)? 
-Conditional    <- LogicalOr ('?' Expression ':' Conditional)?
-LogicalOr      <- LogicalAnd ('||' LogicalAnd)*
-LogicalAnd     <- BitwiseOr ('&&' BitwiseOr)*
-BitwiseOr      <- BitwiseXor ('|' BitwiseXor)*
-BitwiseXor     <- BitwiseAnd ('^' BitwiseAnd)*
-BitwiseAnd     <- Equality ('&' Equality)*
-Equality       <- Relational (('==' / '!=') Relational)*
-Relational     <- Shift (('<' / '>' / '<=' / '>=') Shift)*
-Shift          <- Additive (('<<' / '>>') Additive)*
-Additive       <- Multiplicative (('+' / '-') Multiplicative)*
-Multiplicative <- Cast (('*' / '/' / '%') Cast)*
-Cast           <- '(' Type ')' Cast / Unary
-Unary          <- ('+' / '-' / '!' / '~' / '++' / '--' / '*' / '&') Unary / Postfix
-Postfix        <- Primary ('(' Args? ')' / '[' Expression ']' / '.' Identifier / '->' Identifier / '++' / '--')*
-Primary        <- Identifier / Number / String / '(' Expression ')'
+Expression          <- Assignment
+Assignment          <- Conditional (ASSIGN Assignment)? 
+Conditional         <- LogicalOr ('?' Expression ':' Conditional)?
+LogicalOr           <- LogicalAnd ('||' LogicalAnd)*
+LogicalAnd            <- BitwiseOr ('&&' BitwiseOr)*
+BitwiseOr             <- BitwiseXor ('|' BitwiseXor)*
+BitwiseXor            <- BitwiseAnd ('^' BitwiseAnd)*
+BitwiseAnd            <- Equality ('&' Equality)*
+Equality               <- Relational (Equality_op Relational)*
+Equality_op           <-'==' / '!='
+Relational            <- Shift (Relational_op Shift)*
+Relational_op         <- '<' / '>' / '<=' / '>='
+Shift                 <- Additive (Shift_op Additive)*
+Shift_op              <- '<<' / '>>'
+Additive             <- Multiplicative (Additive_op Multiplicative)*
+Additive_op             <- '+' / '-'
+Multiplicative      <- Cast (Multiplicative_op Cast)*
+Multiplicative_op   <-'*' / '/' / '%'
+Cast                <- '(' Type ')' Cast / Unary
+# 右递归解析前缀
+Unary          <- Unary_op Unary / Postfix
+Unary_op          <- '+' / '-' / '!' / '~' / '++' / '--' / '*' / '&'
+# 避免左递归，用后缀循环代替
+Postfix        <- Primary Postfix_content*
+Postfix_content <- '(' Args? ')' / '[' Expression ']' / '.' Identifier / '->' Identifier / '++' / '--'
 # 区分Primary:Identifier的 funcall 与 varref会 造成FunctionCall 与 VariableRef + Postfix 的冲突
 # 因此不在ast中区分varref 与 funccall
+Primary        <- Identifier / Number / String / '(' Expression ')'

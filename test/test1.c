@@ -1,10 +1,8 @@
-int func(int arg)
+int fun(int arg1, int arg2)
 {
-    return 1;
+    arg1;
+    arg2;
 }
 int main()
 {
-    int a;
-    a = func(12);
-    return a;
 }

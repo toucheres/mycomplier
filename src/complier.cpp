@@ -1,5 +1,6 @@
 #include "complier.hpp"
 #include <filesystem>
+#include <format>
 // 递归遍历 AST 的辅助函数
 void visit_ast(const std::shared_ptr<peg::Ast>& ast, int depth = 0)
 {
@@ -21,23 +22,53 @@ void visit_ast(const std::shared_ptr<peg::Ast>& ast, int depth = 0)
         visit_ast(child, depth + 1);
     }
 }
-std::shared_ptr<peg::Ast> simplify_ast(std::shared_ptr<peg::Ast> ast)
+// // 不适用于解析表达式，暂且不用
+// std::shared_ptr<peg::Ast> simplify_ast(std::shared_ptr<peg::Ast> ast)
+// {
+//     if (!ast)
+//         return ast;
+
+//     // 先递归处理所有子节点
+//     for (size_t i = 0; i < ast->nodes.size(); i++)
+//     {
+//         ast->nodes[i] = simplify_ast(ast->nodes[i]);
+//     }
+
+//     // 表达式路径压缩优化
+//     // if (ast->name == "Assignment" || ast->name == "Conditional" || ast->name == "LogicalOr" ||
+//     //     ast->name == "LogicalAnd" || ast->name == "BitwiseOr" || ast->name == "BitwiseXor" ||
+//     //     ast->name == "BitwiseAnd" || ast->name == "Equality" || ast->name == "Relational" ||
+//     //     ast->name == "Shift" || ast->name == "Additive" || ast->name == "Postfix" ||
+//     //     ast->name == "Multiplicative" || ast->name == "Cast" || ast->name == "Unary")
+//     if (ast->name == "Assignment" || ast->name == "Conditional" || ast->name == "LogicalOr" ||
+//         ast->name == "LogicalAnd" || ast->name == "BitwiseOr" || ast->name == "BitwiseXor" ||
+//         ast->name == "BitwiseAnd" || ast->name == "Equality" || ast->name == "Relational" ||
+//         ast->name == "Shift" || ast->name == "Additive" || ast->name == "Multiplicative" ||
+//         ast->name == "Cast" || ast->name == "Unary" || ast->name == "Postfix" ||
+//         ast->name == "Primary")
+//     {
+
+//         // 如果只有一个子节点，直接返回该子节点
+//         if (ast->nodes.size() == 1)
+//         {
+//             return ast->nodes[0];
+//         }
+//     }
+
+//     return ast;
+// }
+std::shared_ptr<peg::Ast> OBJ::simplify_expr_ast(std::shared_ptr<peg::Ast> ast)
 {
     if (!ast)
+    {
         return ast;
-
-    // 先递归处理所有子节点
+    }
     for (size_t i = 0; i < ast->nodes.size(); i++)
     {
-        ast->nodes[i] = simplify_ast(ast->nodes[i]);
+        ast->nodes[i] = simplify_expr_ast(ast->nodes[i]);
     }
 
     // 表达式路径压缩优化
-    // if (ast->name == "Assignment" || ast->name == "Conditional" || ast->name == "LogicalOr" ||
-    //     ast->name == "LogicalAnd" || ast->name == "BitwiseOr" || ast->name == "BitwiseXor" ||
-    //     ast->name == "BitwiseAnd" || ast->name == "Equality" || ast->name == "Relational" ||
-    //     ast->name == "Shift" || ast->name == "Additive" || ast->name == "Postfix" ||
-    //     ast->name == "Multiplicative" || ast->name == "Cast" || ast->name == "Unary")
     if (ast->name == "Assignment" || ast->name == "Conditional" || ast->name == "LogicalOr" ||
         ast->name == "LogicalAnd" || ast->name == "BitwiseOr" || ast->name == "BitwiseXor" ||
         ast->name == "BitwiseAnd" || ast->name == "Equality" || ast->name == "Relational" ||
@@ -52,13 +83,28 @@ std::shared_ptr<peg::Ast> simplify_ast(std::shared_ptr<peg::Ast> ast)
             return ast->nodes[0];
         }
     }
-
     return ast;
+}
+std::expected<bool, error> OBJ::parse_lvalue_and_push_addr(std::shared_ptr<peg::Ast> expr,
+                                                           funcDef* func)
+{
+    // 变量，数组，指针解引用
+    if (!expr)
+    {
+        return std::unexpected(error::empty_node);
+    }
+    auto& node = *expr;
+    // 直接变量引用
+    if (auto ret = this->symbol_table.lookup_var(node.token_to_string())) // 全局
+    {
+        func->asms.push_back(ASM{ASM::basic_asm::IMM, ret->name});
+    }
 }
 std::expected<bool, error> OBJ::generate_code()
 {
-    visit_ast(this->program);
-    return generate_code(this->program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
+    program = simplify_expr_ast(this->program);
+    visit_ast(program);
+    return generate_code(program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
 }
 // [TODO] 修正generate_expression
 std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> expr, funcDef* func)
@@ -79,7 +125,7 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         // 数字字面量处理 - 将值压栈
         int value = std::stoi(node.token_to_string());
         func->asms.push_back(ASM{ASM::basic_asm::IMM, value});
-        func->asms.push_back(ASM{ASM::basic_asm::PUSH});
+        // func->asms.push_back(ASM{ASM::basic_asm::PUSH});
         return true;
     }
     else if (node.name == "Identifier")
@@ -89,14 +135,15 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         const varDef* var = func->lookup_var(var_name);
         if (!var)
         {
+            // 全局变量
             var = symbol_table.lookup_var(var_name);
             if (!var)
             {
-                std::cerr << "未定义的变量: " << var_name << std::endl;
-                return false;
+                std::cerr << "未定义的变量: " << var_name << ": "
+                          << std::format("{}:{}:{}\n", name, node.line, node.column);
+                return std::unexpected(error::undifined_var);
             }
-            // 全局变量
-            func->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
+            func->asms.push_back(ASM{ASM::basic_asm::IMM, var->name}); // 后期链接
         }
         else
         {
@@ -104,37 +151,45 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
             func->asms.push_back(ASM{ASM::basic_asm::LEA, var->addr});
         }
         func->asms.push_back(ASM{ASM::basic_asm::LI});
-        func->asms.push_back(ASM{ASM::basic_asm::PUSH});
+        // func->asms.push_back(ASM{ASM::basic_asm::PUSH});
         return true;
     }
-    else if (node.name == "Assignment" && node.nodes.size() >= 3)
+    else if (node.name == "Assignment")
     {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
         // 赋值表达式处理
+        // [TODO] 处理其他左值，如arr[0]
         // 1. 获取左值地址
         auto& lvalue = node.nodes[0];
         if (lvalue->name != "Identifier")
         {
             std::cerr << "赋值左侧必须是标识符" << std::endl;
-            return false;
+            return std::unexpected(error::expected_lvalue);
         }
-
         std::string var_name = lvalue->token_to_string();
+        std::string loadaddr;
         const varDef* var = func->lookup_var(var_name);
         if (!var)
         {
             var = symbol_table.lookup_var(var_name);
             if (!var)
             {
-                std::cerr << "未定义的变量: " << var_name << std::endl;
-                return false;
+                std::cerr << "未定义的变量: " << var_name << ": "
+                          << std::format("{}:{}:{}\n", name, node.line, node.column);
+                return std::unexpected(error::undifined_var);
             }
             // 全局变量
-            func->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
+            loadaddr = ASM{ASM::basic_asm::IMM, var->name};
+            func->asms.push_back(loadaddr); // 全局变量统一链接
         }
         else
         {
             // 局部变量
-            func->asms.push_back(ASM{ASM::basic_asm::LEA, var->addr});
+            loadaddr = ASM{ASM::basic_asm::LEA, var->addr};
+            func->asms.push_back(loadaddr);
         }
 
         // 2. 计算右值表达式
@@ -146,12 +201,16 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         // 3. 存储结果
         func->asms.push_back(ASM{ASM::basic_asm::SI});
         // 保持栈顶有结果值
+        func->asms.push_back(loadaddr);
         func->asms.push_back(ASM{ASM::basic_asm::LI});
-        func->asms.push_back(ASM{ASM::basic_asm::PUSH});
         return true;
     }
-    else if (node.name == "Additive" && node.nodes.size() >= 3)
+    else if (node.name == "Additive")
     {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
         // 加减运算处理
         // 1. 计算左操作数
         if (auto ret = generate_expression(node.nodes[0], func); !ret)
@@ -175,24 +234,25 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         {
             func->asms.push_back(ASM{ASM::basic_asm::SUB});
         }
-        func->asms.push_back(ASM{ASM::basic_asm::PUSH});
         return true;
     }
-    else if (node.name == "Multiplicative" && node.nodes.size() >= 3)
+    else if (node.name == "Multiplicative")
     {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
         // 乘除模运算处理
         // 1. 计算左操作数
         if (auto ret = generate_expression(node.nodes[0], func); !ret)
         {
             return ret;
         }
-
         // 2. 计算右操作数
         if (auto ret = generate_expression(node.nodes[2], func); !ret)
         {
             return ret;
         }
-
         // 3. 执行运算
         std::string op = node.nodes[1]->token_to_string();
         if (op == "*")
@@ -207,43 +267,159 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         {
             func->asms.push_back(ASM{ASM::basic_asm::MOD});
         }
-        func->asms.push_back(ASM{ASM::basic_asm::PUSH});
         return true;
     }
-    else if (node.name == "Postfix" && node.nodes.size() >= 2)
+    else if (node.name == "Postfix")
     {
         // 后缀表达式处理（函数调用等）
-        auto primary = node.nodes[0];
-
-        // 函数调用
-        if (primary->name == "Identifier" && node.nodes[1]->nodes.size() > 0 &&
-            node.nodes[1]->nodes[0]->name == "Args")
+        if (node.nodes.size() == 1)
         {
-            std::string func_name = primary->token_to_string();
-            auto args = node.nodes[1]->nodes[0];
-
-            // 按从右到左顺序计算参数
-            for (int i = args->nodes.size() - 1; i >= 0; i--)
+            return generate_expression(node.nodes[0], func);
+        }
+        auto primary = node.nodes[0];
+        for (int i = 1; i < node.nodes.size(); i++)
+        {
+            auto& eachpostfix = *node.nodes[i];
+            if (eachpostfix.choice == 0) // ()后缀
             {
-                if (auto ret = generate_expression(args->nodes[i], func); !ret)
+                // 函数调用
+                if (primary->name == "Identifier")
                 {
-                    return ret;
+                    std::string func_name = primary->token_to_string();
+                    std::shared_ptr<peg::Ast> args;
+                    size_t args_num = 0;
+                    if (node.nodes.size() != 1) // 有args
+                    {
+                        args = node.nodes[0];
+                    }
+                    if (args_num) // 从左向右入参
+                    {
+                        for (auto& each : args->nodes)
+                        {
+                            if (auto ret = generate_expression(each, func); !ret)
+                            {
+                                return ret;
+                            }
+                        }
+                    }
+                    // 调用函数
+                    func->asms.push_back(ASM{"CALL " + func_name}); // 链接时确定addr
+                    // 清理参数
+                    func->asms.push_back(ASM{ASM::basic_asm::DARG, args_num});
+                    // 处理返回值返回值(约定在ax)
+                    func->asms.push_back(ASM{ASM::basic_asm::PUSH});
+                    return true;
                 }
             }
-
-            // 调用函数
-            func->asms.push_back(ASM{"CALL " + func_name});
-
-            // 处理返回值
-            func->asms.push_back(ASM{ASM::basic_asm::PUSH});
-            return true;
+            // [TODO]
+            else if (eachpostfix.choice == 1) // [] 后缀
+            {
+            }
+            else if (eachpostfix.choice == 2) //.后缀
+            {
+            }
+            else if (eachpostfix.choice == 3) //->
+            {
+            }
+            else if (eachpostfix.choice == 4) //++
+            {
+            }
+            else if (eachpostfix.choice == 5) //--
+            {
+            }
+            else
+            {
+                std::cout << "unsurpport postfix: " << eachpostfix.name << '\n';
+                return std::unexpected(error::unsurpported_op);
+            }
         }
     }
-
-    // 其他表达式类型递归处理
-    if (!node.nodes.empty())
+    //[TODO]
+    else if (node.name == "Conditional")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "LogicalOr")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "LogicalAnd")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "BitwiseOr")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "BitwiseXor")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "BitwiseAnd")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "Equality")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "Relational")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "Shift")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "Cast")
+    {
+        if (node.nodes.size() == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "Unary")
+    {
+        if (node.choice == 1)
+        {
+            return generate_expression(node.nodes[0], func);
+        }
+    }
+    else if (node.name == "Primary")
     {
         return generate_expression(node.nodes[0], func);
+    }
+    else
+    {
+        std::cout << "unsurpport operator: " << node.name << '\n';
+        return std::unexpected(error::unsurpported_op);
     }
 
     return true;
@@ -390,36 +566,315 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         //            jmp start
         // end         ...
         //
-        size_t startpos = func->asms.size(); // start
-        // [TODO] 为break传入信息
-        if (auto ret = generate_code(node.nodes[0], func, 0); !ret)
-        {
-            return ret;
-        }
-        size_t jumppos = func->asms.size(); // start
+        // size_t startpos = func->asms.size(); // start
+        // // [TODO] 为break传入信息
+        // if (auto ret = generate_code(node.nodes[0], func, 0); !ret)
+        // {
+        //     return ret;
+        // }
+        // size_t jumppos = func->asms.size(); // start
 
-        if (auto ret = generate_code(node.nodes[1], func, 0); !ret)
-        {
-            return ret;
-        }
-        func->asms.insert(func->asms.begin() + jumppos,
-                          ASM{ASM::basic_asm::JZ, func->asms.size() + 1});
-        size_t exprok = func->asms.size(); // condition_over
-        func->asms.push_back(ASM{ASM::basic_asm::JMP, startpos});
+        // if (auto ret = generate_code(node.nodes[1], func, 0); !ret)
+        // {
+        //     return ret;
+        // }
+        // func->asms.insert(func->asms.begin() + jumppos,
+        //                   ASM{ASM::basic_asm::JZ, func->asms.size() + 1});
+        // size_t exprok = func->asms.size(); // condition_over
+        // func->asms.push_back(ASM{ASM::basic_asm::JMP, startpos});
     }
     else if (node.name == "ExprStmt")
     {
-        return this->generate_expression(node.nodes[0], func);
+        if (auto ret = this->generate_expression(node.nodes[0], func); !ret)
+        {
+            return ret;
+        }
+        func->asms.push_back(ASM{ASM::basic_asm::POP});
+        return true;
     }
     else if (node.name == "Expression")
     {
-        return this->generate_expression(astnode,func);
+        return this->generate_expression(astnode, func);
     }
     else
     {
         std::cout << "unsurpported ast: " << node.name << '\n';
     }
     return true;
+}
+
+OBJ::OBJ(std::string content)
+{
+    // 使用字符串流处理输入
+    std::istringstream iss(content);
+    std::string line;
+
+    funcDef* current_func = nullptr;
+
+    while (std::getline(iss, line))
+    {
+        // 跳过空行
+        if (line.empty())
+            continue;
+
+        // 解析前缀和值
+        auto pos = line.find(':');
+        if (pos == std::string::npos)
+            continue;
+
+        std::string prefix = line.substr(0, pos);
+        std::string value = line.substr(pos + 1);
+
+        if (prefix == "OBJ_NAME")
+        {
+            // 设置OBJ名称
+            name = value;
+
+            // 创建全局初始化函数
+            funcDef __global_init_fun{};
+            __global_init_fun.name = "__global_init_" + name;
+            __global_init_fun.is_defined = true;
+            symbol_table.add_global_symbol(__global_init_fun);
+        }
+        else if (prefix == "GLOBAL_VAR")
+        {
+            // 解析全局变量
+            std::istringstream var_stream(value);
+            std::string var_name, type_str, addr_str, defined_str;
+
+            std::getline(var_stream, var_name, ',');
+            std::getline(var_stream, type_str, ',');
+            std::getline(var_stream, addr_str, ',');
+            std::getline(var_stream, defined_str);
+
+            varDef var;
+            var.name = var_name;
+            // 解析类型
+            if (type_str == "int")
+            {
+                var.type.basic_type = Type::BasicType::Int;
+            }
+            else if (type_str == "char")
+            {
+                var.type.basic_type = Type::BasicType::Char;
+            }
+            else if (type_str == "void")
+            {
+                var.type.basic_type = Type::BasicType::Void;
+            }
+
+            // 解析指针级别
+            size_t ptr_pos = type_str.find('*');
+            if (ptr_pos != std::string::npos)
+            {
+                var.type.pointer_level = type_str.length() - ptr_pos;
+            }
+
+            var.addr = std::stoi(addr_str);
+            var.is_defined = (defined_str == "1");
+
+            symbol_table.add_global_symbol(var);
+        }
+        else if (prefix == "FUNCTION")
+        {
+            // 解析函数定义
+            std::istringstream func_stream(value);
+            std::string func_name, type_str, defined_str;
+
+            std::getline(func_stream, func_name, ',');
+            std::getline(func_stream, type_str, ',');
+            std::getline(func_stream, defined_str);
+
+            funcDef func;
+            func.name = func_name;
+            // 解析返回类型
+            if (type_str == "int")
+            {
+                func.type.basic_type = Type::BasicType::Int;
+            }
+            else if (type_str == "char")
+            {
+                func.type.basic_type = Type::BasicType::Char;
+            }
+            else if (type_str == "void")
+            {
+                func.type.basic_type = Type::BasicType::Void;
+            }
+
+            // 解析指针级别
+            size_t ptr_pos = type_str.find('*');
+            if (ptr_pos != std::string::npos)
+            {
+                func.type.pointer_level = type_str.length() - ptr_pos;
+            }
+
+            func.is_defined = (defined_str == "1");
+
+            symbol_table.add_global_symbol(func);
+            current_func = symbol_table.lookup_fun(func_name);
+        }
+        else if (prefix == "FUNCTION_CODE" && current_func)
+        {
+            // 开始读取函数代码
+            std::string func_name = value;
+            current_func = symbol_table.lookup_fun(func_name);
+        }
+        else if (prefix == "FUNCTION_END")
+        {
+            // 结束当前函数的代码读取
+            current_func = nullptr;
+        }
+        else if (prefix == "ASM" && current_func)
+        {
+            // 添加汇编指令到当前函数
+            current_func->asms.push_back(value);
+        }
+        else if (prefix == "ARG" && current_func)
+        {
+            // 解析函数参数
+            std::istringstream arg_stream(value);
+            std::string arg_name, type_str, addr_str;
+
+            std::getline(arg_stream, arg_name, ',');
+            std::getline(arg_stream, type_str, ',');
+            std::getline(arg_stream, addr_str);
+
+            varDef arg;
+            arg.name = arg_name;
+            // 解析类型
+            if (type_str == "int")
+            {
+                arg.type.basic_type = Type::BasicType::Int;
+            }
+            else if (type_str == "char")
+            {
+                arg.type.basic_type = Type::BasicType::Char;
+            }
+            else if (type_str == "void")
+            {
+                arg.type.basic_type = Type::BasicType::Void;
+            }
+
+            // 解析指针级别
+            size_t ptr_pos = type_str.find('*');
+            if (ptr_pos != std::string::npos)
+            {
+                arg.type.pointer_level = type_str.length() - ptr_pos;
+            }
+
+            arg.addr = std::stoi(addr_str);
+            arg.is_defined = true;
+
+            current_func->args.push_back(arg);
+        }
+    }
+}
+
+std::string OBJ::to_string()
+{
+    std::ostringstream oss;
+
+    // 输出对象名称
+    oss << "OBJ_NAME:" << name << std::endl;
+
+    // 输出全局变量
+    auto* sym_table = &symbol_table;
+    for (const auto& var_entry : sym_table->globalvar)
+    {
+        const auto& var = var_entry.second;
+
+        // 构造类型字符串
+        std::string type_str;
+        if (var.type.basic_type == Type::BasicType::Int)
+        {
+            type_str = "int";
+        }
+        else if (var.type.basic_type == Type::BasicType::Char)
+        {
+            type_str = "char";
+        }
+        else if (var.type.basic_type == Type::BasicType::Void)
+        {
+            type_str = "void";
+        }
+
+        // 添加指针星号
+        for (int i = 0; i < var.type.pointer_level; i++)
+        {
+            type_str += "*";
+        }
+
+        oss << "GLOBAL_VAR:" << var.name << "," << type_str << "," << var.addr << ","
+            << (var.is_defined ? "1" : "0") << std::endl;
+    }
+
+    // 输出函数定义和代码
+    for (const auto& func_entry : sym_table->globalfuncdef)
+    {
+        const auto& func = func_entry.second;
+
+        // 构造类型字符串
+        std::string type_str;
+        if (func.type.basic_type == Type::BasicType::Int)
+        {
+            type_str = "int";
+        }
+        else if (func.type.basic_type == Type::BasicType::Char)
+        {
+            type_str = "char";
+        }
+        else if (func.type.basic_type == Type::BasicType::Void)
+        {
+            type_str = "void";
+        }
+
+        // 添加指针星号
+        for (int i = 0; i < func.type.pointer_level; i++)
+        {
+            type_str += "*";
+        }
+
+        // 输出函数定义
+        oss << "FUNCTION:" << func.name << "," << type_str << "," << (func.is_defined ? "1" : "0")
+            << std::endl;
+
+        // 输出函数参数
+        for (const auto& arg : func.args)
+        {
+            // 构造参数类型字符串
+            std::string arg_type_str;
+            if (arg.type.basic_type == Type::BasicType::Int)
+            {
+                arg_type_str = "int";
+            }
+            else if (arg.type.basic_type == Type::BasicType::Char)
+            {
+                arg_type_str = "char";
+            }
+            else if (arg.type.basic_type == Type::BasicType::Void)
+            {
+                arg_type_str = "void";
+            }
+
+            // 添加指针星号
+            for (int i = 0; i < arg.type.pointer_level; i++)
+            {
+                arg_type_str += "*";
+            }
+
+            oss << "ARG:" << arg.name << "," << arg_type_str << "," << arg.addr << std::endl;
+        }
+
+        // 输出函数代码
+        oss << "FUNCTION_CODE:" << func.name << std::endl;
+        for (const auto& asm_instr : func.asms)
+        {
+            oss << "ASM:" << asm_instr << std::endl;
+        }
+        oss << "FUNCTION_END" << std::endl;
+    }
+
+    return oss.str();
 }
 
 std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths)
@@ -462,6 +917,7 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
             if (auto ret = obj.generate_code())
             {
                 objs.push_back(obj);
+                std::cout << obj.to_string() << '\n';
             }
             else
             {
@@ -560,6 +1016,17 @@ const varDef* funcDef::lookup_var(const std::string& inname) const
             if (block[block.size() - j - 1].name == inname)
             {
                 ptr = &(block[block.size() - j - 1]);
+                break;
+            }
+        }
+    }
+    if(!ptr)
+    {
+        for(auto& each:args)
+        {
+            if(each.name == inname)
+            {
+                ptr = &each;
                 break;
             }
         }
