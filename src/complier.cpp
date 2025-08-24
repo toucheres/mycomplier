@@ -85,21 +85,40 @@ std::shared_ptr<peg::Ast> OBJ::simplify_expr_ast(std::shared_ptr<peg::Ast> ast)
     }
     return ast;
 }
-std::expected<bool, error> OBJ::parse_lvalue_and_push_addr(std::shared_ptr<peg::Ast> expr,
-                                                           funcDef* func)
-{
-    // 变量，数组，指针解引用
-    if (!expr)
-    {
-        return std::unexpected(error::empty_node);
-    }
-    auto& node = *expr;
-    // 直接变量引用
-    if (auto ret = this->symbol_table.lookup_var(node.token_to_string())) // 全局
-    {
-        func->asms.push_back(ASM{ASM::basic_asm::IMM, ret->name});
-    }
-}
+// std::expected<Type, error> OBJ::parse_lvalue_and_push_addr(std::shared_ptr<peg::Ast> expr,
+//                                                            funcDef* func)
+// {
+//     // 变量，数组，指针解引用
+//     if (!expr)
+//     {
+//         return std::unexpected(error::empty_node);
+//     }
+//     auto& node = *expr;
+//     // 直接变量引用
+//     if (node.name == "Identifier")
+//     {
+//         if (auto ret = symbol_table.lookup_var(node.token_to_string()))
+//         {
+//             func->asms.push_back(ASM{ASM::basic_asm::IMM, ret->name});
+//             return ret->type;
+//         }
+//         if (auto ret = func->lookup_var(node.token_to_string()))
+//         {
+//             func->asms.push_back(ASM{ASM::basic_asm::LEA, ret->addr});
+//             return ret->type;
+//         }
+//         // [TODO] 数组左值
+//         return std::unexpected(error::undifined_var);
+//     }
+//     else if (node.name == "Unary") // *ptr
+//     {
+//         if (node.nodes[0]->choice == 7) // *
+//         {
+//             return generate_expression(node.nodes[1], func); // 取出ptr值
+//         }
+//     }
+//     return std::unexpected(error::expected_lvalue);
+// }
 std::expected<bool, error> OBJ::generate_code()
 {
     program = simplify_expr_ast(this->program);
@@ -107,7 +126,7 @@ std::expected<bool, error> OBJ::generate_code()
     return generate_code(program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
 }
 // [TODO] 修正generate_expression
-std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> expr, funcDef* func)
+std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> expr, funcDef* func)
 {
     if (!expr)
     {
@@ -115,7 +134,7 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
     }
 
     auto& node = *expr;
-
+    Type rettype;
     if (node.name == "Expression")
     {
         return generate_expression(node.nodes[0], func);
@@ -126,7 +145,9 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         int value = std::stoi(node.token_to_string());
         func->asms.push_back(ASM{ASM::basic_asm::IMM, value});
         // func->asms.push_back(ASM{ASM::basic_asm::PUSH});
-        return true;
+        rettype.basic_type = Type::BasicType::Int;
+        rettype.pointer_level = 0;
+        return rettype;
     }
     else if (node.name == "Identifier")
     {
@@ -152,7 +173,8 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         }
         func->asms.push_back(ASM{ASM::basic_asm::LI});
         // func->asms.push_back(ASM{ASM::basic_asm::PUSH});
-        return true;
+        rettype = var->type;
+        return rettype;
     }
     else if (node.name == "Assignment")
     {
@@ -161,49 +183,38 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
             return generate_expression(node.nodes[0], func);
         }
         // 赋值表达式处理
-        // [TODO] 处理其他左值，如arr[0]
         // 1. 获取左值地址
-        auto& lvalue = node.nodes[0];
-        if (lvalue->name != "Identifier")
+        if (auto lrettype = generate_expression(node.nodes[0], func))
         {
-            std::cerr << "赋值左侧必须是标识符" << std::endl;
-            return std::unexpected(error::expected_lvalue);
-        }
-        std::string var_name = lvalue->token_to_string();
-        std::string loadaddr;
-        const varDef* var = func->lookup_var(var_name);
-        if (!var)
-        {
-            var = symbol_table.lookup_var(var_name);
-            if (!var)
+            if (!lrettype)
             {
-                std::cerr << "未定义的变量: " << var_name << ": "
-                          << std::format("{}:{}:{}\n", name, node.line, node.column);
-                return std::unexpected(error::undifined_var);
+                return lrettype;
             }
-            // 全局变量
-            loadaddr = ASM{ASM::basic_asm::IMM, var->name};
-            func->asms.push_back(loadaddr); // 全局变量统一链接
+            rettype = lrettype.value();
+            if ((func->asms.back().find("LI") != std::string::npos) ||
+                (func->asms.back().find("LC") != std::string::npos))
+            {
+                // 左值均以LI/LC从内存中加载，去掉加载指令后栈顶即为addr
+                func->asms.pop_back();
+                return lrettype;
+            }
+            else
+            {
+                std::unexpected(error::expected_lvalue);
+            }
         }
-        else
-        {
-            // 局部变量
-            loadaddr = ASM{ASM::basic_asm::LEA, var->addr};
-            func->asms.push_back(loadaddr);
-        }
-
         // 2. 计算右值表达式
         if (auto ret = generate_expression(node.nodes[2], func); !ret)
         {
             return ret;
         }
-
+        // 备份值到a
+        func->asms.push_back(ASM{ASM::basic_asm::MOVE, "stack", "ax"});
         // 3. 存储结果
         func->asms.push_back(ASM{ASM::basic_asm::SI});
-        // 保持栈顶有结果值
-        func->asms.push_back(loadaddr);
-        func->asms.push_back(ASM{ASM::basic_asm::LI});
-        return true;
+        // 保持栈顶的结果值
+        func->asms.push_back(ASM{ASM::basic_asm::PUSH});
+        return rettype;
     }
     else if (node.name == "Additive")
     {
@@ -213,19 +224,58 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         }
         // 加减运算处理
         // 1. 计算左操作数
-        if (auto ret = generate_expression(node.nodes[0], func); !ret)
+        auto leftret = generate_expression(node.nodes[0], func);
+        if (!leftret)
         {
-            return ret;
+            return leftret;
         }
-
         // 2. 计算右操作数
-        if (auto ret = generate_expression(node.nodes[2], func); !ret)
+        auto rightret = generate_expression(node.nodes[2], func);
+        if (!rightret)
         {
-            return ret;
+            return rightret;
         }
-
         // 3. 执行运算
         std::string op = node.nodes[1]->token_to_string();
+        if (leftret.value().is_pointer())
+        {
+            if (!rightret.value().is_pointer())
+            {
+                Type elementtype = leftret.value();
+                elementtype.pointer_level--;
+                func->asms.push_back(ASM{ASM::basic_asm::IMM, elementtype.getsize()});
+                func->asms.push_back(ASM{ASM::basic_asm::MUL});
+
+                if (op == "+")
+                {
+                    func->asms.push_back(ASM{ASM::basic_asm::ADD});
+                }
+                else if (op == "-")
+                {
+                    func->asms.push_back(ASM{ASM::basic_asm::SUB});
+                }
+            }
+            else if (rightret.value() == rightret.value())
+            {
+                if (op == "+")
+                {
+                    func->asms.push_back(ASM{ASM::basic_asm::ADD});
+                }
+                else if (op == "-")
+                {
+                    func->asms.push_back(ASM{ASM::basic_asm::SUB});
+                }
+                func->asms.push_back(ASM{ASM::basic_asm::IMM, rightret.value().getsize()});
+                func->asms.push_back(ASM{ASM::basic_asm::DIV});
+                rettype.pointer_level = 0;
+                rettype.basic_type = Type::BasicType::Int;
+                return rettype;
+            }
+            else
+            {
+                return std::unexpected(error::illegal_calcu);
+            }
+        }
         if (op == "+")
         {
             func->asms.push_back(ASM{ASM::basic_asm::ADD});
@@ -234,7 +284,7 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         {
             func->asms.push_back(ASM{ASM::basic_asm::SUB});
         }
-        return true;
+        return rettype;
     }
     else if (node.name == "Multiplicative")
     {
@@ -244,14 +294,16 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         }
         // 乘除模运算处理
         // 1. 计算左操作数
-        if (auto ret = generate_expression(node.nodes[0], func); !ret)
+        auto lret = generate_expression(node.nodes[0], func);
+        if (!lret)
         {
-            return ret;
+            return lret;
         }
         // 2. 计算右操作数
-        if (auto ret = generate_expression(node.nodes[2], func); !ret)
+        auto rret = generate_expression(node.nodes[2], func);
+        if (!rret)
         {
-            return ret;
+            return rret;
         }
         // 3. 执行运算
         std::string op = node.nodes[1]->token_to_string();
@@ -265,9 +317,17 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         }
         else if (op == "%")
         {
+            if (lret.value().is_pointer() || rret.value().is_pointer() ||
+                lret.value().basic_type == Type::BasicType::Void ||
+                rret.value().basic_type == Type::BasicType::Void)
+            {
+                return std::unexpected(error::illegal_calcu);
+            }
             func->asms.push_back(ASM{ASM::basic_asm::MOD});
         }
-        return true;
+        rettype.basic_type == Type::BasicType::Int;
+        rettype.pointer_level = 0;
+        return rettype;
     }
     else if (node.name == "Postfix")
     {
@@ -308,7 +368,7 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
                     func->asms.push_back(ASM{ASM::basic_asm::DARG, args_num});
                     // 处理返回值返回值(约定在ax)
                     func->asms.push_back(ASM{ASM::basic_asm::PUSH});
-                    return true;
+                    return func->type;
                 }
             }
             // [TODO]
@@ -422,7 +482,8 @@ std::expected<bool, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         return std::unexpected(error::unsurpported_op);
     }
 
-    return true;
+    // 理论上不会到这
+    return rettype;
 }
 std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode, funcDef* func,
                                               size_t deep)
@@ -587,14 +648,17 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
     {
         if (auto ret = this->generate_expression(node.nodes[0], func); !ret)
         {
-            return ret;
+            return std::unexpected(ret.error());
         }
         func->asms.push_back(ASM{ASM::basic_asm::POP});
         return true;
     }
     else if (node.name == "Expression")
     {
-        return this->generate_expression(astnode, func);
+        if (auto ret = this->generate_expression(astnode, func);!ret)
+        {
+            return std::unexpected(ret.error());
+        }
     }
     else
     {
@@ -1020,11 +1084,11 @@ const varDef* funcDef::lookup_var(const std::string& inname) const
             }
         }
     }
-    if(!ptr)
+    if (!ptr)
     {
-        for(auto& each:args)
+        for (auto& each : args)
         {
-            if(each.name == inname)
+            if (each.name == inname)
             {
                 ptr = &each;
                 break;

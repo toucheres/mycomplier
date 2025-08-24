@@ -142,6 +142,10 @@ struct Type
     {
         return pointer_level > 0;
     }
+    bool operator==(const Type& other)
+    {
+        return other.basic_type == this->basic_type && other.pointer_level == this->pointer_level;
+    }
     std::string to_string() const;
     size_t getsize() const;
     Type(std::shared_ptr<peg::Ast> astnode);
@@ -213,10 +217,10 @@ struct OBJ
     int bias = 0;
     // 代码生成接口
     std::shared_ptr<peg::Ast> simplify_expr_ast(std::shared_ptr<peg::Ast> expr);
-    std::expected<bool, error> parse_lvalue_and_push_addr(std::shared_ptr<peg::Ast> expr,
-                                                          funcDef* func);
+    // std::expected<Type, error> parse_lvalue_and_push_addr(std::shared_ptr<peg::Ast> expr,
+    //                                                       funcDef* func);
     std::expected<bool, error> generate_code();
-    std::expected<bool, error> generate_expression(std::shared_ptr<peg::Ast> expr, funcDef* func);
+    std::expected<Type, error> generate_expression(std::shared_ptr<peg::Ast> expr, funcDef* func);
     // [TODO] deep替换为外层向内层传递信息
     std::expected<bool, error> generate_code(std::shared_ptr<peg::Ast> astnode, funcDef* funname,
                                              size_t deep);
