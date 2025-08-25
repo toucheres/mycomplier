@@ -165,14 +165,14 @@ std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         else if (const varDef* glvar = symbol_table.lookup_var(var_name))
         {
             // 全局
-            func->asms.push_back(ASM{ASM::basic_asm::IMM, glvar->name}); // 后期链接
+            func->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + glvar->name}); // 后期链接
             func->asms.push_back(ASM{ASM::basic_asm::LI});
             rettype = glvar->type;
         }
         else if (const auto& fun = symbol_table.lookup_fun(var_name))
         {
             // 函数
-            func->asms.push_back(ASM{ASM::basic_asm::IMM, fun->name}); // 后期链接
+            func->asms.push_back(ASM{ASM::basic_asm::IMM, "func@" + fun->name}); // 后期链接
             rettype = func->type;
         }
         else
@@ -517,18 +517,21 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         auto& varnode = *node.nodes[0];
         gvardef.type = Type{varnode.nodes[0]};
         gvardef.name = varnode.nodes[1]->token_to_string();
-        if (varnode.choice == 0) // 不带初始化
+        if (!this->symbol_table.add_global_symbol(gvardef))
         {
-            if (!this->symbol_table.add_global_symbol(gvardef))
+            return std::unexpected(error::double_defined_var);
+        }
+        if (varnode.choice == 1) // 带初始化
+        {
+            func->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + gvardef.name});
+            if (auto ret = generate_expression(node.nodes[0]->nodes[2], func); !ret)
             {
-                return std::unexpected(error::double_defined_var);
+                return std::unexpected{ret.error()};
             }
-            return true;
+            // [TODO] 区分char 与 int
+            func->asms.push_back(ASM{ASM::basic_asm::LI});
         }
-        else // [TODO]
-        {
-            throw("暂不支持定义时初始化\n");
-        }
+        return true;
     }
     else if (node.name == "FuncDef")
     {
@@ -596,8 +599,22 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         varDef tpvar;
         tpvar.type = Type{node.nodes[0]};
         tpvar.name = node.nodes[1]->token_to_string();
-        func->add_var(tpvar);
-        // [TODO] 带初始化的声明
+        auto ret = func->add_var(tpvar);
+        if (!ret)
+        {
+            return std::unexpected(error::double_defined_var);
+        }
+        if (node.choice == 1) // 带初始化
+        {
+            func->asms.push_back(ASM{ASM::basic_asm::LEA,  ret->addr});
+            if (auto ret = generate_expression(node.nodes[2], func); !ret)
+            {
+                return std::unexpected{ret.error()};
+            }
+            // [TODO] 区分char 与 int
+            func->asms.push_back(ASM{ASM::basic_asm::LI});
+        }
+        return true;
     }
     else if (node.name == "IfStmt")
     {
@@ -1058,7 +1075,7 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
     }
     return linker::process(objs);
 }
-
+// [TODO] 考虑链接器
 std::expected<std::vector<std::string>, error> linker::process(std::vector<OBJ>& objs)
 {
     return std::expected<std::vector<std::string>, error>();
@@ -1244,7 +1261,6 @@ varDef::varDef(std::shared_ptr<peg::Ast> astnode)
     this->type = Type{node.nodes[0]};
     this->is_defined = true;
     this->name = node.nodes[1]->token_to_string();
-    // [TODO] 初始化
 }
 
 size_t varDef::get_addr_in_mem(size_t posnow)
