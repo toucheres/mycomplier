@@ -5,7 +5,8 @@ enum class error
     empty_node,
     undifined_func,
     undifined_var,
-    double_defined_var,
+    undifined_obj_init_fun,
+    double_defined,
     illegal_calcu,
     unsurpported_op,
     expected_lvalue

@@ -57,26 +57,39 @@ struct ASM
         JNZ,
         PUSH, // ax->stack
         POP,  // stack->ax
-        CALL,  // 栈顶为地址
+        CALL, // 栈顶为地址
         NARG, // 分配函数局部变量栈空间,4字节为单位
         RET,
         DARG,
+        UP, // 分配data段
         SYSTEMCALL
     };
     static std::string asm2string(basic_asm in)
     {
         static const std::unordered_map<basic_asm, std::string> asm2stringmap{
-            {basic_asm::MOVE, "MOVE"}, {basic_asm::IMM, "IMM"},
-            {basic_asm::LEA, "LEA"},   {basic_asm::LI, "LI"},
-            {basic_asm::LC, "LC"},     {basic_asm::SI, "SI"},
-            {basic_asm::SC, "SC"},     {basic_asm::ADD, "ADD"},
-            {basic_asm::SUB, "SUB"},   {basic_asm::MUL, "MUL"},
-            {basic_asm::DIV, "DIV"},   {basic_asm::MOD, "MOD"},
-            {basic_asm::JMP, "JMP"},   {basic_asm::JZ, "JZ"},
-            {basic_asm::JNZ, "JNZ"},   {basic_asm::PUSH, "PUSH"},
-            {basic_asm::POP, "POP"},   {basic_asm::CALL, "CALL"},
-            {basic_asm::NARG, "NARG"}, {basic_asm::RET, "RET"},
-            {basic_asm::DARG, "DARG"}, {basic_asm::SYSTEMCALL, "SYSTEMCALL"}};
+            {basic_asm::MOVE, "MOVE"},
+            {basic_asm::IMM, "IMM"},
+            {basic_asm::LEA, "LEA"},
+            {basic_asm::LI, "LI"},
+            {basic_asm::LC, "LC"},
+            {basic_asm::SI, "SI"},
+            {basic_asm::SC, "SC"},
+            {basic_asm::ADD, "ADD"},
+            {basic_asm::SUB, "SUB"},
+            {basic_asm::MUL, "MUL"},
+            {basic_asm::DIV, "DIV"},
+            {basic_asm::MOD, "MOD"},
+            {basic_asm::JMP, "JMP"},
+            {basic_asm::JZ, "JZ"},
+            {basic_asm::JNZ, "JNZ"},
+            {basic_asm::PUSH, "PUSH"},
+            {basic_asm::POP, "POP"},
+            {basic_asm::CALL, "CALL"},
+            {basic_asm::NARG, "NARG"},
+            {basic_asm::RET, "RET"},
+            {basic_asm::DARG, "DARG"},
+            {basic_asm::UP, "UP"},
+            {basic_asm::SYSTEMCALL, "SYSTEMCALL"}};
         auto it = asm2stringmap.find(in);
         if (it != asm2stringmap.end())
             return it->second;
@@ -158,6 +171,7 @@ struct Identifi
     bool is_defined;
     int addr;
 };
+// [TODO] 对函数指针和数组的支持
 struct varDef : Identifi
 {
     varDef(std::shared_ptr<peg::Ast> astnode);
@@ -186,10 +200,14 @@ struct funcDef : Identifi
 };
 
 struct OBJ;
+struct linker;
+struct exefile;
 // 符号表
 class SymbolTable
 {
     friend OBJ;
+    friend linker;
+    friend exefile;
 
   private:
     std::unordered_map<std::string, varDef> globalvar;
@@ -235,9 +253,21 @@ struct OBJ
     OBJ(std::string content);
     std::string to_string();
 };
+struct exefile
+{
+    size_t global_size = 0;
+    std::vector<std::string> asms;
+};
 struct linker
 {
-    static std::expected<std::vector<std::string>, error> process(std::vector<OBJ>& objs);
+    std::unordered_map<std::string, size_t> addrmap;
+    std::vector<OBJ>& objs;
+    exefile exe;
+    std::expected<size_t, error> pushfunc(std::string funcname);
+    std::expected<std::vector<std::string>, error> process();
+    linker(std::vector<OBJ>& ins) : objs(ins)
+    {
+    }
 };
 struct complier
 {

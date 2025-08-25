@@ -1,6 +1,7 @@
 #include "complier.hpp"
 #include <filesystem>
 #include <format>
+#include <regex>
 // 递归遍历 AST 的辅助函数
 void visit_ast(const std::shared_ptr<peg::Ast>& ast, int depth = 0)
 {
@@ -519,7 +520,7 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         gvardef.name = varnode.nodes[1]->token_to_string();
         if (!this->symbol_table.add_global_symbol(gvardef))
         {
-            return std::unexpected(error::double_defined_var);
+            return std::unexpected(error::double_defined);
         }
         if (varnode.choice == 1) // 带初始化
         {
@@ -602,11 +603,11 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         auto ret = func->add_var(tpvar);
         if (!ret)
         {
-            return std::unexpected(error::double_defined_var);
+            return std::unexpected(error::double_defined);
         }
         if (node.choice == 1) // 带初始化
         {
-            func->asms.push_back(ASM{ASM::basic_asm::LEA,  ret->addr});
+            func->asms.push_back(ASM{ASM::basic_asm::LEA, ret->addr});
             if (auto ret = generate_expression(node.nodes[2], func); !ret)
             {
                 return std::unexpected{ret.error()};
@@ -1073,12 +1074,127 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
             }
         }
     }
-    return linker::process(objs);
+    return linker{objs}.process();
 }
-// [TODO] 考虑链接器
-std::expected<std::vector<std::string>, error> linker::process(std::vector<OBJ>& objs)
+std::expected<size_t, error> linker::pushfunc(std::string funcname)
 {
-    return std::expected<std::vector<std::string>, error>();
+    funcDef* func = nullptr;
+    auto ret = addrmap.find("func@" + funcname);
+    if (ret == addrmap.end()) // 重定向表未记录
+    {
+        bool flag = false;
+        for (auto& eachobj : objs)
+        {
+            auto fun = eachobj.symbol_table.globalfuncdef.find("func@" + funcname);
+            if (fun == eachobj.symbol_table.globalfuncdef.end())
+            {
+                continue;
+            }
+            else
+            {
+                if (flag)
+                {
+                    return std::unexpected(error::double_defined);
+                }
+                else
+                {
+                    func = &fun->second;
+                    // 记录在重定向表中
+                    size_t thisfuncstart = addrmap["func@" + funcname] = this->exe.asms.size();
+                    for (auto& eachasms : func->asms)
+                    {
+                        this->exe.asms.push_back(eachasms);
+                    }
+                    flag = true;
+                    for (int i = thisfuncstart; i < this->exe.asms.size(); i++)
+                    {
+                        auto& eachasmthisfun = this->exe.asms[i];
+                        std::regex pattern("func@([a-zA-Z_][a-zA-Z0-9_]*)");
+                        std::smatch match;
+                        if (std::regex_search(eachasmthisfun, match, pattern) && match.size() > 1)
+                        {
+                            auto funnametoreaddr = match[1].str(); // 返回第一个捕获组
+                            size_t pos = match.position(0);
+                            size_t len = match.length(0);
+                            auto it = addrmap.find("func@" + funnametoreaddr);
+                            if (it != addrmap.end())
+                            {
+                                // 替换为实际地址
+                                eachasmthisfun.replace(pos, len, std::to_string(it->second));
+                            }
+                            else
+                            {
+                                auto ret = pushfunc(funnametoreaddr);
+                                if (!ret)
+                                {
+                                    return std::unexpected(error::undifined_func);
+                                }
+                                eachasmthisfun.replace(pos, len, std::to_string(ret.value()));
+                            }
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else // 重定向表已记录
+    {
+        return addrmap["func@" + funcname];
+    }
+    return addrmap["func@" + funcname];
+}
+// [TODO] bug
+std::expected<std::vector<std::string>, error> linker::process()
+{
+    // 分配全局变量空间,确定地址
+    for (auto& eachobj : objs)
+    {
+        for (auto& [name, eachgvar] : eachobj.symbol_table.globalvar)
+        {
+            eachgvar.addr = eachgvar.get_addr_in_mem(exe.global_size);
+            exe.global_size = eachgvar.addr + eachgvar.type.getsize();
+            auto labal = "globalvar@" + eachgvar.name;
+            if (addrmap.find(labal) != addrmap.end())
+            {
+                return std::unexpected(error::double_defined);
+            }
+            addrmap[labal] = eachgvar.addr;
+        }
+    }
+    auto ceiling = [](int n, int x)
+    {
+        // x 必须是 2 的幂
+        return (n + x - 1) & ~(x - 1);
+    };
+    // 对其stack到4倍数
+    exe.asms.push_back(ASM{ASM::basic_asm::UP,                          // 整体移动sp,bp
+                           ceiling(exe.global_size, VCPU::size_word)}); // 向上对齐到 4 字节边界});
+    // 拼接obj初始化函数
+    for (auto& eachobj : objs)
+    {
+        auto ret = eachobj.symbol_table.globalfuncdef.find("__global_init_" + eachobj.name);
+        if (ret == eachobj.symbol_table.globalfuncdef.end())
+        {
+            return std::unexpected(error::undifined_obj_init_fun);
+        }
+        for (auto& eachasm : ret->second.asms)
+        {
+            exe.asms.push_back(eachasm);
+        }
+    }
+    // 推入main函数, 并重定向func@
+    if (auto ret = pushfunc("main"); !ret)
+    {
+        return std::unexpected(ret.error());
+    }
+    else
+    {
+        return exe.asms;
+    }
 }
 
 size_t Type::getsize() const
@@ -1265,11 +1381,16 @@ varDef::varDef(std::shared_ptr<peg::Ast> astnode)
 
 size_t varDef::get_addr_in_mem(size_t posnow)
 {
+    // [TODO] char的考虑
     // 考虑对齐要求
+    auto ceiling = [](int n, int x)
+    {
+        // x 必须是 2 的幂
+        return (n + x - 1) & ~(x - 1);
+    };
     if (type.getsize() > 1)
     {
-        // 对于 int 等较大类型，确保地址是 4 的倍数
-        posnow = (posnow + 3) & ~3; // 向上对齐到 4 字节边界
+        return ceiling(posnow, VCPU::size_word);
     }
     return posnow;
 }

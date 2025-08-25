@@ -1,5 +1,5 @@
-#include "vm.h"
 #include "complier.hpp"
+#include "vm.h"
 #include <iostream>
 #include <peglib.h>
 
@@ -62,7 +62,10 @@ int main()
     // {
     //     std::cout << "解析失败！\n";
     // }
-    complier::process({"/home/toucher/vscoderope/mycomplier/test/test1.c"});
-
+    auto ret = complier::process({"/home/toucher/vscoderope/mycomplier/test/test1.c"}).value();
+    for (auto& each : ret)
+    {
+        std::cout << each << '\n';
+    }
     return 0;
 }
