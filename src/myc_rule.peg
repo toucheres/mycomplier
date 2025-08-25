@@ -86,7 +86,8 @@ Cast                <- '(' Type ')' Cast / Unary
 # 右递归解析前缀
 Unary          <- Unary_op Unary / Postfix
 Unary_op          <- '+' / '-' / '!' / '~' / '++' / '--' / '*' / '&'
-# 避免左递归，用后缀循环代替
+# 避免左递归解析，用后缀循环代替，再对ast进行处理转化为左递归:
+# Postfix       <- Postfix Postfix_content / Primary
 Postfix        <- Primary Postfix_content*
 Postfix_content <- '(' Args? ')' / '[' Expression ']' / '.' Identifier / '->' Identifier / '++' / '--'
 # 区分Primary:Identifier的 funcall 与 varref会 造成FunctionCall 与 VariableRef + Postfix 的冲突

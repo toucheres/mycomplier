@@ -57,7 +57,7 @@ struct ASM
         JNZ,
         PUSH, // ax->stack
         POP,  // stack->ax
-        CALL,
+        CALL,  // 栈顶为地址
         NARG, // 分配函数局部变量栈空间,4字节为单位
         RET,
         DARG,
@@ -216,6 +216,7 @@ struct OBJ
     // 全局偏移
     int bias = 0;
     // 代码生成接口
+    void transform_postfix_nodes(std::shared_ptr<peg::Ast>& ast);
     std::shared_ptr<peg::Ast> simplify_expr_ast(std::shared_ptr<peg::Ast> expr);
     // std::expected<Type, error> parse_lvalue_and_push_addr(std::shared_ptr<peg::Ast> expr,
     //                                                       funcDef* func);

@@ -121,6 +121,7 @@ std::shared_ptr<peg::Ast> OBJ::simplify_expr_ast(std::shared_ptr<peg::Ast> ast)
 // }
 std::expected<bool, error> OBJ::generate_code()
 {
+    transform_postfix_nodes(program);
     program = simplify_expr_ast(this->program);
     visit_ast(program);
     return generate_code(program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
@@ -152,29 +153,34 @@ std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
     }
     else if (node.name == "Identifier")
     {
-        // 变量引用处理
+        // id引用处理
         std::string var_name = node.token_to_string();
-        const varDef* var = func->lookup_var(var_name);
-        if (!var)
+        if (const varDef* lovar = func->lookup_var(var_name))
         {
-            // 全局变量
-            var = symbol_table.lookup_var(var_name);
-            if (!var)
-            {
-                std::cerr << "未定义的变量: " << var_name << ": "
-                          << std::format("{}:{}:{}\n", name, node.line, node.column);
-                return std::unexpected(error::undifined_var);
-            }
-            func->asms.push_back(ASM{ASM::basic_asm::IMM, var->name}); // 后期链接
+            // 局部变量
+            func->asms.push_back(ASM{ASM::basic_asm::LEA, lovar->addr});
+            func->asms.push_back(ASM{ASM::basic_asm::LI});
+            rettype = lovar->type;
+        }
+        else if (const varDef* glvar = symbol_table.lookup_var(var_name))
+        {
+            // 全局
+            func->asms.push_back(ASM{ASM::basic_asm::IMM, glvar->name}); // 后期链接
+            func->asms.push_back(ASM{ASM::basic_asm::LI});
+            rettype = glvar->type;
+        }
+        else if (const auto& fun = symbol_table.lookup_fun(var_name))
+        {
+            // 函数
+            func->asms.push_back(ASM{ASM::basic_asm::IMM, fun->name}); // 后期链接
+            rettype = func->type;
         }
         else
         {
-            // 局部变量
-            func->asms.push_back(ASM{ASM::basic_asm::LEA, var->addr});
+            std::cerr << "未定义的变量: " << var_name << ": "
+                      << std::format("{}:{}:{}\n", name, node.line, node.column);
+            return std::unexpected(error::undifined_var);
         }
-        func->asms.push_back(ASM{ASM::basic_asm::LI});
-        // func->asms.push_back(ASM{ASM::basic_asm::PUSH});
-        rettype = var->type;
         return rettype;
     }
     else if (node.name == "Assignment")
@@ -329,69 +335,66 @@ std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         rettype.pointer_level = 0;
         return rettype;
     }
-    else if (node.name == "Postfix")
+    // [TODO] 优化ast后缀逻辑
+    else if (node.name == "Postfix") // 后缀表达式处理
     {
-        // 后缀表达式处理（函数调用等）
         if (node.nodes.size() == 1)
         {
             return generate_expression(node.nodes[0], func);
         }
         auto primary = node.nodes[0];
-        for (int i = 1; i < node.nodes.size(); i++)
+        auto& postfix = *node.nodes[1];
+        if (postfix.choice == 0) // ()后缀, 调用函数
         {
-            auto& eachpostfix = *node.nodes[i];
-            if (eachpostfix.choice == 0) // ()后缀
+            // 1. 计算所有参数（从右向左压栈）
+            std::vector<std::shared_ptr<peg::Ast>> args;
+            size_t args_num = 0;
+            if (postfix.nodes.size() > 0)
             {
-                // 函数调用
-                if (primary->name == "Identifier")
+                auto& args_list = *(postfix.nodes[0]);
+                args_num = args_list.nodes.size();
+                // 从左向右压入参数
+                for (int i = 0; i < args_num; i++)
                 {
-                    std::string func_name = primary->token_to_string();
-                    std::shared_ptr<peg::Ast> args;
-                    size_t args_num = 0;
-                    if (node.nodes.size() != 1) // 有args
+                    if (auto ret = generate_expression(args_list.nodes[i], func); !ret)
                     {
-                        args = node.nodes[0];
+                        return ret;
                     }
-                    if (args_num) // 从左向右入参
-                    {
-                        for (auto& each : args->nodes)
-                        {
-                            if (auto ret = generate_expression(each, func); !ret)
-                            {
-                                return ret;
-                            }
-                        }
-                    }
-                    // 调用函数
-                    func->asms.push_back(ASM{"CALL " + func_name}); // 链接时确定addr
-                    // 清理参数
-                    func->asms.push_back(ASM{ASM::basic_asm::DARG, args_num});
-                    // 处理返回值返回值(约定在ax)
-                    func->asms.push_back(ASM{ASM::basic_asm::PUSH});
-                    return func->type;
                 }
             }
-            // [TODO]
-            else if (eachpostfix.choice == 1) // [] 后缀
+            // 2. 最后计算函数地址
+            auto funcret = generate_expression(primary, func);
+            if (!funcret)
             {
+                return funcret;
             }
-            else if (eachpostfix.choice == 2) //.后缀
-            {
-            }
-            else if (eachpostfix.choice == 3) //->
-            {
-            }
-            else if (eachpostfix.choice == 4) //++
-            {
-            }
-            else if (eachpostfix.choice == 5) //--
-            {
-            }
-            else
-            {
-                std::cout << "unsurpport postfix: " << eachpostfix.name << '\n';
-                return std::unexpected(error::unsurpported_op);
-            }
+            // 3. 调用函数
+            func->asms.push_back(ASM{ASM::basic_asm::CALL});
+            func->asms.push_back(ASM{ASM::basic_asm::DARG, args_num});
+            func->asms.push_back(ASM{ASM::basic_asm::PUSH});
+
+            return funcret;
+        }
+        // [TODO]
+        else if (postfix.choice == 1) // [] 后缀
+        {
+        }
+        else if (postfix.choice == 2) //.后缀
+        {
+        }
+        else if (postfix.choice == 3) //->
+        {
+        }
+        else if (postfix.choice == 4) //++
+        {
+        }
+        else if (postfix.choice == 5) //--
+        {
+        }
+        else
+        {
+            std::cout << "unsurpport postfix: " << postfix.name << '\n';
+            return std::unexpected(error::unsurpported_op);
         }
     }
     //[TODO]
@@ -485,7 +488,6 @@ std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
     // 理论上不会到这
     return rettype;
 }
-// [TODO] 完善GlobalVarDef
 std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode, funcDef* func,
                                               size_t deep)
 {
@@ -508,6 +510,25 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
             }
         }
         return true;
+    }
+    else if (node.name == "GlobalVarDef")
+    {
+        varDef gvardef;
+        auto& varnode = *node.nodes[0];
+        gvardef.type = Type{varnode.nodes[0]};
+        gvardef.name = varnode.nodes[1]->token_to_string();
+        if (varnode.choice == 0) // 不带初始化
+        {
+            if (!this->symbol_table.add_global_symbol(gvardef))
+            {
+                return std::unexpected(error::double_defined_var);
+            }
+            return true;
+        }
+        else // [TODO]
+        {
+            throw("暂不支持定义时初始化\n");
+        }
     }
     else if (node.name == "FuncDef")
     {
@@ -576,7 +597,7 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         tpvar.type = Type{node.nodes[0]};
         tpvar.name = node.nodes[1]->token_to_string();
         func->add_var(tpvar);
-        // [TODO] 带初始化的生命
+        // [TODO] 带初始化的声明
     }
     else if (node.name == "IfStmt")
     {
@@ -656,7 +677,7 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
     }
     else if (node.name == "Expression")
     {
-        if (auto ret = this->generate_expression(astnode, func);!ret)
+        if (auto ret = this->generate_expression(astnode, func); !ret)
         {
             return std::unexpected(ret.error());
         }
@@ -941,7 +962,52 @@ std::string OBJ::to_string()
 
     return oss.str();
 }
+void OBJ::transform_postfix_nodes(std::shared_ptr<peg::Ast>& ast)
+{
+    // 如果不是 Postfix 节点，或只有一个子节点，直接返回
+    if (!ast || ast->name != "Postfix" || ast->nodes.size() <= 1)
+    {
+        // 递归处理子节点
+        if (ast && !ast->nodes.empty())
+        {
+            for (auto& node : ast->nodes)
+            {
+                transform_postfix_nodes(node);
+            }
+        }
+        return;
+    }
 
+    // 第一个节点是 Primary
+    auto result = ast->nodes[0];
+
+    // 遍历处理所有后缀操作
+    for (size_t i = 1; i < ast->nodes.size(); i++)
+    {
+        // 正确创建空节点容器
+        std::vector<std::shared_ptr<peg::Ast>> nodes;
+        nodes.push_back(result);
+        nodes.push_back(ast->nodes[i]);
+
+        // 创建新节点
+        auto new_postfix = std::make_shared<peg::Ast>(ast->path.c_str(), // 使用 c_str() 转换
+                                                      ast->line, ast->column,
+                                                      "Postfix", // 直接使用字符串字面量是可以的
+                                                      nodes      // 使用预先创建的向量
+        );
+
+        result = new_postfix;
+    }
+
+    // 替换当前 AST - 使用指针赋值而不是内容赋值
+    ast = result;
+
+    // 递归处理新树的子节点
+    for (auto& node : ast->nodes)
+    {
+        transform_postfix_nodes(node);
+    }
+}
 std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths)
 {
     using namespace peg;
@@ -1122,7 +1188,7 @@ bool funcDef::add_arg(std::vector<varDef>& vardef)
 
 varDef* SymbolTable::add_global_symbol(const varDef& vardef)
 {
-    if (auto ret = globalvar.find(vardef.name); ret != globalvar.end())
+    if (auto ret = globalvar.find(vardef.name); ret == globalvar.end())
     {
         globalvar[vardef.name] = vardef;
         return &globalvar[vardef.name];
