@@ -67,21 +67,37 @@ _  <- [ \t\r\n]*
 Expression          <- Assignment
 Assignment          <- Conditional (ASSIGN Assignment)? 
 Conditional         <- LogicalOr ('?' Expression ':' Conditional)?
-LogicalOr           <- LogicalAnd ('||' LogicalAnd)*
-LogicalAnd            <- BitwiseOr ('&&' BitwiseOr)*
-BitwiseOr             <- BitwiseXor ('|' BitwiseXor)*
-BitwiseXor            <- BitwiseAnd ('^' BitwiseAnd)*
-BitwiseAnd            <- Equality ('&' Equality)*
+
+LogicalOr           <- LogicalAnd (LogicalOr_op LogicalAnd)*
+LogicalOr_op        <- '||'
+
+LogicalAnd            <- BitwiseOr (LogicalAnd_op BitwiseOr)*
+LogicalAnd_op          <- '&&'
+
+BitwiseOr             <- BitwiseXor (BitwiseOr_op BitwiseXor)*
+BitwiseOr_op            <- '|'
+
+BitwiseXor            <- BitwiseAnd (BitwiseXor_op BitwiseAnd)*
+BitwiseXor_op           <- '^'
+
+BitwiseAnd            <- Equality (BitwiseAnd_op Equality)*
+BitwiseAnd_op           <- '&'
+
 Equality               <- Relational (Equality_op Relational)*
 Equality_op           <-'==' / '!='
+
 Relational            <- Shift (Relational_op Shift)*
 Relational_op         <- '<' / '>' / '<=' / '>='
+
 Shift                 <- Additive (Shift_op Additive)*
 Shift_op              <- '<<' / '>>'
+
 Additive             <- Multiplicative (Additive_op Multiplicative)*
 Additive_op             <- '+' / '-'
+
 Multiplicative      <- Cast (Multiplicative_op Cast)*
 Multiplicative_op   <-'*' / '/' / '%'
+
 Cast                <- '(' Type ')' Cast / Unary
 # 右递归解析前缀
 Unary          <- Unary_op Unary / Postfix

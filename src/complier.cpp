@@ -123,6 +123,7 @@ std::shared_ptr<peg::Ast> OBJ::simplify_expr_ast(std::shared_ptr<peg::Ast> ast)
 std::expected<bool, error> OBJ::generate_code()
 {
     transform_postfix_nodes(program);
+    transform_left_combine_binary_op_nodes(program);
     program = simplify_expr_ast(this->program);
     visit_ast(program);
     return generate_code(program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
@@ -1043,6 +1044,62 @@ void OBJ::transform_postfix_nodes(std::shared_ptr<peg::Ast>& ast)
     {
         transform_postfix_nodes(node);
     }
+}
+void OBJ::transform_left_combine_binary_op_nodes(std::shared_ptr<peg::Ast>& ast)
+{
+    if (!ast)
+        return;
+
+    // 1. 先递归处理所有子节点
+    for (size_t i = 0; i < ast->nodes.size(); i++)
+    {
+        transform_left_combine_binary_op_nodes(ast->nodes[i]);
+    }
+
+    // 2. 检查是否是二元表达式
+    if (!is_binary_expr(ast->name) || ast->nodes.size() <= 1)
+    {
+        return;
+    }
+
+    // 3. 二元表达式转换为递归结构
+    auto expr_type = ast->name;
+    auto first_term = ast->nodes[0];
+    auto current = first_term;
+
+    // 如果有操作符节点和操作数对，循环处理
+    for (size_t i = 1; i < ast->nodes.size(); i += 2)
+    {
+        // 确保有一个操作符和一个操作数
+        if (i + 1 >= ast->nodes.size())
+            break;
+
+        auto op_node = ast->nodes[i];
+        auto right_term = ast->nodes[i + 1];
+
+        // 创建新的表达式节点
+        std::vector<std::shared_ptr<peg::Ast>> new_nodes;
+        new_nodes.push_back(current);
+        new_nodes.push_back(op_node);
+        new_nodes.push_back(right_term);
+
+        auto new_expr = std::make_shared<peg::Ast>(ast->path.c_str(), ast->line, ast->column,
+                                                   expr_type.c_str(), new_nodes);
+
+        current = new_expr;
+    }
+
+    // 4. 替换原始节点
+    ast = current;
+}
+
+// 辅助函数：检查是否是二元表达式类型
+bool OBJ::is_binary_expr(const std::string& name)
+{
+    static const std::unordered_set<std::string> binary_exprs = {
+        "LogicalOr", "LogicalAnd", "BitwiseOr", "BitwiseXor", "BitwiseAnd",
+        "Equality",  "Relational", "Shift",     "Additive",   "Multiplicative"};
+    return binary_exprs.find(name) != binary_exprs.end();
 }
 std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths)
 {

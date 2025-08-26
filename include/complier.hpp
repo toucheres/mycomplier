@@ -75,30 +75,18 @@ struct ASM
     static std::string asm2string(basic_asm in)
     {
         static const std::unordered_map<basic_asm, std::string> asm2stringmap{
-            {basic_asm::MOVE, "MOVE"},
-            {basic_asm::IMM, "IMM"},
-            {basic_asm::LEA, "LEA"},
-            {basic_asm::LI, "LI"},
-            {basic_asm::LC, "LC"},
-            {basic_asm::SI, "SI"},
-            {basic_asm::SC, "SC"},
-            {basic_asm::ADD, "ADD"},
-            {basic_asm::SUB, "SUB"},
-            {basic_asm::MUL, "MUL"},
-            {basic_asm::DIV, "DIV"},
-            {basic_asm::MOD, "MOD"},
-            {basic_asm::JMP, "JMP"},
-            {basic_asm::JZ, "JZ"},
-            {basic_asm::JNZ, "JNZ"},
-            {basic_asm::PUSH, "PUSH"},
-            {basic_asm::POP, "POP"},
-            {basic_asm::CALL, "CALL"},
-            {basic_asm::NVAR, "NVAR"},
-            {basic_asm::RET, "RET"},
-            {basic_asm::EXIT, "EXIT"},
-            {basic_asm::DARG, "DARG"},
-            {basic_asm::UP, "UP"},
-            {basic_asm::SYSTEMCALL, "SYSTEMCALL"}};
+            {basic_asm::MOVE, "MOVE"}, {basic_asm::IMM, "IMM"},
+            {basic_asm::LEA, "LEA"},   {basic_asm::LI, "LI"},
+            {basic_asm::LC, "LC"},     {basic_asm::SI, "SI"},
+            {basic_asm::SC, "SC"},     {basic_asm::ADD, "ADD"},
+            {basic_asm::SUB, "SUB"},   {basic_asm::MUL, "MUL"},
+            {basic_asm::DIV, "DIV"},   {basic_asm::MOD, "MOD"},
+            {basic_asm::JMP, "JMP"},   {basic_asm::JZ, "JZ"},
+            {basic_asm::JNZ, "JNZ"},   {basic_asm::PUSH, "PUSH"},
+            {basic_asm::POP, "POP"},   {basic_asm::CALL, "CALL"},
+            {basic_asm::NVAR, "NVAR"}, {basic_asm::RET, "RET"},
+            {basic_asm::EXIT, "EXIT"}, {basic_asm::DARG, "DARG"},
+            {basic_asm::UP, "UP"},     {basic_asm::SYSTEMCALL, "SYSTEMCALL"}};
         auto it = asm2stringmap.find(in);
         if (it != asm2stringmap.end())
             return it->second;
@@ -199,7 +187,7 @@ struct funcDef : Identifi
     std::vector<varDef> args;
     std::vector<std::vector<varDef>> funcvar_stack;
     size_t max_stack_size = VCPU::size_word; // 预留oldbp
-    size_t stack_size_now = VCPU::size_word;// 预留oldbp
+    size_t stack_size_now = VCPU::size_word; // 预留oldbp
     void enter_scope();
     void exit_scope();
     const varDef* lookup_var(const std::string& name) const;
@@ -244,6 +232,8 @@ struct OBJ
     int bias = 0;
     // 代码生成接口
     void transform_postfix_nodes(std::shared_ptr<peg::Ast>& ast);
+    void transform_left_combine_binary_op_nodes(std::shared_ptr<peg::Ast>& ast);
+    bool is_binary_expr(const std::string& name);
     std::shared_ptr<peg::Ast> simplify_expr_ast(std::shared_ptr<peg::Ast> expr);
     // std::expected<Type, error> parse_lvalue_and_push_addr(std::shared_ptr<peg::Ast> expr,
     //                                                       funcDef* func);
