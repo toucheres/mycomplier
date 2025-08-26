@@ -531,7 +531,7 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
                 return std::unexpected{ret.error()};
             }
             // [TODO] 区分char 与 int
-            func->asms.push_back(ASM{ASM::basic_asm::LI});
+            func->asms.push_back(ASM{ASM::basic_asm::SI});
         }
         return true;
     }
@@ -629,7 +629,7 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
                 return std::unexpected{ret.error()};
             }
             // [TODO] 区分char 与 int
-            func->asms.push_back(ASM{ASM::basic_asm::LI});
+            func->asms.push_back(ASM{ASM::basic_asm::SI});
         }
         return true;
     }
