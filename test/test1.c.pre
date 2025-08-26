@@ -1,11 +1,12 @@
 int main()
 {
-    if(0)
+    while (1 + 1)
     {
-        return 0;
+        return 2 + 2;
+        break;
+        return 3 + 3;
+        continue;
+        return 4 + 4;
     }
-    else
-    {
-        return 1;
-    }
+    return 5;
 }

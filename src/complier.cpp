@@ -650,22 +650,46 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         //            jmp start
         // end         ...
         //
-        // size_t startpos = func->asms.size(); // start
-        // // [TODO] 为break传入信息
-        // if (auto ret = generate_code(node.nodes[0], func, 0); !ret)
-        // {
-        //     return ret;
-        // }
-        // size_t jumppos = func->asms.size(); // start
-
-        // if (auto ret = generate_code(node.nodes[1], func, 0); !ret)
-        // {
-        //     return ret;
-        // }
-        // func->asms.insert(func->asms.begin() + jumppos,
-        //                   ASM{ASM::basic_asm::JZ, func->asms.size() + 1});
-        // size_t exprok = func->asms.size(); // condition_over
+        size_t startpos = func->asms.size(); // start
+        if (auto ret = generate_code(node.nodes[0], func, 0); !ret)
+        {
+            return ret;
+        }
+        size_t conditionpos = func->asms.size();
+        func->asms.push_back("HOLD");// for jz
+        if (auto ret = generate_code(node.nodes[1], func, 0); !ret)
+        {
+            return ret;
+        }
+        func->asms.push_back(ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(startpos)});
+        func->asms[conditionpos] =
+            ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(func->asms.size())};
+        for (int i = startpos; i < func->asms.size(); i++)
+        {
+            if (func->asms[i] == "breaklable")
+            {
+                // 替换为实际地址
+                func->asms[i] =
+                    ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(func->asms.size())};
+            }
+        }
+        for (int i = startpos; i < func->asms.size(); i++)
+        {
+            if (func->asms[i] == "continuelable")
+            {
+                // 替换为实际地址
+                func->asms[i] = ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(startpos)};
+            }
+        }
         // func->asms.push_back(ASM{ASM::basic_asm::JMP, startpos});
+    }
+    else if (node.name == "BreakStmt")
+    {
+        func->asms.push_back("breaklable");
+    }
+    else if (node.name == "ContinueStmt")
+    {
+        func->asms.push_back("continuelable");
     }
     else if (node.name == "ExprStmt")
     {

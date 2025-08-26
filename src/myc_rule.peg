@@ -42,7 +42,7 @@ FuncDecl    <- Type Identifier '(' FunArgs? ')' ';'
 FunArgs     <- Arg (',' Arg)*
 Arg         <- Type Identifier
 Block       <- '{' Statement* '}'
-Statement   <- VarDef / ReturnStmt / ExprStmt / IfStmt / WhileStmt / BreakStmt / ContinueStmt / Block
+Statement   <-  ContinueStmt / BreakStmt / WhileStmt / VarDef / ReturnStmt / ExprStmt / IfStmt /  Block
 ReturnStmt  <- 'return' Expression? ';'
 ExprStmt    <- Expression ';'
 # 控制结构
