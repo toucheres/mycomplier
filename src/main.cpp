@@ -63,9 +63,9 @@ int main()
     //     std::cout << "解析失败！\n";
     // }
     auto ret = complier::process({"/home/toucher/vscoderope/mycomplier/test/test1.c"}).value();
-    for (auto& each : ret)
+    for (int i = 0; i < ret.size(); i++)
     {
-        std::cout << each << '\n';
+        std::cout << "[" << i << "]: " << ret[i] << '\n';
     }
     return 0;
 }

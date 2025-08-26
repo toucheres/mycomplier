@@ -22,12 +22,18 @@ struct VCPU
     {
         stack.resize(1024); // 默认memery大小
     }
-    inline static const constexpr size_t size_word = 4;
+    inline static const constexpr size_t size_word = 4;// 32位cpu
 };
 
 struct VM
 {
+    std::ostream logout;
+    std::vector<std::string> asms;
     VCPU cpu;
+    void print();
+    bool setlogpath(std::string path);
+    void eachcycle();
+    int run();
     VM(std::string path);
     VM(std::vector<std::string> asms);
 };

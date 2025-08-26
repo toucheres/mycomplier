@@ -556,7 +556,25 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         else
         {
             this->symbol_table.add_global_symbol(func);
-            return generate_code(node.nodes[2], this->symbol_table.lookup_fun(func.name), 0);
+            symbol_table.lookup_fun(func.name)->asms.push_back(
+                ASM{ASM::basic_asm::NVAR, "labal@NVAR"});
+            if (auto ret =
+                    generate_code(node.nodes[2], this->symbol_table.lookup_fun(func.name), 0);
+                !ret)
+            {
+                return ret;
+            }
+            auto ceiling = [](int n, int x)
+            {
+                // x 必须是 2 的幂
+                return (n + x - 1) & ~(x - 1);
+            };
+            symbol_table.lookup_fun(func.name)->asms[0] =
+                ASM{ASM::basic_asm::NVAR,
+                    std::to_string(ceiling(symbol_table.lookup_fun(func.name)->max_stack_size,
+                                           VCPU::size_word) /
+                                   VCPU::size_word)};
+            return true;
         }
     }
     else if (node.name == "Block")
@@ -1085,7 +1103,7 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
         bool flag = false;
         for (auto& eachobj : objs)
         {
-            auto fun = eachobj.symbol_table.globalfuncdef.find("func@" + funcname);
+            auto fun = eachobj.symbol_table.globalfuncdef.find(funcname);
             if (fun == eachobj.symbol_table.globalfuncdef.end())
             {
                 continue;
@@ -1108,10 +1126,10 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                     flag = true;
                     for (int i = thisfuncstart; i < this->exe.asms.size(); i++)
                     {
-                        auto& eachasmthisfun = this->exe.asms[i];
                         std::regex pattern("func@([a-zA-Z_][a-zA-Z0-9_]*)");
                         std::smatch match;
-                        if (std::regex_search(eachasmthisfun, match, pattern) && match.size() > 1)
+                        if (std::regex_search(this->exe.asms[i], match, pattern) &&
+                            match.size() > 1)
                         {
                             auto funnametoreaddr = match[1].str(); // 返回第一个捕获组
                             size_t pos = match.position(0);
@@ -1120,7 +1138,7 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                             if (it != addrmap.end())
                             {
                                 // 替换为实际地址
-                                eachasmthisfun.replace(pos, len, std::to_string(it->second));
+                                this->exe.asms[i].replace(pos, len, std::to_string(it->second));
                             }
                             else
                             {
@@ -1129,7 +1147,7 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                                 {
                                     return std::unexpected(error::undifined_func);
                                 }
-                                eachasmthisfun.replace(pos, len, std::to_string(ret.value()));
+                                this->exe.asms[i].replace(pos, len, std::to_string(ret.value()));
                             }
                         }
                         else
@@ -1186,6 +1204,8 @@ std::expected<std::vector<std::string>, error> linker::process()
             exe.asms.push_back(eachasm);
         }
     }
+    this->exe.asms.push_back(ASM{ASM::basic_asm::CALL, exe.asms.size() + 2}); // call main
+    this->exe.asms.push_back(ASM{ASM::basic_asm::EXIT});
     // 推入main函数, 并重定向func@
     if (auto ret = pushfunc("main"); !ret)
     {

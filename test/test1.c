@@ -1,6 +1,12 @@
-int gvar = 42;
+int fun2()
+{
+    return 2;
+}
+int fun1()
+{
+    return fun2();
+}
 int main()
 {
-    int var = gvar;
-    return 0;
+    return fun1();
 }

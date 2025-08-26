@@ -58,8 +58,9 @@ struct ASM
         PUSH, // ax->stack
         POP,  // stack->ax
         CALL, // 栈顶为地址
-        NARG, // 分配函数局部变量栈空间,4字节为单位
+        NVAR, // 分配函数局部变量栈空间,4字节为单位
         RET,
+        EXIT,
         DARG,
         UP, // 分配data段
         SYSTEMCALL
@@ -85,8 +86,9 @@ struct ASM
             {basic_asm::PUSH, "PUSH"},
             {basic_asm::POP, "POP"},
             {basic_asm::CALL, "CALL"},
-            {basic_asm::NARG, "NARG"},
+            {basic_asm::NVAR, "NVAR"},
             {basic_asm::RET, "RET"},
+            {basic_asm::EXIT, "EXIT"},
             {basic_asm::DARG, "DARG"},
             {basic_asm::UP, "UP"},
             {basic_asm::SYSTEMCALL, "SYSTEMCALL"}};
