@@ -2,6 +2,7 @@
 #include "error.hpp"
 #include <expected>
 #include <fstream>
+#include <iostream>
 #include <memory>
 #include <stack>
 #include <string>
@@ -9,6 +10,13 @@
 #include <vector>
 struct VCPU
 {
+    enum State
+    {
+        OK,
+        STOP,
+        ERROR
+    };
+    State state = State::OK;
     std::vector<std::string> assembly_code; // 直接存储汇编指令字符串
     std::vector<char> stack;                // memery
 
@@ -51,6 +59,7 @@ struct VCPU
         }
         else
         {
+            throw("unsurpport data length");
             // unsurpport
         }
     }
@@ -68,6 +77,7 @@ struct VCPU
         {
             // unsurpport
         }
+        return true;
     }
     void do_ins(std::string thisasm);
     void DOMOVE(std::string thisasm);
@@ -94,24 +104,45 @@ struct VCPU
     void DODARG(std::string thisasm);
     void DOUP(std::string thisasm); // 分配data段
     void DOSYSTEMCALL(std::string thisasm);
-    void do_cycle()
+    bool print()
     {
-        do_ins(assembly_code[pc]);
-        // [exit/error判断]
-        cycle++;
-        pc++;
+        std::cout << "指令: " << assembly_code[pc] << '\n';
+        std::cout << "ax: " << ax << '\n';
+        std::cout << "sp: " << sp << '\n';
+        std::cout << "bp: " << bp << '\n';
+        std::cout << "pc: " << pc << '\n';
+        for (int i = 0; i < sp; i += 4)
+        {
+            std::cout << "[" << i << "]: " << *reinterpret_cast<int*>(&stack[i]) << '\n';
+        }
+        std::cout << '\n';
+        return true;
+    }
+    void run()
+    {
+        do
+        {
+            print();
+            do_ins(assembly_code[pc]);
+            // [exit/error判断]
+            cycle++;
+            pc++;
+        } while (state == State::OK);
     }
 };
 
 struct VM
 {
-    std::ostream logout;
+    // std::ostream* logout = nullptr;
     VCPU cpu;
-    std::expected<bool, error> print();
+    // std::expected<bool, error> print();
     std::expected<bool, error> setlogpath(std::string path);
     std::expected<bool, error> eachcycle();
     std::expected<int, error> run();
     bool enable_debug = true;
     VM(std::string path);
-    VM(std::vector<std::string> asms);
+    VM(std::vector<std::string> asms)
+    {
+        cpu.assembly_code = asms;
+    }
 };

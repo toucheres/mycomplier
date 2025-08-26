@@ -541,42 +541,39 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         func.is_defined = true;
         func.type = Type{node.nodes[0]};
         func.name = node.nodes[1]->token_to_string();
+        int blockindex = 2;
         if (node.nodes.size() == 4)
         {
             // 有参数
+            blockindex = 3;
             std::vector<varDef> funargs;
             for (auto eachargptr : node.nodes[2]->nodes)
             {
                 funargs.push_back(varDef{eachargptr});
             }
             func.add_arg(funargs);
-            this->symbol_table.add_global_symbol(func);
+            // this->symbol_table.add_global_symbol(func);
             // funname_codes.emplace(func.name, func);
-            return generate_code(node.nodes[3], this->symbol_table.lookup_fun(func.name), 0);
+            // return generate_code(node.nodes[3], this->symbol_table.lookup_fun(func.name), 0);
         }
-        else
+        this->symbol_table.add_global_symbol(func);
+        symbol_table.lookup_fun(func.name)->asms.push_back(ASM{ASM::basic_asm::NVAR, "labal@NVAR"});
+        if (auto ret = generate_code(node.nodes[blockindex], this->symbol_table.lookup_fun(func.name), 0);
+            !ret)
         {
-            this->symbol_table.add_global_symbol(func);
-            symbol_table.lookup_fun(func.name)->asms.push_back(
-                ASM{ASM::basic_asm::NVAR, "labal@NVAR"});
-            if (auto ret =
-                    generate_code(node.nodes[2], this->symbol_table.lookup_fun(func.name), 0);
-                !ret)
-            {
-                return ret;
-            }
-            auto ceiling = [](int n, int x)
-            {
-                // x 必须是 2 的幂
-                return (n + x - 1) & ~(x - 1);
-            };
-            symbol_table.lookup_fun(func.name)->asms[0] =
-                ASM{ASM::basic_asm::NVAR,
-                    std::to_string(ceiling(symbol_table.lookup_fun(func.name)->max_stack_size,
-                                           VCPU::size_word) /
-                                   VCPU::size_word)};
-            return true;
+            return ret;
         }
+        auto ceiling = [](int n, int x)
+        {
+            // x 必须是 2 的幂
+            return (n + x - 1) & ~(x - 1);
+        };
+        symbol_table.lookup_fun(func.name)->asms[0] =
+            ASM{ASM::basic_asm::NVAR,
+                std::to_string(
+                    ceiling(symbol_table.lookup_fun(func.name)->max_stack_size, VCPU::size_word) /
+                    VCPU::size_word)};
+        return true;
     }
     else if (node.name == "Block")
     {
@@ -1261,7 +1258,8 @@ std::expected<std::vector<std::string>, error> linker::process()
             exe.asms.push_back(eachasm);
         }
     }
-    this->exe.asms.push_back(ASM{ASM::basic_asm::CALL, exe.asms.size() + 2}); // call main
+    this->exe.asms.push_back(ASM{ASM::basic_asm::IMM, exe.asms.size() + 3}); // call main
+    this->exe.asms.push_back(ASM{ASM::basic_asm::CALL});                     // call main
     this->exe.asms.push_back(ASM{ASM::basic_asm::EXIT});
     // 推入main函数, 并重定向func@
     if (auto ret = pushfunc("main"); !ret)
@@ -1391,7 +1389,7 @@ bool funcDef::add_arg(std::vector<varDef>& vardef)
     args = vardef;
     for (int i = 0; i < vardef.size(); i++)
     {
-        args[i].addr = -VCPU::size_word * (i + 2);
+        args[i].addr = -VCPU::size_word * (i + 3);
     }
     return true;
 }

@@ -12,12 +12,25 @@
 // 低地址 +----------------+
 //       |     参数 N     |
 //       |     参数...    |
-//       |     参数 1     |
+//       |     参数 1     | -12
 //       +----------------+
-//       |  返回地址(pc+1) |
+//       |  返回地址(pc+1) | -8
 //       +----------------+
-//       |   旧的BP值     | <- 新的BP和SP都指向这里
-// 高地址 +----------------+
+//       |   旧的BP值     |  -4
+// 高地址 +----------------+<- 新的BP和SP都指向这里
+
+// 低地址 +----------------+
+//       |     参数 N     |
+//       |     参数...    |
+//       |     参数 1     | -12
+//       +----------------+
+//       |  返回地址(pc+1) | -8
+//       +----------------+
+//       |   旧的BP值     |  -4  
+//       +----------------+      bp
+//       |   tpvar0       |  0
+//       |   tpvar1       |  4
+// 高地址 +----------------+<-  sp   
 // fun中: a=bp[-(n*4)] b=bp[-((n-1)*4)]... retaddr=bp[0] obp=bp[4]
 // nargs n  分配n个参数
 // ret ax携带返回值,jump bp[0]
@@ -186,8 +199,8 @@ struct funcDef : Identifi
     std::vector<std::string> asms;
     std::vector<varDef> args;
     std::vector<std::vector<varDef>> funcvar_stack;
-    size_t max_stack_size = VCPU::size_word; // 预留oldbp
-    size_t stack_size_now = VCPU::size_word; // 预留oldbp
+    size_t max_stack_size = 0;              // 预留oldbp
+    size_t stack_size_now = 0;              // 预留oldbp
     void enter_scope();
     void exit_scope();
     const varDef* lookup_var(const std::string& name) const;

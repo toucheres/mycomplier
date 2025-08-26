@@ -1,11 +1,12 @@
-int fun(int arg1, int arg2)
+int func(int a, int b)
 {
-    return arg1 + arg2;
+    int var1;
+    int var2;
+    var1 = a;
+    var2 = b;
+    return var1 + var2;
 }
 int main()
 {
-    int arg;
-    int arg1;
-    int arg2;
-    return arg + arg1 + arg2;
+    return func(66, 88);
 }

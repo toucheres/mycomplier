@@ -12,10 +12,23 @@ file(GLOB_RECURSE SRC_FILES "${CMAKE_SOURCE_DIR}/src/*")
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # Add third-party libraries
-# cpp-peglib is provided under 3rd/cpp-peglib and defines an INTERFACE target 'peglib'
 add_subdirectory(${CMAKE_SOURCE_DIR}/3rd/cpp-peglib)
+
+# 设置严格警告
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  add_compile_options(
+    # -Wall -Wextra -Wpedantic 
+    # # -Werror
+    # -Wshadow -Wformat=2 -Wunused
+    # -Wcast-align -Wconversion -Wsign-conversion
+  )
+  
+  # 可选：运行时检查（需要在编译和链接时都添加）
+  # add_compile_options(-fsanitize=address -fsanitize=undefined)
+  # add_link_options(-fsanitize=address -fsanitize=undefined)
+endif()
 
 add_executable(mycomplier ${SRC_FILES})
 
-# Link peglib interface target so its include directories propagate to our target
+# Link peglib interface target
 target_link_libraries(mycomplier PRIVATE peglib)

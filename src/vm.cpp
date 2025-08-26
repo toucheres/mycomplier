@@ -6,37 +6,34 @@
 #include <map>
 #include <sstream>
 
-std::expected<bool, error> VM::print()
-{
-    return std::expected<bool, error>();
-}
+
 
 std::expected<bool, error> VM::setlogpath(std::string path)
 {
-    // 创建新的文件输出流
-    static std::ofstream* file_stream = nullptr;
+    // // 创建新的文件输出流
+    // static std::ofstream* file_stream = nullptr;
 
-    // 关闭并删除之前可能打开的文件流
-    if (file_stream)
-    {
-        file_stream->close();
-        delete file_stream;
-    }
+    // // 关闭并删除之前可能打开的文件流
+    // if (file_stream)
+    // {
+    //     file_stream->close();
+    //     delete file_stream;
+    // }
 
-    // 创建新文件流
-    file_stream = new std::ofstream(path);
+    // // 创建新文件流
+    // file_stream = new std::ofstream(path);
 
-    // 检查文件是否成功打开
-    if (!file_stream->is_open())
-    {
-        std::cerr << "Failed to open log file: " << path << std::endl;
-        delete file_stream;
-        file_stream = nullptr;
-        return std::unexpected(error::file_not_exsist);
-    }
+    // // 检查文件是否成功打开
+    // if (!file_stream->is_open())
+    // {
+    //     std::cerr << "Failed to open log file: " << path << std::endl;
+    //     delete file_stream;
+    //     file_stream = nullptr;
+    //     return std::unexpected(error::file_not_exsist);
+    // }
 
-    // 重定向 logout 到新的文件流缓冲区
-    logout.rdbuf(file_stream->rdbuf());
+    // // 重定向 logout 到新的文件流缓冲区
+    // logout->rdbuf(file_stream->rdbuf());
 
     return true;
 }
@@ -47,9 +44,14 @@ std::expected<bool, error> VM::eachcycle()
 }
 std::expected<int, error> VM::run()
 {
-    if (enable_debug)
+    cpu.run();
+    if (cpu.state == VCPU::State::STOP)
     {
-        print();
+        return cpu.ax;
+    }
+    else
+    {
+        return std::unexpected(error::cpu_error);
     }
 }
 
@@ -403,7 +405,7 @@ void VCPU::DONVAR(std::string thisasm)
 
     // 分配空间（以4字节为单位）
     int count = std::stoi(count_str);
-    sp += count * 4;
+    sp += count * VCPU::size_word;
 }
 
 // 函数返回
@@ -416,23 +418,18 @@ void VCPU::DORET(std::string thisasm)
     sp = bp;
 
     // 恢复旧的帧指针
-    this->stackpop(); // 弹出旧的bp值
     bp = this->stacktop();
-    this->stackpop();
-
-    // 恢复返回地址并跳转
+    this->stackpop(); // 弹出旧的bp值
     int ret_addr = this->stacktop();
+    // 恢复返回地址并跳转
     this->stackpop();
-
     pc = ret_addr - 1; // -1因为do_cycle会自增
 }
 
 // 退出程序
 void VCPU::DOEXIT(std::string thisasm)
 {
-    // 可以设置一个标志来指示程序应该退出
-    // 这里假设外部循环会检查pc是否超过assembly_code.size()
-    pc = assembly_code.size(); // 设置pc超出范围以退出执行循环
+    state = State::STOP;
 }
 
 // 清理函数参数

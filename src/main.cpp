@@ -67,5 +67,7 @@ int main()
     {
         std::cout << "[" << i << "]: " << ret[i] << '\n';
     }
+    VM vm{ret};
+    vm.run();
     return 0;
 }
