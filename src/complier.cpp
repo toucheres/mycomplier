@@ -615,7 +615,7 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
             return ret;
         }
         size_t startpos = func->asms.size(); // condition_over
-
+        func->asms.push_back("hold");
         func->enter_scope();
         if (auto ret = generate_code(node.nodes[1], func, 0); !ret)
         {
@@ -624,10 +624,11 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         }
         func->exit_scope();
 
-        func->asms.insert(func->asms.begin() + startpos,
-                          ASM{ASM::basic_asm::JZ, func->asms.size() + 1});
+        func->asms[startpos] =
+            ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(func->asms.size() + 1)};
 
         size_t if_end = func->asms.size();
+        func->asms.push_back("hold");
         if (node.nodes.size() == 3) // 存在else
         {
             func->enter_scope();
@@ -637,8 +638,8 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
                 return ret;
             }
             func->exit_scope();
-            func->asms.insert(func->asms.begin() + if_end,
-                              ASM{ASM::basic_asm::JMP, func->asms.size() + 1});
+            func->asms[if_end] =
+                ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(func->asms.size())};
         }
     }
     else if (node.name == "WhileStmt")
@@ -1170,6 +1171,25 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                                 }
                                 this->exe.asms[i].replace(pos, len, std::to_string(ret.value()));
                             }
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
+                    for (int i = thisfuncstart; i < this->exe.asms.size(); i++)
+                    {
+                        std::regex pattern("thisfun@([0-9]*)");
+                        std::smatch match;
+                        if (std::regex_search(this->exe.asms[i], match, pattern) &&
+                            match.size() > 1)
+                        {
+                            auto lable = match[1].str(); // 返回第一个捕获组
+                            size_t pos = match.position(0);
+                            size_t len = match.length(0);
+                            // 替换为实际地址
+                            this->exe.asms[i].replace(
+                                pos, len, std::to_string(std::stoi(lable) + thisfuncstart));
                         }
                         else
                         {
