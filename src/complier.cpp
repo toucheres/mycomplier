@@ -127,8 +127,8 @@ std::expected<bool, error> OBJ::generate_code()
     visit_ast(program);
     return generate_code(program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
 }
-// [TODO] 修正generate_expression
 // [TODO] 检查类型安全
+// [TODO] 连加，连法bug(循环改递归)
 std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> expr, funcDef* func)
 {
     if (!expr)
@@ -354,10 +354,10 @@ std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
             {
                 auto& args_list = *(postfix.nodes[0]);
                 args_num = args_list.nodes.size();
-                // 从左向右压入参数
-                for (int i = 0; i < args_num; i++)
+                // 从右向左压栈
+                for (int i = args_num; i > 0; i--)
                 {
-                    if (auto ret = generate_expression(args_list.nodes[i], func); !ret)
+                    if (auto ret = generate_expression(args_list.nodes[i - 1], func); !ret)
                     {
                         return ret;
                     }
@@ -1334,7 +1334,7 @@ bool funcDef::add_arg(std::vector<varDef>& vardef)
     args = vardef;
     for (int i = 0; i < vardef.size(); i++)
     {
-        args[i].addr = -VCPU::size_word * (vardef.size() - i);
+        args[i].addr = -VCPU::size_word * (i + 2);
     }
     return true;
 }

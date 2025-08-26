@@ -1,12 +1,11 @@
-int fun2()
+int fun(int arg1, int arg2)
 {
-    return 2;
-}
-int fun1()
-{
-    return fun2();
+    return arg1 + arg2;
 }
 int main()
 {
-    return fun1();
+    int arg;
+    int arg1;
+    int arg2;
+    return arg + arg1 + arg2;
 }

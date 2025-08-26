@@ -8,9 +8,16 @@
 // 计算b
 // lea&li b    stack: a   b
 //...
-// call addr<fun> 压入pc+1 压入bp bp=sp jump-addr<fun>  stack: a   b  ...  opc+1  obp
-//                                                                          bp
-
+// call addr<fun>
+// 低地址 +----------------+
+//       |     参数 N     |
+//       |     参数...    |
+//       |     参数 1     |
+//       +----------------+
+//       |  返回地址(pc+1) |
+//       +----------------+
+//       |   旧的BP值     | <- 新的BP和SP都指向这里
+// 高地址 +----------------+
 // fun中: a=bp[-(n*4)] b=bp[-((n-1)*4)]... retaddr=bp[0] obp=bp[4]
 // nargs n  分配n个参数
 // ret ax携带返回值,jump bp[0]
@@ -191,8 +198,8 @@ struct funcDef : Identifi
     std::vector<std::string> asms;
     std::vector<varDef> args;
     std::vector<std::vector<varDef>> funcvar_stack;
-    size_t max_stack_size = VCPU::size_word * 2;
-    size_t stack_size_now = VCPU::size_word * 2;
+    size_t max_stack_size = VCPU::size_word; // 预留oldbp
+    size_t stack_size_now = VCPU::size_word;// 预留oldbp
     void enter_scope();
     void exit_scope();
     const varDef* lookup_var(const std::string& name) const;
