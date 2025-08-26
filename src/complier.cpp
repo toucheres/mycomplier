@@ -1,4 +1,5 @@
 #include "complier.hpp"
+#include "preprocessor.hpp"
 #include <filesystem>
 #include <format>
 #include <regex>
@@ -86,40 +87,6 @@ std::shared_ptr<peg::Ast> OBJ::simplify_expr_ast(std::shared_ptr<peg::Ast> ast)
     }
     return ast;
 }
-// std::expected<Type, error> OBJ::parse_lvalue_and_push_addr(std::shared_ptr<peg::Ast> expr,
-//                                                            funcDef* func)
-// {
-//     // 变量，数组，指针解引用
-//     if (!expr)
-//     {
-//         return std::unexpected(error::empty_node);
-//     }
-//     auto& node = *expr;
-//     // 直接变量引用
-//     if (node.name == "Identifier")
-//     {
-//         if (auto ret = symbol_table.lookup_var(node.token_to_string()))
-//         {
-//             func->asms.push_back(ASM{ASM::basic_asm::IMM, ret->name});
-//             return ret->type;
-//         }
-//         if (auto ret = func->lookup_var(node.token_to_string()))
-//         {
-//             func->asms.push_back(ASM{ASM::basic_asm::LEA, ret->addr});
-//             return ret->type;
-//         }
-//         // [TODO] 数组左值
-//         return std::unexpected(error::undifined_var);
-//     }
-//     else if (node.name == "Unary") // *ptr
-//     {
-//         if (node.nodes[0]->choice == 7) // *
-//         {
-//             return generate_expression(node.nodes[1], func); // 取出ptr值
-//         }
-//     }
-//     return std::unexpected(error::expected_lvalue);
-// }
 std::expected<bool, error> OBJ::generate_code()
 {
     transform_postfix_nodes(program);
@@ -129,7 +96,6 @@ std::expected<bool, error> OBJ::generate_code()
     return generate_code(program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
 }
 // [TODO] 检查类型安全
-// [TODO] 连加，连法bug(循环改递归)
 std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> expr, funcDef* func)
 {
     if (!expr)
@@ -337,7 +303,6 @@ std::expected<Type, error> OBJ::generate_expression(std::shared_ptr<peg::Ast> ex
         rettype.pointer_level = 0;
         return rettype;
     }
-    // [TODO] 优化ast后缀逻辑
     else if (node.name == "Postfix") // 后缀表达式处理
     {
         if (node.nodes.size() == 1)
@@ -558,7 +523,8 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         }
         this->symbol_table.add_global_symbol(func);
         symbol_table.lookup_fun(func.name)->asms.push_back(ASM{ASM::basic_asm::NVAR, "labal@NVAR"});
-        if (auto ret = generate_code(node.nodes[blockindex], this->symbol_table.lookup_fun(func.name), 0);
+        if (auto ret =
+                generate_code(node.nodes[blockindex], this->symbol_table.lookup_fun(func.name), 0);
             !ret)
         {
             return ret;
@@ -1102,11 +1068,10 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
 {
     using namespace peg;
     std::string peg_rules;
-    std::ifstream in("/home/toucher/vscoderope/mycomplier/src/myc_rule.peg");
+    std::ifstream in("../src/myc_rule.peg");
     if (!in)
     {
-        std::cerr << "无法打开规则文件: /home/toucher/vscoderope/mycomplier/src/myc_rule.peg"
-                  << std::endl;
+        std::cerr << "无法打开规则文件: ../src/myc_rule.peg" << std::endl;
         return std::unexpected(error::file_not_exsist);
     }
     peg_rules.assign((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -1121,7 +1086,9 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
     for (auto& each : paths)
     {
         std::string test_src;
-        std::ifstream test_src_in(each);
+        Preprocessor preprocessor;
+        preprocessor.process(each);
+        std::ifstream test_src_in(each + ".pre");
         if (!test_src_in)
         {
             std::cerr << "无法打开源文件: " << each << std::endl;
@@ -1219,7 +1186,6 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
     }
     return addrmap["func@" + funcname];
 }
-// [TODO] bug
 std::expected<std::vector<std::string>, error> linker::process()
 {
     // 分配全局变量空间,确定地址

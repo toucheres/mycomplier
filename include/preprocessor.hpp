@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include "error.hpp"
+// [TODO] 以token为单位解析
 class Preprocessor
 {
   public:

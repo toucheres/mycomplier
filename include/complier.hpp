@@ -252,7 +252,6 @@ struct OBJ
     //                                                       funcDef* func);
     std::expected<bool, error> generate_code();
     std::expected<Type, error> generate_expression(std::shared_ptr<peg::Ast> expr, funcDef* func);
-    // [TODO] deep替换为外层向内层传递信息
     std::expected<bool, error> generate_code(std::shared_ptr<peg::Ast> astnode, funcDef* funname,
                                              size_t deep);
     OBJ(std::shared_ptr<peg::Ast> root, std::string inname) : program(root), name(inname)
