@@ -1,12 +1,9 @@
-int main()
-{
-    while (1 + 1)
-    {
-        return 2 + 2;
-        break;
-        return 3 + 3;
-        continue;
-        return 4 + 4;
-    }
-    return 5;
-}
+int arr2[12][15];
+int (*funptrarr[4])();
+// int*** a;
+// int *a[10];
+// int func(int[10],int**);
+// int funcdef()
+// {
+
+// }

@@ -87,11 +87,72 @@ std::shared_ptr<peg::Ast> OBJ::simplify_expr_ast(std::shared_ptr<peg::Ast> ast)
     }
     return ast;
 }
+bool Type::operator==(const Type& other) const
+{
+    // 基本类型和指针级别必须相同
+    if (other.basic_type != this->basic_type || other.pointer_level != this->pointer_level)
+    {
+        return false;
+    }
+
+    // 类型种类必须相同
+    if (other.kind != this->kind)
+    {
+        return false;
+    }
+
+    // 针对数组类型的比较
+    if (is_array() && other.is_array())
+    {
+        // 数组大小必须相同，或至少一个未指定大小
+        if (array_info.has_value() && other.array_info.has_value())
+        {
+            if (array_info->size != -1 && other.array_info->size != -1 &&
+                array_info->size != other.array_info->size)
+            {
+                return false;
+            }
+        }
+    }
+
+    // 针对函数类型的比较
+    if (is_function() && other.is_function())
+    {
+        if (func_info.has_value() && other.func_info.has_value())
+        {
+            // 可变参数特性必须一致
+            if (func_info->is_variadic != other.func_info->is_variadic)
+            {
+                return false;
+            }
+
+            // 参数数量和类型必须一致
+            if (func_info->param_types.size() != other.func_info->param_types.size())
+            {
+                return false;
+            }
+
+            for (size_t i = 0; i < func_info->param_types.size(); ++i)
+            {
+                if (!(func_info->param_types[i] == other.func_info->param_types[i]))
+                {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
+}
 std::expected<bool, error> OBJ::generate_code()
 {
     transform_postfix_nodes(program);
     transform_left_combine_binary_op_nodes(program);
     program = simplify_expr_ast(this->program);
+    std::cout << "before transform_typepostfix_node\n";
+    visit_ast(program);
+    transform_typepostfix_node(program);
+    std::cout << "after transform_typepostfix_node\n";
     visit_ast(program);
     return generate_code(program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
 }
@@ -656,7 +717,7 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
             return ret;
         }
         size_t conditionpos = func->asms.size();
-        func->asms.push_back("HOLD");// for jz
+        func->asms.push_back("HOLD"); // for jz
         if (auto ret = generate_code(node.nodes[1], func, 0); !ret)
         {
             return ret;
@@ -683,6 +744,7 @@ std::expected<bool, error> OBJ::generate_code(std::shared_ptr<peg::Ast> astnode,
         }
         // func->asms.push_back(ASM{ASM::basic_asm::JMP, startpos});
     }
+    // [TODO] for statement
     else if (node.name == "BreakStmt")
     {
         func->asms.push_back("breaklable");
@@ -987,6 +1049,426 @@ std::string OBJ::to_string()
 
     return oss.str();
 }
+Type::Type(std::shared_ptr<peg::Ast> astnode)
+{
+    if (!astnode)
+    {
+        throw std::runtime_error("Invalid AST node for type construction");
+    }
+
+    if (astnode->name == "Type")
+    {
+        // 1. 处理基本类型
+        std::string basictypename = astnode->nodes[0]->nodes[0]->token_to_string();
+        if (basictypename == "int")
+        {
+            basic_type = BasicType::Int;
+        }
+        else if (basictypename == "char")
+        {
+            basic_type = BasicType::Char;
+        }
+        else if (basictypename == "void")
+        {
+            basic_type = BasicType::Void;
+        }
+        else if (basictypename == "float")
+        {
+            basic_type = BasicType::Float;
+        }
+        else if (basictypename == "double")
+        {
+            basic_type = BasicType::Double;
+        }
+        else if (basictypename == "long")
+        {
+            basic_type = BasicType::Long;
+        }
+        else if (basictypename == "short")
+        {
+            basic_type = BasicType::Short;
+        }
+        else if (basictypename == "unsigned")
+        {
+            basic_type = BasicType::Unsigned;
+        }
+        else if (basictypename == "signed")
+        {
+            basic_type = BasicType::Signed;
+        }
+
+        // 2. 处理声明符部分
+        auto declarator = astnode->nodes[1];
+
+        // 3. 处理指针
+        if (declarator->nodes.size() > 0 && declarator->nodes[0]->name == "Pointer")
+        {
+            std::string ptr_str = declarator->nodes[0]->token_to_string();
+            pointer_level = std::count(ptr_str.begin(), ptr_str.end(), '*');
+        }
+
+        // 4. 处理直接声明符 (可能已转换为左递归形式)
+        auto direct_decl =
+            (declarator->nodes.size() > 1) ? declarator->nodes[1] : declarator->nodes[0];
+
+        // 5. 处理数组类型
+        if (direct_decl->name == "ArrayType")
+        {
+            kind = Kind::Array;
+
+            // 获取数组大小
+            auto size_expr =
+                direct_decl->nodes[1]->nodes.size() > 0 ? direct_decl->nodes[1]->nodes[0] : nullptr;
+
+            ArrayInfo arr_info;
+            if (size_expr && size_expr->is_token && size_expr->name == "Number")
+            {
+                arr_info.size = std::stoi(size_expr->token_to_string());
+            }
+            else
+            {
+                arr_info.size = -1; // 未指定大小
+            }
+
+            array_info = arr_info;
+        }
+        // 6. 处理函数类型
+        else if (direct_decl->name == "FunctionType")
+        {
+            kind = Kind::Function;
+
+            FunctionInfo fn_info;
+
+            // 获取参数列表
+            auto params_node =
+                direct_decl->nodes[1]->nodes.size() > 0 ? direct_decl->nodes[1]->nodes[0] : nullptr;
+
+            if (params_node)
+            {
+                for (const auto& param_node : params_node->nodes)
+                {
+                    if (param_node->name == "Parameter")
+                    {
+                        fn_info.param_types.push_back(Type(param_node->nodes[0]));
+                    }
+                    else if (param_node->token_to_string() == "...")
+                    {
+                        fn_info.is_variadic = true;
+                    }
+                }
+            }
+
+            func_info = fn_info;
+        }
+    }
+}
+
+// 修改 getsize() 方法以支持新的类型表示
+size_t Type::getsize() const
+{
+    if (is_array() && array_info.has_value())
+    {
+        // 数组大小 = 元素大小 * 元素数量
+        int element_size =
+            (this->basic_type == BasicType::Char && pointer_level == 0) ? 1 : VCPU::size_word;
+        return array_info->size > 0 ? element_size * array_info->size : VCPU::size_word;
+    }
+    else if (is_function())
+    {
+        // 函数指针大小
+        return VCPU::size_word;
+    }
+    else if (this->basic_type == BasicType::Char && !this->is_pointer())
+    {
+        return 1;
+    }
+    return VCPU::size_word;
+}
+
+// 修改 to_string() 方法
+std::string Type::to_string() const
+{
+    std::string result;
+
+    // 基本类型
+    switch (basic_type)
+    {
+    case BasicType::Int:
+        result = "int";
+        break;
+    case BasicType::Char:
+        result = "char";
+        break;
+    case BasicType::Void:
+        result = "void";
+        break;
+    case BasicType::Float:
+        result = "float";
+        break;
+    case BasicType::Double:
+        result = "double";
+        break;
+    case BasicType::Long:
+        result = "long";
+        break;
+    case BasicType::Short:
+        result = "short";
+        break;
+    case BasicType::Unsigned:
+        result = "unsigned";
+        break;
+    case BasicType::Signed:
+        result = "signed";
+        break;
+    }
+
+    // 数组类型
+    if (is_array() && array_info.has_value())
+    {
+        result += "[";
+        if (array_info->size > 0)
+        {
+            result += std::to_string(array_info->size);
+        }
+        result += "]";
+    }
+
+    // 函数类型
+    if (is_function() && func_info.has_value())
+    {
+        result += "(";
+        for (size_t i = 0; i < func_info->param_types.size(); ++i)
+        {
+            if (i > 0)
+                result += ", ";
+            result += func_info->param_types[i].to_string();
+        }
+        if (func_info->is_variadic)
+        {
+            if (!func_info->param_types.empty())
+                result += ", ";
+            result += "...";
+        }
+        result += ")";
+    }
+
+    // 指针
+    for (int i = 0; i < pointer_level; ++i)
+    {
+        result = "*" + result;
+    }
+
+    return result;
+}
+// void OBJ::transform_typepostfix_node(std::shared_ptr<peg::Ast>& ast)
+// {
+//     if (!ast) return;
+    
+//     // 递归处理子节点
+//     for (size_t i = 0; i < ast->nodes.size(); i++) {
+//         transform_typepostfix_node(ast->nodes[i]);
+//     }
+    
+//     // 处理 DirectDeclarator 和 AbstractDirectDeclarator
+//     if ((ast->name == "DirectDeclarator" || 
+//          ast->name == "AbstractDirectDeclarator") && ast->nodes.size() > 1)
+//     {
+//         // 获取基础节点（标识符或嵌套声明符）
+//         auto base_node = ast->nodes[0];
+        
+//         // 对于抽象声明符，可能没有基础节点（只有后缀）
+//         if (ast->name == "AbstractDirectDeclarator" && ast->nodes.size() == 0) {
+//             // 创建一个占位符节点
+//             base_node = std::make_shared<peg::Ast>(
+//                 ast->path.c_str(), ast->line, ast->column, "AnonymousType", std::vector<std::shared_ptr<peg::Ast>>()
+//             );
+//         }
+        
+//         // 收集所有后缀
+//         std::vector<std::shared_ptr<peg::Ast>> suffixes;
+//         size_t start_idx = (ast->name == "DirectDeclarator") ? 1 : 0;
+//         for (size_t i = start_idx; i < ast->nodes.size(); i++) {
+//             suffixes.push_back(ast->nodes[i]);
+//         }
+        
+//         // 从外向内构建类型（正序处理后缀）
+//         auto result = base_node;
+//         for (auto it = suffixes.begin(); it != suffixes.end(); ++it) {
+//             auto suffix = (*it)->nodes[0];
+            
+//             if (suffix->name == "ArraySuffix") {
+//                 // 创建新的数组类型节点
+//                 std::vector<std::shared_ptr<peg::Ast>> new_nodes;
+//                 new_nodes.push_back(result);
+//                 new_nodes.push_back(suffix);
+                
+//                 auto array_type = std::make_shared<peg::Ast>(
+//                     ast->path.c_str(), ast->line, ast->column,
+//                     "ArrayType", new_nodes
+//                 );
+                
+//                 result = array_type;
+//             } 
+//             else if (suffix->name == "FunctionSuffix") {
+//                 // 创建新的函数类型节点
+//                 std::vector<std::shared_ptr<peg::Ast>> new_nodes;
+//                 new_nodes.push_back(result);
+//                 new_nodes.push_back(suffix);
+                
+//                 auto function_type = std::make_shared<peg::Ast>(
+//                     ast->path.c_str(), ast->line, ast->column,
+//                     "FunctionType", new_nodes
+//                 );
+                
+//                 result = function_type;
+//             }
+//         }
+        
+//         // 替换原节点
+//         ast = result;
+//     }
+// }
+void OBJ::transform_typepostfix_node(std::shared_ptr<peg::Ast>& ast)
+{
+    if (!ast)
+        return;
+
+    // 递归处理子节点
+    for (size_t i = 0; i < ast->nodes.size(); i++)
+    {
+        transform_typepostfix_node(ast->nodes[i]);
+    }
+
+    // 处理 DirectDeclarator 和 AbstractDirectDeclarator
+    if ((ast->name == "DirectDeclarator" || ast->name == "AbstractDirectDeclarator") &&
+        ast->nodes.size() > 1)
+    {
+        // 第一个节点可能是标识符或括号内的声明符
+        auto base_node = ast->nodes[0];
+        bool has_parentheses = false;
+
+        // 检查是否有括号包裹的声明符
+        if (base_node->name == "Declarator")
+        {
+            has_parentheses = true;
+        }
+
+        // 收集所有后缀
+        std::vector<std::shared_ptr<peg::Ast>> suffixes;
+        for (size_t i = 1; i < ast->nodes.size(); i++)
+        {
+            suffixes.push_back(ast->nodes[i]);
+        }
+
+        // 根据括号与否选择不同的处理策略
+        if (has_parentheses)
+        {
+            // 括号内的声明符应优先处理，然后才应用后缀
+            auto inner_declarator = base_node;
+
+            // 如果有后缀，按正确的语义顺序应用
+            if (!suffixes.empty())
+            {
+                // 创建函数/数组后缀的嵌套结构
+                auto result = inner_declarator;
+
+                for (auto& suffix : suffixes)
+                {
+                    if (suffix->nodes[0]->name == "ArraySuffix")
+                    {
+                        // 创建新的数组类型节点
+                        std::vector<std::shared_ptr<peg::Ast>> new_nodes;
+                        new_nodes.push_back(result);
+                        new_nodes.push_back(suffix->nodes[0]);
+
+                        auto array_type = std::make_shared<peg::Ast>(
+                            ast->path.c_str(), ast->line, ast->column, "ArrayType", new_nodes);
+
+                        result = array_type;
+                    }
+                    else if (suffix->nodes[0]->name == "FunctionSuffix")
+                    {
+                        // 创建新的函数类型节点
+                        std::vector<std::shared_ptr<peg::Ast>> new_nodes;
+                        new_nodes.push_back(result);
+                        new_nodes.push_back(suffix->nodes[0]);
+
+                        auto function_type = std::make_shared<peg::Ast>(
+                            ast->path.c_str(), ast->line, ast->column, "FunctionType", new_nodes);
+
+                        result = function_type;
+                    }
+                }
+
+                // 替换原节点
+                ast = result;
+            }
+            else
+            {
+                // 没有后缀，直接使用括号内声明符
+                ast = inner_declarator;
+            }
+        }
+        else
+        {
+            // 没有括号的情况，正常处理后缀
+            auto result = base_node;
+
+            // 从内向外构建类型 - 对于 int arr[12][14]，应该先处理[14]再处理[12]
+            for (auto it = suffixes.rbegin(); it != suffixes.rend(); ++it)
+            {
+                auto suffix = (*it)->nodes[0];
+
+                if (suffix->name == "ArraySuffix")
+                {
+                    // 创建新的数组类型节点
+                    std::vector<std::shared_ptr<peg::Ast>> new_nodes;
+                    new_nodes.push_back(result);
+                    new_nodes.push_back(suffix);
+
+                    auto array_type = std::make_shared<peg::Ast>(
+                        ast->path.c_str(), ast->line, ast->column, "ArrayType", new_nodes);
+
+                    result = array_type;
+                }
+                else if (suffix->name == "FunctionSuffix")
+                {
+                    // 创建新的函数类型节点
+                    std::vector<std::shared_ptr<peg::Ast>> new_nodes;
+                    new_nodes.push_back(result);
+                    new_nodes.push_back(suffix);
+
+                    auto function_type = std::make_shared<peg::Ast>(
+                        ast->path.c_str(), ast->line, ast->column, "FunctionType", new_nodes);
+
+                    result = function_type;
+                }
+            }
+
+            // 替换原节点
+            ast = result;
+        }
+    }
+
+    // 特殊处理 Declarator 节点，确保指针信息正确传递
+    if (ast->name == "Declarator" && ast->nodes.size() > 1)
+    {
+        // 如果有指针和DirectDeclarator，确保嵌套关系正确
+        if (ast->nodes[0]->name == "Pointer" && ast->nodes[1]->name != "DirectDeclarator")
+        {
+
+            // 创建正确的Declarator结构
+            std::vector<std::shared_ptr<peg::Ast>> new_nodes;
+            new_nodes.push_back(ast->nodes[0]); // Pointer
+            new_nodes.push_back(ast->nodes[1]); // 转换后的节点
+
+            auto new_declarator = std::make_shared<peg::Ast>(ast->path.c_str(), ast->line,
+                                                             ast->column, "Declarator", new_nodes);
+
+            ast = new_declarator;
+        }
+    }
+}
 void OBJ::transform_postfix_nodes(std::shared_ptr<peg::Ast>& ast)
 {
     // 如果不是 Postfix 节点，或只有一个子节点，直接返回
@@ -1282,43 +1764,43 @@ std::expected<std::vector<std::string>, error> linker::process()
     }
 }
 
-size_t Type::getsize() const
-{
-    if (this->basic_type == BasicType::Char && (!this->is_pointer()))
-    {
-        return 1;
-    }
-    return VCPU::size_word;
-}
+// size_t Type::getsize() const
+// {
+//     if (this->basic_type == BasicType::Char && (!this->is_pointer()))
+//     {
+//         return 1;
+//     }
+//     return VCPU::size_word;
+// }
 
-Type::Type(std::shared_ptr<peg::Ast> astnode)
-{
-    if (!astnode)
-    {
-        throw;
-    }
-    auto node = *astnode;
-    std::string basictypename = node.nodes[0]->token_to_string();
-    if (basictypename == "int")
-    {
-        basic_type = BasicType::Int;
-    }
-    else if (basictypename == "char")
-    {
-        basic_type = BasicType::Char;
-    }
-    else if (basictypename == "void")
-    {
-        basic_type = BasicType::Void;
-    }
-    if (node.nodes.size() == 2)
-    {
-        // 有ptr
-        auto& ptrs = *node.nodes[1];
-        std::string ptr_str = ptrs.token_to_string();
-        this->pointer_level = std::count(ptr_str.begin(), ptr_str.end(), '*');
-    }
-}
+// Type::Type(std::shared_ptr<peg::Ast> astnode)
+// {
+//     if (!astnode)
+//     {
+//         throw;
+//     }
+//     auto node = *astnode;
+//     std::string basictypename = node.nodes[0]->token_to_string();
+//     if (basictypename == "int")
+//     {
+//         basic_type = BasicType::Int;
+//     }
+//     else if (basictypename == "char")
+//     {
+//         basic_type = BasicType::Char;
+//     }
+//     else if (basictypename == "void")
+//     {
+//         basic_type = BasicType::Void;
+//     }
+//     if (node.nodes.size() == 2)
+//     {
+//         // 有ptr
+//         auto& ptrs = *node.nodes[1];
+//         std::string ptr_str = ptrs.token_to_string();
+//         this->pointer_level = std::count(ptr_str.begin(), ptr_str.end(), '*');
+//     }
+// }
 
 // argDef::argDef(std::shared_ptr<peg::Ast> astnode)
 // {

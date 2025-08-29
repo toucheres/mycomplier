@@ -14,50 +14,70 @@
 # %whitespace - 自动忽略空白规则
 
 # 主入口点
-Program    <- (GlobalVarDef / FuncDef / GlobalVarDecl / FuncDecl)*
-# Program    <- Global*
-# Global     <- (GlobalVarDef / FuncDef / GlobalVarDecl / FuncDecl)
+Program    <- (symbalDecl)*
 
 # 全局
-GlobalVarDef    <- VarDef
-GlobalVarDecl   <- VarDecl
-
+symbalDecl <- linkOption* ( VarDecl / FuncDef / VarDefWithInit )
+VarDecl <- idDecl ';'
+FuncDef <- idDecl Block
+VarDefWithInit <- idDecl '=' (Expression / initBlock) ';'
+linkOption  <- 'extern' / 'static'
+initBlock <- '{' (Expression / initBlock)? (',' (Expression / initBlock))* '}'
 # 基础元素定义
 # 标识符
 Identifier <- < [a-zA-Z_][a-zA-Z0-9_]* >
 Number         <- < [0-9]+ >
 String         <- '"' < (!'"' .)* > '"'
-# 形参
-Args           <- Expression (',' Expression)*
-ASSIGN         <- < '=' / '+=' / '-=' / '*=' / '/=' / '%=' / '&=' / '|=' / '^=' / '<<=' / '>>=' >
-  
-# 变量声明/定义
-VarDef    <- Type Identifier ';' / Type Identifier '=' Expression ';'
-VarDecl    <- 'extern' Type Identifier ';'
-
-# 函数声明/定义
-FuncDef     <- Type Identifier '(' FunArgs? ')' Block
-FuncDecl    <- Type Identifier '(' FunArgs? ')' ';'
-#实参
-FunArgs     <- Arg (',' Arg)*
-Arg         <- Type Identifier
+# 语句块和控制结构
 Block       <- '{' Statement* '}'
-Statement   <-  ContinueStmt / BreakStmt / WhileStmt / VarDef / ReturnStmt / ExprStmt / IfStmt /  Block
+Statement   <-  ContinueStmt / BreakStmt / WhileStmt / VarDecl / VarDefWithInit / ReturnStmt / ExprStmt / IfStmt /  Block
 ReturnStmt  <- 'return' Expression? ';'
 ExprStmt    <- Expression ';'
-# 控制结构
 IfStmt      <- 'if' '(' Expression ')' Statement ('else' Statement)?
 WhileStmt   <- 'while' '(' Expression ')' Statement
-BreakStmt  <- 'break' ';'
+BreakStmt   <- 'break' ';'
 ContinueStmt <- 'continue' ';'
-# ForStmt     <- 'for' '(' (VarDef / ExprStmt / ';') Expression? ';' Expression? ')' Statement
-# DoWhileStmt <- 'do' Statement 'while' '(' Expression ')' ';'
 
-# 类型
-Type       <- BasicType Pointer?
-BasicType  <- 'int' / 'char' / 'void'  # 添加 void 支持
-Pointer    <- '*'+
+# 类型系统 - 完全重写以支持复杂类型
+idDecl           <- TypeSpecifier Declarator
+TypeSpecifier  <- BasicType
+BasicType      <- 'int' / 'char' / 'void' / 'float' / 'double' / 'long' / 'short' / 'unsigned' / 'signed'
 
+# 声明符 - 采用后缀模式避免左递归问题
+Declarator     <- Pointer? DirectDeclarator
+Pointer        <- '*'+
+
+# 直接声明符 - 基础标识符或带括号的复杂声明符
+DirectDeclarator <- (
+                     Identifier 
+                     / '(' Declarator ')'
+                   ) 
+                   DirectDeclaratorSuffix*
+
+# 声明符后缀 - 处理数组和函数类型
+DirectDeclaratorSuffix <- ArraySuffix / FunctionSuffix
+
+# 数组后缀 - 可以有空括号或带表达式的括号
+ArraySuffix    <- '[' Expression? ']'
+
+# 函数后缀 - 参数列表可选
+FunctionSuffix <- '(' ParameterTypeList? ')'
+
+# 参数类型列表
+ParameterTypeList <- Parameter (',' Parameter)* (',' '...')?
+
+# 参数声明 - 允许带名称或匿名参数
+Parameter      <- TypeSpecifier (Declarator / AbstractidDecl)?
+
+# 抽象声明符 - 用于没有标识符的类型声明（如函数参数）
+AbstractidDecl <- Pointer? AbstractDirectDeclarator / Pointer
+
+# 抽象直接声明符 - 不含标识符的复杂类型
+AbstractDirectDeclarator <- (
+                            '(' AbstractidDecl ')'
+                           ) 
+                           DirectDeclaratorSuffix*
+                           / DirectDeclaratorSuffix+
 
 # 忽略空白
 _  <- [ \t\r\n]*
@@ -65,7 +85,10 @@ _  <- [ \t\r\n]*
 
 # 表达式
 Expression          <- Assignment
+
 Assignment          <- Conditional (ASSIGN Assignment)? 
+ASSIGN              <-  '=' / '+=' / '-=' / '*=' / '/=' / '%=' / '&=' / '|=' / '^=' / '<<=' / '>>='
+
 Conditional         <- LogicalOr ('?' Expression ':' Conditional)?
 
 LogicalOr           <- LogicalAnd (LogicalOr_op LogicalAnd)*
@@ -98,14 +121,12 @@ Additive_op             <- '+' / '-'
 Multiplicative      <- Cast (Multiplicative_op Cast)*
 Multiplicative_op   <-'*' / '/' / '%'
 
-Cast                <- '(' Type ')' Cast / Unary
+Cast                <- '(' idDecl ')' Cast / Unary
 # 右递归解析前缀
 Unary          <- Unary_op Unary / Postfix
 Unary_op          <- '+' / '-' / '!' / '~' / '++' / '--' / '*' / '&'
-# 避免左递归解析，用后缀循环代替，再对ast进行处理转化为左递归:
-# Postfix       <- Postfix Postfix_content / Primary
+
 Postfix        <- Primary Postfix_content*
 Postfix_content <- '(' Args? ')' / '[' Expression ']' / '.' Identifier / '->' Identifier / '++' / '--'
-# 区分Primary:Identifier的 funcall 与 varref会 造成FunctionCall 与 VariableRef + Postfix 的冲突
-# 因此不在ast中区分varref 与 funccall
 Primary        <- Identifier / Number / String / '(' Expression ')'
+Args           <- Expression (',' Expression)*

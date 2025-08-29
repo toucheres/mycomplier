@@ -26,11 +26,11 @@
 //       +----------------+
 //       |  返回地址(pc+1) | -8
 //       +----------------+
-//       |   旧的BP值     |  -4  
+//       |   旧的BP值     |  -4
 //       +----------------+      bp
 //       |   tpvar0       |  0
 //       |   tpvar1       |  4
-// 高地址 +----------------+<-  sp   
+// 高地址 +----------------+<-  sp
 // fun中: a=bp[-(n*4)] b=bp[-((n-1)*4)]... retaddr=bp[0] obp=bp[4]
 // nargs n  分配n个参数
 // ret ax携带返回值,jump bp[0]
@@ -150,27 +150,93 @@ struct ASM
 // };
 
 // 类型表示
+// struct Type
+// {
+//     enum class BasicType
+//     {
+//         Int,
+//         Char,
+//         Void
+//     };
+//     BasicType basic_type;
+//     int pointer_level = 0; // 指针层级
+
+//     bool is_pointer() const
+//     {
+//         return pointer_level > 0;
+//     }
+//     bool operator==(const Type& other) const
+//     {
+//         return other.basic_type == this->basic_type && other.pointer_level ==
+//         this->pointer_level;
+//     }
+//     std::string to_string() const;
+//     size_t getsize() const;
+//     Type(std::shared_ptr<peg::Ast> astnode);
+//     Type() = default;
+// };
+// 类型表示
 struct Type
 {
     enum class BasicType
     {
         Int,
         Char,
-        Void
+        Void,
+        Float,
+        Double,
+        Long,
+        Short,
+        Unsigned,
+        Signed
     };
+
+    enum class Kind
+    {
+        Basic,   // 基本类型
+        Pointer, // 指针类型
+        Array,   // 数组类型
+        Function // 函数类型
+    };
+
     BasicType basic_type;
     int pointer_level = 0; // 指针层级
+    Kind kind = Kind::Basic;
+
+    // 数组信息
+    struct ArrayInfo
+    {
+        int size; // 数组大小，-1表示未指定
+    };
+
+    // 函数信息
+    struct FunctionInfo
+    {
+        std::vector<Type> param_types;
+        bool is_variadic = false;
+    };
+
+    // 复杂类型信息
+    std::optional<ArrayInfo> array_info;
+    std::optional<FunctionInfo> func_info;
 
     bool is_pointer() const
     {
-        return pointer_level > 0;
+        return kind == Kind::Pointer;
     }
-    bool operator==(const Type& other) const
+    bool is_array() const
     {
-        return other.basic_type == this->basic_type && other.pointer_level == this->pointer_level;
+        return kind == Kind::Array;
     }
+    bool is_function() const
+    {
+        return kind == Kind::Function;
+    }
+
+    bool operator==(const Type& other) const;
     std::string to_string() const;
     size_t getsize() const;
+
     Type(std::shared_ptr<peg::Ast> astnode);
     Type() = default;
 };
@@ -199,8 +265,8 @@ struct funcDef : Identifi
     std::vector<std::string> asms;
     std::vector<varDef> args;
     std::vector<std::vector<varDef>> funcvar_stack;
-    size_t max_stack_size = 0;              // 预留oldbp
-    size_t stack_size_now = 0;              // 预留oldbp
+    size_t max_stack_size = 0; // 预留oldbp
+    size_t stack_size_now = 0; // 预留oldbp
     void enter_scope();
     void exit_scope();
     const varDef* lookup_var(const std::string& name) const;
@@ -244,6 +310,7 @@ struct OBJ
     // 全局偏移
     int bias = 0;
     // 代码生成接口
+    void transform_typepostfix_node(std::shared_ptr<peg::Ast>& ast);
     void transform_postfix_nodes(std::shared_ptr<peg::Ast>& ast);
     void transform_left_combine_binary_op_nodes(std::shared_ptr<peg::Ast>& ast);
     bool is_binary_expr(const std::string& name);
