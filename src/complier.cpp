@@ -154,6 +154,11 @@ std::expected<bool, error> OBJ::generate_code()
     transform_typepostfix_node(program);
     std::cout << "after transform_typepostfix_node\n";
     visit_ast(program);
+    // std::cout << "before transform_type_back_head\n";
+    // visit_ast(program);
+    // transform_type_back_head(program); //[TODO]翻转id id优先匹配内层id
+    // std::cout << "after transform_type_back_head\n";
+    // visit_ast(program);
     return generate_code(program, this->symbol_table.lookup_fun("__global_init_" + name), 0);
 }
 // [TODO] 检查类型安全
@@ -1263,67 +1268,68 @@ std::string Type::to_string() const
 // void OBJ::transform_typepostfix_node(std::shared_ptr<peg::Ast>& ast)
 // {
 //     if (!ast) return;
-    
+
 //     // 递归处理子节点
 //     for (size_t i = 0; i < ast->nodes.size(); i++) {
 //         transform_typepostfix_node(ast->nodes[i]);
 //     }
-    
+
 //     // 处理 DirectDeclarator 和 AbstractDirectDeclarator
-//     if ((ast->name == "DirectDeclarator" || 
+//     if ((ast->name == "DirectDeclarator" ||
 //          ast->name == "AbstractDirectDeclarator") && ast->nodes.size() > 1)
 //     {
 //         // 获取基础节点（标识符或嵌套声明符）
 //         auto base_node = ast->nodes[0];
-        
+
 //         // 对于抽象声明符，可能没有基础节点（只有后缀）
 //         if (ast->name == "AbstractDirectDeclarator" && ast->nodes.size() == 0) {
 //             // 创建一个占位符节点
 //             base_node = std::make_shared<peg::Ast>(
-//                 ast->path.c_str(), ast->line, ast->column, "AnonymousType", std::vector<std::shared_ptr<peg::Ast>>()
+//                 ast->path.c_str(), ast->line, ast->column, "AnonymousType",
+//                 std::vector<std::shared_ptr<peg::Ast>>()
 //             );
 //         }
-        
+
 //         // 收集所有后缀
 //         std::vector<std::shared_ptr<peg::Ast>> suffixes;
 //         size_t start_idx = (ast->name == "DirectDeclarator") ? 1 : 0;
 //         for (size_t i = start_idx; i < ast->nodes.size(); i++) {
 //             suffixes.push_back(ast->nodes[i]);
 //         }
-        
+
 //         // 从外向内构建类型（正序处理后缀）
 //         auto result = base_node;
 //         for (auto it = suffixes.begin(); it != suffixes.end(); ++it) {
 //             auto suffix = (*it)->nodes[0];
-            
+
 //             if (suffix->name == "ArraySuffix") {
 //                 // 创建新的数组类型节点
 //                 std::vector<std::shared_ptr<peg::Ast>> new_nodes;
 //                 new_nodes.push_back(result);
 //                 new_nodes.push_back(suffix);
-                
+
 //                 auto array_type = std::make_shared<peg::Ast>(
 //                     ast->path.c_str(), ast->line, ast->column,
 //                     "ArrayType", new_nodes
 //                 );
-                
+
 //                 result = array_type;
-//             } 
+//             }
 //             else if (suffix->name == "FunctionSuffix") {
 //                 // 创建新的函数类型节点
 //                 std::vector<std::shared_ptr<peg::Ast>> new_nodes;
 //                 new_nodes.push_back(result);
 //                 new_nodes.push_back(suffix);
-                
+
 //                 auto function_type = std::make_shared<peg::Ast>(
 //                     ast->path.c_str(), ast->line, ast->column,
 //                     "FunctionType", new_nodes
 //                 );
-                
+
 //                 result = function_type;
 //             }
 //         }
-        
+
 //         // 替换原节点
 //         ast = result;
 //     }
@@ -1414,8 +1420,8 @@ void OBJ::transform_typepostfix_node(std::shared_ptr<peg::Ast>& ast)
             // 没有括号的情况，正常处理后缀
             auto result = base_node;
 
-            // 从内向外构建类型 - 对于 int arr[12][14]，应该先处理[14]再处理[12]
-            for (auto it = suffixes.rbegin(); it != suffixes.rend(); ++it)
+            // 从内向外构建类型
+            for (auto it = suffixes.begin(); it != suffixes.end(); ++it)
             {
                 auto suffix = (*it)->nodes[0];
 
@@ -1941,9 +1947,28 @@ varDef::varDef(std::shared_ptr<peg::Ast> astnode)
         throw;
     }
     auto& node = *astnode;
-    this->type = Type{node.nodes[0]};
-    this->is_defined = true;
-    this->name = node.nodes[1]->token_to_string();
+    while (1)
+    {
+        // 找到最内层
+        if (astnode->name == "Identifier")
+        {
+            name = astnode->token_to_string();
+            this->type = Type{astnode};
+            this->is_defined = true;
+            break;
+        }
+        if (astnode->name == "idDecl")
+        {
+            astnode = astnode->nodes[1];
+            continue;
+        }
+        if (astnode->name == "Declarator")
+        {
+            astnode = astnode->nodes[astnode->nodes.size() - 1];
+            continue;
+        }
+        astnode = astnode->nodes[0];
+    }
 }
 
 size_t varDef::get_addr_in_mem(size_t posnow)

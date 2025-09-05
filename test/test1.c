@@ -1,3 +1,6 @@
+int a;
+int** b;
+int** c[12][13];
 int arr2[12][15];
 int (*funptrarr[4])();
 // int*** a;
