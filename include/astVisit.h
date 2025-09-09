@@ -5,9 +5,20 @@
 #include "error.hpp"
 #include "obj.h"
 #include <antlr4-runtime/antlr4-runtime.h>
-struct ComplierVisitor : public ComplierBaseVisitor
+#include <tree/ParseTree.h>
+struct astVisitor : public ComplierBaseVisitor
 {
+  private:
+    funcDef* funcnow;
+    funcDef* globalinitfun;
+
+  public:
+    astVisitor(std::string name);
     OBJ obj;
-    std::any visitCompilationUnit(ComplierParser::CompilationUnitContext * ctx) override;
+    std::any visitByTypeIndex(antlr4::ParserRuleContext* ctx);
+    std::any visitCompilationUnit(ComplierParser::CompilationUnitContext* ctx) override;
     std::any visitTranslationUnit(ComplierParser::TranslationUnitContext* ctx) override;
+    std::any visitDeclaration(ComplierParser::DeclarationContext* ctx) override;
+    std::any visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx) override;
+    std::any visitExternalDeclaration(ComplierParser::ExternalDeclarationContext* ctx) override;
 };

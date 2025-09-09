@@ -72,8 +72,6 @@ struct Type
     bool operator==(const Type& other) const;
     std::string to_string() const;
     size_t getsize() const;
-
-    Type(std::shared_ptr<peg::Ast> astnode);
     Type() = default;
 };
 struct Identifi
@@ -86,9 +84,9 @@ struct Identifi
 // [TODO] 对函数指针和数组的支持
 struct varDef : Identifi
 {
-    varDef(std::shared_ptr<peg::Ast> astnode);
     size_t get_addr_in_mem(size_t posnow);
     varDef() = default;
+    static std::optional<varDef> makeByNode( ComplierParser::DeclarationContext* ast);
 };
 // struct argDef
 // {
@@ -98,6 +96,8 @@ struct varDef : Identifi
 // };
 struct funcDef : Identifi
 {
+    // [TODO] funcDefineNode
+    static std::optional<funcDef> makeByNode( ComplierParser::DeclarationContext* ast);
     std::vector<std::string> asms;
     std::vector<varDef> args;
     std::vector<std::vector<varDef>> funcvar_stack;

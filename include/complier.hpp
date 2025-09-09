@@ -143,42 +143,6 @@ struct ASM
         return content;
     }
 };
-
-// struct ASTNode
-// {
-//     virtual ~ASTNode() = default;
-//     // 代码生成方法
-//     virtual void generate(std::vector<std::string>& code) const = 0;
-// };
-
-// 类型表示
-// struct Type
-// {
-//     enum class BasicType
-//     {
-//         Int,
-//         Char,
-//         Void
-//     };
-//     BasicType basic_type;
-//     int pointer_level = 0; // 指针层级
-
-//     bool is_pointer() const
-//     {
-//         return pointer_level > 0;
-//     }
-//     bool operator==(const Type& other) const
-//     {
-//         return other.basic_type == this->basic_type && other.pointer_level ==
-//         this->pointer_level;
-//     }
-//     std::string to_string() const;
-//     size_t getsize() const;
-//     Type(std::shared_ptr<peg::Ast> astnode);
-//     Type() = default;
-// };
-// 类型表示
-
 struct exefile
 {
     size_t global_size = 0;

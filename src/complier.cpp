@@ -2,13 +2,14 @@
 #include "ComplierBaseVisitor.h"
 #include "ComplierLexer.h"
 #include "ComplierParser.h"
+#include "obj.h"
 #include "preprocessor.hpp"
 #include <antlr4-runtime/antlr4-runtime.h>
+#include <astVisit.h>
 #include <filesystem>
 #include <format>
 #include <iostream>
 #include <regex>
-#include <astVisit.h>
 // 修改 getsize() 方法以支持新的类型表示
 size_t Type::getsize() const
 {
@@ -419,37 +420,6 @@ funcDef* SymbolTable::lookup_fun(const std::string& name) // 移除了 const
     }
 }
 
-varDef::varDef(std::shared_ptr<peg::Ast> astnode)
-{
-    if (!astnode)
-    {
-        throw;
-    }
-    auto& node = *astnode;
-    while (1)
-    {
-        // 找到最内层
-        if (astnode->name == "Identifier")
-        {
-            name = astnode->token_to_string();
-            this->type = Type{astnode};
-            this->is_defined = true;
-            break;
-        }
-        if (astnode->name == "idDecl")
-        {
-            astnode = astnode->nodes[1];
-            continue;
-        }
-        if (astnode->name == "Declarator")
-        {
-            astnode = astnode->nodes[astnode->nodes.size() - 1];
-            continue;
-        }
-        astnode = astnode->nodes[0];
-    }
-}
-
 size_t varDef::get_addr_in_mem(size_t posnow)
 {
     // [TODO] char的考虑
@@ -465,28 +435,453 @@ size_t varDef::get_addr_in_mem(size_t posnow)
     }
     return posnow;
 }
+std::optional<varDef> varDef::makeByNode(ComplierParser::DeclarationContext* ast)
+{
+    // 检查参数有效性
+    if (!ast || !ast->declarationSpecifiers() || !ast->initDeclaratorList())
+    {
+        return std::nullopt;
+    }
 
+    // 解析声明说明符（类型信息）
+    Type type;
+    bool isTypeValid = false;
+
+    // 遍历所有声明说明符
+    for (auto declSpec : ast->declarationSpecifiers()->declarationSpecifier())
+    {
+        // 只处理类型说明符
+        if (declSpec->typeSpecifier())
+        {
+            auto typeSpec = declSpec->typeSpecifier();
+
+            // 判断基本类型
+            if (typeSpec->getText() == "int")
+            {
+                type.basic_type = Type::BasicType::Int;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "char")
+            {
+                type.basic_type = Type::BasicType::Char;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "void")
+            {
+                type.basic_type = Type::BasicType::Void;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "float")
+            {
+                type.basic_type = Type::BasicType::Float;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "double")
+            {
+                type.basic_type = Type::BasicType::Double;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "long")
+            {
+                type.basic_type = Type::BasicType::Long;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "short")
+            {
+                type.basic_type = Type::BasicType::Short;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "unsigned")
+            {
+                type.basic_type = Type::BasicType::Unsigned;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "signed")
+            {
+                type.basic_type = Type::BasicType::Signed;
+                isTypeValid = true;
+            }
+        }
+    }
+
+    // 如果没有有效类型，返回空
+    if (!isTypeValid)
+    {
+        return std::nullopt;
+    }
+
+    // 获取声明符（变量名和修饰符）
+    auto initDeclList = ast->initDeclaratorList();
+    if (initDeclList->initDeclarator().empty())
+    {
+        return std::nullopt;
+    }
+
+    // 我们处理第一个声明符（如果有多个，应在外部循环处理）
+    auto initDecl = initDeclList->initDeclarator(0);
+    if (!initDecl->declarator() || !initDecl->declarator()->directDeclarator())
+    {
+        return std::nullopt;
+    }
+
+    auto directDecl = initDecl->declarator()->directDeclarator();
+
+    // 获取变量名
+    std::string varName;
+    if (directDecl->Identifier())
+    {
+        varName = directDecl->Identifier()->getText();
+    }
+    else
+    {
+        return std::nullopt; // 没有找到标识符
+    }
+
+    // 处理指针
+    if (initDecl->declarator()->pointer())
+    {
+        auto pointer = initDecl->declarator()->pointer();
+        // 计算指针级别 - 直接从文本分析 * 的数量
+        std::string pointerText = pointer->getText();
+        type.pointer_level = std::count(pointerText.begin(), pointerText.end(), '*');
+        type.kind = Type::Kind::Pointer;
+    }
+
+    // 处理数组
+    // 检查directDeclarator是否有数组维度
+    for (size_t i = 0; i < directDecl->children.size(); ++i)
+    {
+        if (i + 3 <= directDecl->children.size() && directDecl->children[i]->getText() == "[" &&
+            directDecl->children[i + 2]->getText() == "]")
+        {
+
+            type.kind = Type::Kind::Array;
+            type.array_info = Type::ArrayInfo{-1}; // 默认为未指定大小
+
+            // 尝试获取数组大小
+            auto sizeExpr = directDecl->children[i + 1];
+            if (auto constExpr = dynamic_cast<ComplierParser::ConstantExpressionContext*>(sizeExpr))
+            {
+                // 尝试从常量表达式中提取整数值
+                try
+                {
+                    int size = std::stoi(constExpr->getText());
+                    type.array_info->size = size;
+                }
+                catch (...)
+                {
+                    // 转换失败，保持默认值
+                }
+            }
+            break;
+        }
+    }
+
+    // 创建变量定义
+    varDef var;
+    var.name = varName;
+    var.type = type;
+    var.is_defined = true;
+    var.addr = 0; // 初始地址，将在后续分配
+
+    // 处理初始值（如果有）
+    // 注意：这里只是标记有初始化器，实际值需要在代码生成阶段处理
+    if (initDecl->initializer())
+    {
+        // 这里可以添加初始化器处理逻辑
+    }
+
+    return var;
+}
+std::optional<funcDef> funcDef::makeByNode(ComplierParser::DeclarationContext* ast)
+{
+    // 检查参数有效性
+    if (!ast || !ast->declarationSpecifiers() || !ast->initDeclaratorList())
+    {
+        return std::nullopt;
+    }
+
+    // 解析返回类型
+    Type returnType;
+    bool isTypeValid = false;
+
+    // 遍历所有声明说明符
+    for (auto declSpec : ast->declarationSpecifiers()->declarationSpecifier())
+    {
+        // 只处理类型说明符
+        if (declSpec->typeSpecifier())
+        {
+            auto typeSpec = declSpec->typeSpecifier();
+
+            // 判断基本类型
+            if (typeSpec->getText() == "int")
+            {
+                returnType.basic_type = Type::BasicType::Int;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "char")
+            {
+                returnType.basic_type = Type::BasicType::Char;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "void")
+            {
+                returnType.basic_type = Type::BasicType::Void;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "float")
+            {
+                returnType.basic_type = Type::BasicType::Float;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "double")
+            {
+                returnType.basic_type = Type::BasicType::Double;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "long")
+            {
+                returnType.basic_type = Type::BasicType::Long;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "short")
+            {
+                returnType.basic_type = Type::BasicType::Short;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "unsigned")
+            {
+                returnType.basic_type = Type::BasicType::Unsigned;
+                isTypeValid = true;
+            }
+            else if (typeSpec->getText() == "signed")
+            {
+                returnType.basic_type = Type::BasicType::Signed;
+                isTypeValid = true;
+            }
+        }
+    }
+
+    // 如果没有有效类型，返回空
+    if (!isTypeValid)
+    {
+        return std::nullopt;
+    }
+
+    // 获取函数声明符
+    auto initDeclList = ast->initDeclaratorList();
+    if (initDeclList->initDeclarator().empty())
+    {
+        return std::nullopt;
+    }
+
+    auto initDecl = initDeclList->initDeclarator(0);
+    if (!initDecl->declarator() || !initDecl->declarator()->directDeclarator())
+    {
+        return std::nullopt;
+    }
+
+    auto directDecl = initDecl->declarator()->directDeclarator();
+
+    // 检查是否为函数声明（包含参数列表）
+    bool isFunction = false;
+    std::string funcName;
+    std::vector<varDef> parameters;
+    bool isVariadic = false;
+
+    // 首先获取函数名
+    if (directDecl->Identifier())
+    {
+        funcName = directDecl->Identifier()->getText();
+    }
+    else
+    {
+        return std::nullopt;
+    }
+
+    // 检查是否有参数列表
+    for (size_t i = 0; i < directDecl->children.size(); ++i)
+    {
+        if (i + 2 < directDecl->children.size() && directDecl->children[i]->getText() == "(" &&
+            directDecl->children[i + 2]->getText() == ")")
+        {
+
+            isFunction = true;
+
+            // 检查是否有参数
+            auto paramCtx = directDecl->children[i + 1];
+            if (auto paramList = dynamic_cast<ComplierParser::ParameterTypeListContext*>(paramCtx))
+            {
+                // 处理参数列表
+                if (paramList->parameterList())
+                {
+                    for (auto paramDecl : paramList->parameterList()->parameterDeclaration())
+                    {
+                        // 为每个参数创建一个变量定义
+                        varDef param;
+
+                        // 获取参数类型
+                        if (paramDecl->declarationSpecifiers())
+                        {
+                            Type paramType;
+                            for (auto declSpec :
+                                 paramDecl->declarationSpecifiers()->declarationSpecifier())
+                            {
+                                if (declSpec->typeSpecifier())
+                                {
+                                    auto typeSpec = declSpec->typeSpecifier();
+                                    if (typeSpec->getText() == "int")
+                                    {
+                                        paramType.basic_type = Type::BasicType::Int;
+                                    }
+                                    else if (typeSpec->getText() == "char")
+                                    {
+                                        paramType.basic_type = Type::BasicType::Char;
+                                    }
+                                    else if (typeSpec->getText() == "void")
+                                    {
+                                        paramType.basic_type = Type::BasicType::Void;
+                                    }
+                                    else if (typeSpec->getText() == "float")
+                                    {
+                                        paramType.basic_type = Type::BasicType::Float;
+                                    }
+                                    else if (typeSpec->getText() == "double")
+                                    {
+                                        paramType.basic_type = Type::BasicType::Double;
+                                    }
+                                    else if (typeSpec->getText() == "long")
+                                    {
+                                        paramType.basic_type = Type::BasicType::Long;
+                                    }
+                                    else if (typeSpec->getText() == "short")
+                                    {
+                                        paramType.basic_type = Type::BasicType::Short;
+                                    }
+                                    else if (typeSpec->getText() == "unsigned")
+                                    {
+                                        paramType.basic_type = Type::BasicType::Unsigned;
+                                    }
+                                    else if (typeSpec->getText() == "signed")
+                                    {
+                                        paramType.basic_type = Type::BasicType::Signed;
+                                    }
+                                }
+                            }
+
+                            // 处理参数修饰符（指针等）
+                            if (paramDecl->declarator())
+                            {
+                                if (paramDecl->declarator()->pointer())
+                                {
+                                    auto pointer = paramDecl->declarator()->pointer();
+                                    // 计算指针级别 - 直接从文本分析 * 的数量
+                                    paramType.pointer_level = 0;
+                                    std::string pointerText = pointer->getText();
+                                    paramType.pointer_level = std::count(pointerText.begin(), pointerText.end(), '*');
+                                    paramType.kind = Type::Kind::Pointer;
+                                }
+
+                                // 获取参数名
+                                if (paramDecl->declarator()->directDeclarator() &&
+                                    paramDecl->declarator()->directDeclarator()->Identifier())
+                                {
+                                    param.name = paramDecl->declarator()
+                                                     ->directDeclarator()
+                                                     ->Identifier()
+                                                     ->getText();
+                                }
+                                else
+                                {
+                                    param.name = ""; // 匿名参数
+                                }
+                            }
+
+                            param.type = paramType;
+                            param.is_defined = true;
+                            param.addr = 0; // 初始地址，将在后续分配
+                            parameters.push_back(param);
+                        }
+                    }
+                }
+
+                // 检查是否有可变参数（...）
+                isVariadic =
+                    paramList->children.size() >= 3 &&
+                    paramList->children[paramList->children.size() - 2]->getText() == "," &&
+                    paramList->children[paramList->children.size() - 1]->getText() == "...";
+            }
+            break;
+        }
+    }
+
+    // 如果不是函数，返回空
+    if (!isFunction)
+    {
+        return std::nullopt;
+    }
+
+    // 处理返回类型的指针部分
+    if (initDecl->declarator()->pointer())
+    {
+        auto pointer = initDecl->declarator()->pointer();
+        // 计算指针级别 - 直接从文本分析 * 的数量
+        std::string pointerText = pointer->getText();
+        returnType.pointer_level = std::count(pointerText.begin(), pointerText.end(), '*');
+        returnType.kind = Type::Kind::Pointer;
+    }
+
+    // 创建函数类型信息
+    returnType.kind = Type::Kind::Function;
+    returnType.func_info = Type::FunctionInfo{};
+    for (const auto& param : parameters)
+    {
+        returnType.func_info->param_types.push_back(param.type);
+    }
+    returnType.func_info->is_variadic = isVariadic;
+
+    // 创建函数定义
+    funcDef func;
+    func.name = funcName;
+    func.type = returnType;
+    func.is_defined = false; // 这只是一个声明，不是定义
+    func.addr = 0;
+    func.args = parameters;
+    func.max_stack_size = VCPU::size_word * 2; // 初始堆栈大小（为旧BP和返回地址预留空间）
+    func.stack_size_now = VCPU::size_word * 2;
+
+    return func;
+}
 std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths)
 {
-    // 创建输入流
-    std::ifstream in("/home/toucher/vscoderope/mycomplier/test/test1.c.pre");
-    std::string input((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    antlr4::ANTLRInputStream inputStream(input);
-    // antlr4::ANTLRInputStream inputStream(input);
-
-    // 创建词法分析器
-    ComplierLexer lexer(&inputStream);
-    antlr4::CommonTokenStream tokens(&lexer);
-
-    // 创建语法分析器
-    ComplierParser parser(&tokens);
-
-    // 使用正确的入口规则 - 根据你的语法确定
-    // 可能是 translationUnit、compilationUnit 或 expression
-    auto tree = parser.compilationUnit(); // 替换成你语法的入口规则
-    std::cout << "ast: \n";
-    // 在 main 函数中调用：
-    // 创建和使用自定义访问器
-    ComplierVisitor visitor{};
-    visitor.visitCompilationUnit(tree);
+    std::vector<OBJ> objs;
+    for (auto each : paths)
+    {
+        // 创建输入流
+        Preprocessor{}.process(each);
+        std::ifstream in(each + ".pre");
+        std::string input((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        antlr4::ANTLRInputStream inputStream(input);
+        // 创建词法分析器
+        ComplierLexer lexer(&inputStream);
+        antlr4::CommonTokenStream tokens(&lexer);
+        // 创建语法分析器
+        ComplierParser parser(&tokens);
+        // 使用正确的入口规则
+        auto tree = parser.compilationUnit();
+        std::cout << "ast: \n";
+        // 创建和使用自定义访问器
+        astVisitor visitor{each};
+        auto ret = std::any_cast<bool>(visitor.visitCompilationUnit(tree));
+        if (ret)
+        {
+            objs.push_back(visitor.obj);
+        }
+        else
+        {
+            std::cout << "fail: " << each << '\n';
+        }
+    }
+    linker linker{objs};
+    return linker.exe.asms;
 }
