@@ -42,7 +42,7 @@ struct Type
     // 数组信息
     struct ArrayInfo
     {
-        int size; // 数组大小，-1表示未指定
+        std::vector<int> dimensions; // 数组各维度大小，-1表示未指定大小
     };
 
     // 函数信息

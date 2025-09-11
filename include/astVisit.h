@@ -21,4 +21,7 @@ struct astVisitor : public ComplierBaseVisitor
     std::any visitDeclaration(ComplierParser::DeclarationContext* ctx) override;
     std::any visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx) override;
     std::any visitExternalDeclaration(ComplierParser::ExternalDeclarationContext* ctx) override;
+    std::any visitDeclarationSpecifiers(ComplierParser::DeclarationSpecifiersContext* ctx) override;
+    std::any visitDeclarationSpecifier(ComplierParser::DeclarationSpecifierContext* ctx) override;
+    std::any visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx) override;
 };

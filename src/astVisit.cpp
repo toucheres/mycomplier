@@ -70,6 +70,81 @@ std::any astVisitor::visitExternalDeclaration(ComplierParser::ExternalDeclaratio
     std::cerr << "警告: 未识别的外部声明类型" << std::endl;
     return {};
 }
+std::any astVisitor::visitDeclarationSpecifiers(ComplierParser::DeclarationSpecifiersContext* ctx)
+{
+    std::vector<varDef> vars;
+    for (auto each : ctx->declarationSpecifier())
+    {
+
+        auto ret = ac<std::expected<varDef, error>>(visitDeclarationSpecifier(each));
+        if (ret)
+        {
+            vars.push_back(ret.value());
+        }
+        else
+        {
+            return std::unexpected(ret.error());
+        }
+    }
+    return std::expected<std::vector<varDef>, error>(vars);
+}
+std::any astVisitor::visitDeclarationSpecifier(ComplierParser::DeclarationSpecifierContext* ctx)
+{
+    // [TODO] storageClassSpecifier
+    ctx;
+}
+std::any astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
+{
+    auto typeSpec = ctx;
+    Type::BasicType ty;
+    // 判断基本类型
+    if (typeSpec->getText() == "int")
+    {
+        ty = Type::BasicType::Int;
+        return std::expected<Type::BasicType, error>(ty);
+    }
+    else if (typeSpec->getText() == "char")
+    {
+        ty = Type::BasicType::Char;
+        return std::expected<Type::BasicType, error>(ty);
+    }
+    else if (typeSpec->getText() == "void")
+    {
+        ty = Type::BasicType::Void;
+        return std::expected<Type::BasicType, error>(ty);
+    }
+    else if (typeSpec->getText() == "float")
+    {
+        ty = Type::BasicType::Float;
+        return std::expected<Type::BasicType, error>(ty);
+    }
+    else if (typeSpec->getText() == "double")
+    {
+        ty = Type::BasicType::Double;
+        return std::expected<Type::BasicType, error>(ty);
+    }
+    else if (typeSpec->getText() == "long")
+    {
+        ty = Type::BasicType::Long;
+        return std::expected<Type::BasicType, error>(ty);
+    }
+    else if (typeSpec->getText() == "short")
+    {
+        ty = Type::BasicType::Short;
+        return std::expected<Type::BasicType, error>(ty);
+    }
+    else if (typeSpec->getText() == "unsigned")
+    {
+        ty = Type::BasicType::Unsigned;
+        return std::expected<Type::BasicType, error>(ty);
+    }
+    else if (typeSpec->getText() == "signed")
+    {
+        ty = Type::BasicType::Signed;
+        return std::expected<Type::BasicType, error>(ty);
+    }
+    return std::unexpected(error::unsurpport_basictype);
+}
 astVisitor::astVisitor(std::string name)
 {
     funcDef fun;

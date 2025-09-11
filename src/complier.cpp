@@ -13,12 +13,25 @@
 // 修改 getsize() 方法以支持新的类型表示
 size_t Type::getsize() const
 {
-    if (is_array() && array_info.has_value())
+    if (is_array() && array_info.has_value() && !array_info->dimensions.empty())
     {
-        // 数组大小 = 元素大小 * 元素数量
+        // 计算元素大小
         int element_size =
             (this->basic_type == BasicType::Char && pointer_level == 0) ? 1 : VCPU::size_word;
-        return array_info->size > 0 ? element_size * array_info->size : VCPU::size_word;
+
+        // 计算多维数组的总元素数量
+        size_t total_elements = 1;
+        for (const auto& dim : array_info->dimensions)
+        {
+            // 如果任何维度未指定大小，返回默认大小
+            if (dim <= 0)
+            {
+                return VCPU::size_word;
+            }
+            total_elements *= dim;
+        }
+
+        return element_size * total_elements;
     }
     else if (is_function())
     {
@@ -72,12 +85,15 @@ std::string Type::to_string() const
     // 数组类型
     if (is_array() && array_info.has_value())
     {
-        result += "[";
-        if (array_info->size > 0)
+        for (const auto& dim : array_info->dimensions)
         {
-            result += std::to_string(array_info->size);
+            result += "[";
+            if (dim > 0)
+            {
+                result += std::to_string(dim);
+            }
+            result += "]";
         }
-        result += "]";
     }
 
     // 函数类型
@@ -435,6 +451,7 @@ size_t varDef::get_addr_in_mem(size_t posnow)
     }
     return posnow;
 }
+// [TODO] 重构
 std::optional<varDef> varDef::makeByNode(ComplierParser::DeclarationContext* ast)
 {
     // 检查参数有效性
@@ -528,13 +545,53 @@ std::optional<varDef> varDef::makeByNode(ComplierParser::DeclarationContext* ast
 
     // 获取变量名
     std::string varName;
+    
+    // 处理多维数组和复杂声明的情况
+    // 对于像 arr[12][13] 这样的声明，需要递归查找标识符
+    antlr4::tree::ParseTree* currentNode = directDecl;
+    
+    // 尝试直接获取标识符
     if (directDecl->Identifier())
     {
         varName = directDecl->Identifier()->getText();
     }
     else
     {
-        return std::nullopt; // 没有找到标识符
+        // 如果当前节点没有直接的标识符，尝试递归查找
+        // 通常，数组声明的第一个子节点是另一个 directDeclarator
+        if (directDecl->children.size() > 0)
+        {
+            // 递归查找，直到找到一个含有 Identifier 的 directDeclarator
+            std::function<std::string(antlr4::tree::ParseTree*)> findIdentifier = 
+                [&findIdentifier](antlr4::tree::ParseTree* node) -> std::string {
+                    // 尝试将节点转换为 directDeclarator
+                    if (auto dd = dynamic_cast<ComplierParser::DirectDeclaratorContext*>(node))
+                    {
+                        if (dd->Identifier())
+                        {
+                            return dd->Identifier()->getText();
+                        }
+                        // 如果这个节点没有标识符，但有子节点
+                        if (!dd->children.empty())
+                        {
+                            // 检查第一个子节点
+                            return findIdentifier(dd->children[0]);
+                        }
+                    }
+                    return ""; // 没有找到标识符
+                };
+            
+            varName = findIdentifier(directDecl);
+            
+            if (varName.empty())
+            {
+                return std::nullopt; // 没有找到标识符
+            }
+        }
+        else
+        {
+            return std::nullopt; // 没有找到标识符
+        }
     }
 
     // 处理指针
@@ -549,32 +606,45 @@ std::optional<varDef> varDef::makeByNode(ComplierParser::DeclarationContext* ast
 
     // 处理数组
     // 检查directDeclarator是否有数组维度
+    bool isArray = false;
+    std::vector<int> dimensions;
+
     for (size_t i = 0; i < directDecl->children.size(); ++i)
     {
         if (i + 3 <= directDecl->children.size() && directDecl->children[i]->getText() == "[" &&
             directDecl->children[i + 2]->getText() == "]")
         {
-
-            type.kind = Type::Kind::Array;
-            type.array_info = Type::ArrayInfo{-1}; // 默认为未指定大小
+            isArray = true;
 
             // 尝试获取数组大小
             auto sizeExpr = directDecl->children[i + 1];
+            int dimension = -1; // 默认为未指定大小
+
             if (auto constExpr = dynamic_cast<ComplierParser::ConstantExpressionContext*>(sizeExpr))
             {
                 // 尝试从常量表达式中提取整数值
                 try
                 {
-                    int size = std::stoi(constExpr->getText());
-                    type.array_info->size = size;
+                    // 后续支持常量表达式
+                    dimension = std::stoi(constExpr->getText());
                 }
                 catch (...)
                 {
                     // 转换失败，保持默认值
                 }
             }
-            break;
+
+            dimensions.push_back(dimension);
+            i += 2; // 跳到 ']' 后继续检查下一个维度
         }
+    }
+
+    // 如果是数组，设置数组信息
+    if (isArray)
+    {
+        type.kind = Type::Kind::Array;
+        type.array_info = Type::ArrayInfo{};
+        type.array_info->dimensions = dimensions;
     }
 
     // 创建变量定义
@@ -690,13 +760,39 @@ std::optional<funcDef> funcDef::makeByNode(ComplierParser::DeclarationContext* a
     bool isVariadic = false;
 
     // 首先获取函数名
+    // 处理复杂声明的情况
     if (directDecl->Identifier())
     {
         funcName = directDecl->Identifier()->getText();
     }
     else
     {
-        return std::nullopt;
+        // 如果当前节点没有直接的标识符，尝试递归查找
+        std::function<std::string(antlr4::tree::ParseTree*)> findIdentifier = 
+            [&findIdentifier](antlr4::tree::ParseTree* node) -> std::string {
+                // 尝试将节点转换为 directDeclarator
+                if (auto dd = dynamic_cast<ComplierParser::DirectDeclaratorContext*>(node))
+                {
+                    if (dd->Identifier())
+                    {
+                        return dd->Identifier()->getText();
+                    }
+                    // 如果这个节点没有标识符，但有子节点
+                    if (!dd->children.empty())
+                    {
+                        // 检查第一个子节点
+                        return findIdentifier(dd->children[0]);
+                    }
+                }
+                return ""; // 没有找到标识符
+            };
+        
+        funcName = findIdentifier(directDecl);
+        
+        if (funcName.empty())
+        {
+            return std::nullopt; // 没有找到标识符
+        }
     }
 
     // 检查是否有参数列表
@@ -778,7 +874,8 @@ std::optional<funcDef> funcDef::makeByNode(ComplierParser::DeclarationContext* a
                                     // 计算指针级别 - 直接从文本分析 * 的数量
                                     paramType.pointer_level = 0;
                                     std::string pointerText = pointer->getText();
-                                    paramType.pointer_level = std::count(pointerText.begin(), pointerText.end(), '*');
+                                    paramType.pointer_level =
+                                        std::count(pointerText.begin(), pointerText.end(), '*');
                                     paramType.kind = Type::Kind::Pointer;
                                 }
 
@@ -869,7 +966,6 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
         ComplierParser parser(&tokens);
         // 使用正确的入口规则
         auto tree = parser.compilationUnit();
-        std::cout << "ast: \n";
         // 创建和使用自定义访问器
         astVisitor visitor{each};
         auto ret = std::any_cast<bool>(visitor.visitCompilationUnit(tree));
