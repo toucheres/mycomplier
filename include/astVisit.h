@@ -11,6 +11,9 @@ struct astVisitor : public ComplierBaseVisitor
   private:
     funcDef* funcnow;
     funcDef* globalinitfun;
+    
+    // 辅助函数：递归收集多维数组的维度信息
+    std::vector<int> collectArrayDimensions(ComplierParser::DirectDeclaratorContext* ddCtx);
 
   public:
     astVisitor(std::string name);

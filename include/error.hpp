@@ -9,6 +9,7 @@ enum class error
     double_defined,
     cpu_error,
     illegal_calcu,
+    unsurpport_basictype,
     unsurpported_op,
     expected_lvalue
 };
