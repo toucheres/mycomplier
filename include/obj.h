@@ -12,6 +12,28 @@
 #include <variant>
 #include <vector>
 #include <vm.h>
+// 前向声明
+struct Type;
+struct varDef;
+
+struct PtrInfo
+{
+    std::shared_ptr<Type> elementType;
+    int num_lay;
+};
+// 数组信息
+struct ArrayInfo
+{
+    std::shared_ptr<Type> elementType;
+    int size; // 数组大小
+};
+// 函数信息
+struct FunctionInfo
+{
+    std::vector<varDef> param_types;
+    std::shared_ptr<Type> retType;
+    bool is_variadic = false;
+};
 struct Type
 {
     enum class BasicType
@@ -26,36 +48,28 @@ struct Type
         Unsigned,
         Signed
     };
-
     enum class Kind
     {
-        Basic,   // 基本类型
-        Pointer, // 指针类型
-        Array,   // 数组类型
-        Function // 函数类型
+        Undefined, // 初始(主要用于解析变量时decltor只有名字时)
+        Basic,     // 基本类型
+        Pointer,   // 指针类型
+        Array,     // 数组类型
+        Function   // 函数类型
     };
-
-    BasicType basic_type;
-    int pointer_level = 0; // 指针层级
-    Kind kind = Kind::Basic;
-
-    // 数组信息
-    struct ArrayInfo
+    Kind kind = Kind::Undefined;
+    // 基础类型
+    BasicType basic_type; // avilable when kind == Basic
+    // 指针相关
+    int pointer_level = 0; // 为了兼容性保留，新代码应使用ptr_info
+    // 复合类型
+    std::shared_ptr<ArrayInfo> array_info;   // avilable when kind == Array
+    std::shared_ptr<FunctionInfo> func_info; // avilable when kind == Function
+    std::shared_ptr<PtrInfo> ptr_info;       // avilable when kind == Pointer
+    std::shared_ptr<Type> target;            // 用于递归表示指针、数组的目标类型
+    bool is_base() const
     {
-        std::vector<int> dimensions; // 数组各维度大小，-1表示未指定大小
-    };
-
-    // 函数信息
-    struct FunctionInfo
-    {
-        std::vector<Type> param_types;
-        bool is_variadic = false;
-    };
-
-    // 复杂类型信息
-    std::optional<ArrayInfo> array_info;
-    std::optional<FunctionInfo> func_info;
-
+        return kind == Kind::Basic;
+    }
     bool is_pointer() const
     {
         return kind == Kind::Pointer;
@@ -68,7 +82,6 @@ struct Type
     {
         return kind == Kind::Function;
     }
-
     bool operator==(const Type& other) const;
     std::string to_string() const;
     size_t getsize() const;
@@ -86,7 +99,7 @@ struct varDef : Identifi
 {
     size_t get_addr_in_mem(size_t posnow);
     varDef() = default;
-    static std::optional<varDef> makeByNode( ComplierParser::DeclarationContext* ast);
+    // static std::optional<varDef> makeByNode( ComplierParser::DeclarationContext* ast);
 };
 // struct argDef
 // {
@@ -97,7 +110,7 @@ struct varDef : Identifi
 struct funcDef : Identifi
 {
     // [TODO] funcDefineNode
-    static std::optional<funcDef> makeByNode( ComplierParser::DeclarationContext* ast);
+    // static std::optional<funcDef> makeByNode( ComplierParser::DeclarationContext* ast);
     std::vector<std::string> asms;
     std::vector<varDef> args;
     std::vector<std::vector<varDef>> funcvar_stack;
@@ -143,6 +156,8 @@ struct OBJ
     ComplierParser::CompilationUnitContext* program;
     // 符号表
     SymbolTable symbol_table;
+    // typedef表
+    std::unordered_map<std::string, Type> typedefs;
     // 全局偏移
     int bias = 0;
     // 代码生成接口
