@@ -2,6 +2,7 @@
 #include "ComplierBaseVisitor.h"
 #include "ComplierLexer.h"
 #include "ComplierParser.h"
+#include <functional>
 #include <tree/TerminalNode.h>
 template <class CAST> CAST ac(auto&& in)
 {
@@ -28,16 +29,139 @@ std::any astVisitor::visitTranslationUnit(ComplierParser::TranslationUnitContext
 }
 std::any astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
 {
+    varDef basetype;
     std::vector<varDef> vars;
-    if (ctx->declarationSpecifiers()) // 基础类型
+    if (ctx->declarationSpecifiers()) // 前类型
     {
-        visitDeclarationSpecifiers(ctx->declarationSpecifiers());
+        auto ret = ac<std::expected<std::vector<varDef>, error>>(
+            visitDeclarationSpecifiers(ctx->declarationSpecifiers()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        auto& declarationSpecifiers = ret.value();
+        if (declarationSpecifiers.back().name != "") // 可能是typedef或变量名
+        {
+            auto id = declarationSpecifiers.back().name;
+            if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id
+            {
+                declarationSpecifiers.pop_back();
+                ctx->declarationSpecifiers()->children.pop_back();
+                varDef var;
+                var.name = id;
+                vars.push_back(var);
+            }
+        }
+
+        bool flag = false;
+        for (auto each : ctx->declarationSpecifiers()->declarationSpecifier())
+        {
+            if (each->typeSpecifier())
+            {
+
+                if (each->typeSpecifier()->typedefName())
+                {
+                    auto id = each->typeSpecifier()->typedefName()->toString();
+                    if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id,忽略
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        if (flag)
+                        {
+                            return std::unexpected<error>(error::double_type);
+                        }
+                        basetype.type = obj.typedefs.find(id)->second;
+                        flag = true;
+                    }
+                }
+                if (flag)
+                {
+                    return std::unexpected<error>(error::double_type);
+                }
+                basetype =
+                    ac<std::expected<varDef, error>>(visitTypeSpecifier(each->typeSpecifier()))
+                        .value();
+                flag = true;
+
+            } // [TODO] 考虑修饰符
+        }
     }
-    else if (ctx->initDeclaratorList()) // 数组/函数/指针的组合
+    if (ctx->initDeclaratorList()) // 数组/函数/指针的组合s
     {
-        visitInitDeclaratorList(ctx->initDeclaratorList());
+        auto ret = ac<std::expected<std::vector<varDef>, error>>(
+            visitInitDeclaratorList(ctx->initDeclaratorList()));
+        if (ret)
+        {
+            vars.insert(vars.end(), ret.value().begin(), ret.value().end());
+        }
+        else
+        {
+            return std::unexpected<error>(ret.error());
+        }
     }
-    return true;
+    for (auto& each : vars)
+    {
+        auto lastnode = &each.type;
+        // 找到底层decltor
+        std::function<Type&(Type&)> getrootdecltor;
+        getrootdecltor = [getrootdecltor](Type& in) -> Type&
+        {
+            if (in.kind == Type::Kind::Undefined)
+            {
+                return in;
+            }
+            if (in.kind == Type::Kind::Basic)
+            {
+                // throw; // 理论上不会
+                return in;
+            }
+            if (in.kind == Type::Kind::Array && (!in.array_info->elementType))
+            {
+                return in;
+            }
+            if (in.kind == Type::Kind::Array && (in.array_info->elementType))
+            {
+                return getrootdecltor(*(in.array_info->elementType));
+            }
+            if (in.kind == Type::Kind::Pointer && (!in.ptr_info->elementType))
+            {
+                return in;
+            }
+            if (in.kind == Type::Kind::Pointer && (in.ptr_info->elementType))
+            {
+                return getrootdecltor(*(in.ptr_info->elementType));
+            }
+            if (in.kind == Type::Kind::Function && (!in.func_info->retType))
+            {
+                return in;
+            }
+            if (in.kind == Type::Kind::Function && (in.func_info->retType))
+            {
+                return getrootdecltor(*(in.func_info->retType));
+            }
+            throw; // 理论不会到这里
+        };
+        auto& tofinish = getrootdecltor(each.type);
+        if (tofinish.kind == Type::Kind::Array)
+        {
+            tofinish.array_info->elementType = std::make_shared<Type>(basetype.type);
+        }
+        else if (tofinish.kind == Type::Kind::Pointer)
+        {
+            tofinish.ptr_info->elementType = std::make_shared<Type>(basetype.type);
+        }
+        else if (tofinish.kind == Type::Kind::Function)
+        {
+            tofinish.func_info->retType = std::make_shared<Type>(basetype.type);
+        }
+        else if (tofinish.kind == Type::Kind::Undefined)
+        {
+            tofinish = basetype.type;
+        }
+    }
+    return std::expected<std::vector<varDef>, error>(vars);
     // [TODO] 处理初始化器
     // 如果有初始化器，需要处理 ctx->initDeclaratorList()
 }
@@ -191,7 +315,8 @@ std::any astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ct
         }
     }
     // 判断基本类型
-    else if (ctx->getText() == "int")
+    rettype.type.kind = Type::Kind::Basic;
+    if (ctx->getText() == "int")
     {
         rettype.type.basic_type = Type::BasicType::Int;
         return std::expected<varDef, error>(rettype);
@@ -282,12 +407,14 @@ std::any astVisitor::visitDeclarator(ComplierParser::DeclaratorContext* ctx)
             return std::unexpected<error>(ret.error());
         }
         var.type.ptr_info->elementType = std::make_shared<Type>(ret.value().type);
+        return std::expected<varDef, error>(var);
     }
     else if (ctx->directDeclarator())
     {
         return ac<std::expected<varDef, error>>(visitDirectDeclarator(ctx->directDeclarator()));
     }
 }
+// [REWRITE] ctx->getAltNumber()不是分支标识
 std::any astVisitor::visitDirectDeclarator(ComplierParser::DirectDeclaratorContext* ctx)
 {
     varDef var;
@@ -746,7 +873,7 @@ std::any astVisitor::visitDirectAbstractDeclarator(
 
     return std::expected<Type, error>(type);
 }
-astVisitor::astVisitor(std::string name,OBJ& ob):obj(ob)
+astVisitor::astVisitor(std::string name, OBJ& ob) : obj(ob)
 {
     funcDef fun;
     fun.name = "__global_init" + name;

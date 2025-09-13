@@ -7,6 +7,7 @@ enum class error
     undifined_var,
     undifined_obj_init_fun,
     double_defined,
+    double_type,
     cpu_error,
     illegal_calcu,
     unsurpport_basictype,

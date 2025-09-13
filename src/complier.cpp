@@ -951,7 +951,7 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
         // 创建词法分析器
         ComplierLexer lexer(&inputStream);
         antlr4::CommonTokenStream tokens(&lexer);
-        // 创建语法分析器
+        // 创建自定义语法分析器
         ComplierParser parser(&tokens);
         // 使用正确的入口规则
         auto tree = parser.compilationUnit();
