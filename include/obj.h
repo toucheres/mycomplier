@@ -1,6 +1,7 @@
 #pragma once
 #include "ComplierBaseVisitor.h"
 #include "ComplierVisitor.h"
+#include <copyed_ptr.hpp>
 #include <expected>
 #include <map>
 #include <memory>
@@ -16,24 +17,6 @@
 struct Type;
 struct varDef;
 
-struct PtrInfo
-{
-    std::shared_ptr<Type> elementType;
-    int num_lay;
-};
-// 数组信息
-struct ArrayInfo
-{
-    std::shared_ptr<Type> elementType;
-    int size; // 数组大小
-};
-// 函数信息
-struct FunctionInfo
-{
-    std::vector<varDef> param_types;
-    std::shared_ptr<Type> retType;
-    bool is_variadic = false;
-};
 struct Type
 {
     enum class BasicType
@@ -50,42 +33,28 @@ struct Type
     };
     enum class Kind
     {
-        Undefined, // 初始(主要用于解析变量时decltor只有名字时)
+        Undefined, // 初始
+        ID,        // id
         Basic,     // 基本类型
         Pointer,   // 指针类型
         Array,     // 数组类型
         Function   // 函数类型
     };
+    Type() = default;
+    Type(const Type&) = default;
+    Type(Kind kind, int arg);
+    Type(Kind kind, std::string arg);
     Kind kind = Kind::Undefined;
+    std::string id;
     // 基础类型
     BasicType basic_type; // avilable when kind == Basic
-    // 指针相关
-    int pointer_level = 0; // 为了兼容性保留，新代码应使用ptr_info
-    // 复合类型
-    std::shared_ptr<ArrayInfo> array_info;   // avilable when kind == Array
-    std::shared_ptr<FunctionInfo> func_info; // avilable when kind == Function
-    std::shared_ptr<PtrInfo> ptr_info;       // avilable when kind == Pointer
-    std::shared_ptr<Type> target;            // 用于递归表示指针、数组的目标类型
-    bool is_base() const
-    {
-        return kind == Kind::Basic;
-    }
-    bool is_pointer() const
-    {
-        return kind == Kind::Pointer;
-    }
-    bool is_array() const
-    {
-        return kind == Kind::Array;
-    }
-    bool is_function() const
-    {
-        return kind == Kind::Function;
-    }
-    bool operator==(const Type& other) const;
+    copyed_ptr<Type> subType;
+    std::vector<Type> args;
+    int arr_or_ptr_num = -1;
+    Type& getTop();
+    bool pushTop(const Type& what);
     std::string to_string() const;
     size_t getsize() const;
-    Type() = default;
 };
 struct Identifi
 {

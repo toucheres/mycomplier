@@ -10,104 +10,46 @@
 #include <format>
 #include <iostream>
 #include <regex>
-// 修改 getsize() 方法以支持新的类型表示
+//[REWRITE] 修改 getsize() 方法以支持新的类型表示
 size_t Type::getsize() const
 {
-    if (is_array() && array_info)
-    {
-        // 计算元素大小
-        int element_size =
-            (this->basic_type == BasicType::Char && pointer_level == 0) ? 1 : VCPU::size_word;
-
-        // 计算多维数组的总元素数量
-
-        size_t total_elements = array_info->size;
-
-        return element_size * total_elements;
-    }
-    else if (is_function())
-    {
-        // 函数指针大小
-        return VCPU::size_word;
-    }
-    else if (this->basic_type == BasicType::Char && !this->is_pointer())
-    {
-        return 1;
-    }
-    return VCPU::size_word;
+    return 0;
 }
 
-// 修改 to_string() 方法
+Type::Type(Kind kind_, int arg_)
+{
+    kind = kind_;
+    arr_or_ptr_num = arg_;
+}
+
+Type::Type(Kind kind_, std::string arg_)
+{
+    kind = kind_;
+    id = arg_;
+}
+
+Type& Type::getTop()
+{
+    Type* now = this;
+    while (now->kind != Type::Kind::Basic && now->kind != Type::Kind::Undefined && now->subType)
+    {
+        now = now->subType.get();
+    }
+    return *now;
+}
+
+bool Type::pushTop(const Type& what)
+{
+    auto& top = getTop();
+    top.subType = copyed_ptr<Type>::make_copyed_ptr(what);
+    return true;
+}
+
+
+//[REWRITE] 修改 to_string() 方法
 std::string Type::to_string() const
 {
-    std::string result;
-
-    // 基本类型
-    switch (basic_type)
-    {
-    case BasicType::Int:
-        result = "int";
-        break;
-    case BasicType::Char:
-        result = "char";
-        break;
-    case BasicType::Void:
-        result = "void";
-        break;
-    case BasicType::Float:
-        result = "float";
-        break;
-    case BasicType::Double:
-        result = "double";
-        break;
-    case BasicType::Long:
-        result = "long";
-        break;
-    case BasicType::Short:
-        result = "short";
-        break;
-    case BasicType::Unsigned:
-        result = "unsigned";
-        break;
-    case BasicType::Signed:
-        result = "signed";
-        break;
-    }
-
-    // 数组类型
-    if (is_array() && array_info)
-    {
-        result += "[";
-        result += std::to_string(array_info->size);
-        result += "]";
-    }
-
-    // 函数类型
-    if (is_function() && func_info)
-    {
-        result += "(";
-        for (size_t i = 0; i < func_info->param_types.size(); ++i)
-        {
-            if (i > 0)
-                result += ", ";
-            // result += func_info->param_types[i].to_string();
-        }
-        if (func_info->is_variadic)
-        {
-            if (!func_info->param_types.empty())
-                result += ", ";
-            result += "...";
-        }
-        result += ")";
-    }
-
-    // 指针
-    for (int i = 0; i < pointer_level; ++i)
-    {
-        result = "*" + result;
-    }
-
-    return result;
+    return "";
 }
 
 std::expected<size_t, error> linker::pushfunc(std::string funcname)

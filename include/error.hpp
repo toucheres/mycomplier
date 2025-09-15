@@ -11,6 +11,7 @@ enum class error
     cpu_error,
     illegal_calcu,
     unsurpport_basictype,
+    unsurpport_directDeclarator,
     unsurpported_op,
     expected_lvalue
 };

@@ -11,9 +11,10 @@ struct astVisitor : public ComplierBaseVisitor
   private:
     funcDef* funcnow;
     funcDef* globalinitfun;
-    
-    // 辅助函数：递归收集多维数组的维度信息
-    std::vector<int> collectArrayDimensions(ComplierParser::DirectDeclaratorContext* ddCtx);
+
+    // 辅助函数
+    Type& getrootdecltor(Type& in);
+    long long parseConstexpr(ComplierParser::AssignmentExpressionContext* expr);
 
   public:
     astVisitor(std::string name, OBJ& obj);
@@ -37,7 +38,9 @@ struct astVisitor : public ComplierBaseVisitor
     std::any visitDeclarationSpecifiers2(
         ComplierParser::DeclarationSpecifiers2Context* ctx) override;
     std::any visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx) override;
-    std::any visitDirectAbstractDeclarator(ComplierParser::DirectAbstractDeclaratorContext* ctx) override;
+    std::any visitDirectAbstractDeclarator(
+        ComplierParser::DirectAbstractDeclaratorContext* ctx) override;
     std::any visitTypeName(ComplierParser::TypeNameContext* ctx) override;
-    std::any visitSpecifierQualifierList(ComplierParser::SpecifierQualifierListContext* ctx) override;
+    std::any visitSpecifierQualifierList(
+        ComplierParser::SpecifierQualifierListContext* ctx) override;
 };
