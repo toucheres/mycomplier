@@ -43,7 +43,8 @@ struct Type
     Type() = default;
     Type(const Type&) = default;
     Type(Kind kind, int arg);
-    Type(Kind kind, std::string arg);
+    Type(Kind kind, std::string arg);        // for id
+    Type(Kind kind, std::vector<Type> args); // for function
     Kind kind = Kind::Undefined;
     std::string id;
     // 基础类型

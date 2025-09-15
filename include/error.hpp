@@ -3,6 +3,7 @@ enum class error
 {
     file_not_exsist,
     empty_node,
+    undifined_type,
     undifined_func,
     undifined_var,
     undifined_obj_init_fun,

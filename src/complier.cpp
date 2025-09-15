@@ -28,6 +28,12 @@ Type::Type(Kind kind_, std::string arg_)
     id = arg_;
 }
 
+Type::Type(Kind kind_, std::vector<Type> args_)
+{
+    kind = kind_;
+    args = args_;
+}
+
 Type& Type::getTop()
 {
     Type* now = this;
@@ -44,7 +50,6 @@ bool Type::pushTop(const Type& what)
     top.subType = copyed_ptr<Type>::make_copyed_ptr(what);
     return true;
 }
-
 
 //[REWRITE] 修改 to_string() 方法
 std::string Type::to_string() const
@@ -899,15 +904,8 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
         auto tree = parser.compilationUnit();
         // 创建和使用自定义访问器
         astVisitor visitor{each, obj};
-        auto ret = std::any_cast<bool>(visitor.visitCompilationUnit(tree));
-        if (ret)
-        {
-            objs.push_back(visitor.obj);
-        }
-        else
-        {
-            std::cout << "fail: " << each << '\n';
-        }
+        visitor.visitCompilationUnit(tree);
+        objs.push_back(visitor.obj);
     }
     linker linker{objs};
     return linker.exe.asms;

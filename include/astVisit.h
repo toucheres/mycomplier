@@ -32,7 +32,6 @@ struct astVisitor : public ComplierBaseVisitor
     std::any visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx) override;
     std::any visitDeclarator(ComplierParser::DeclaratorContext* ctx) override;
     std::any visitDirectDeclarator(ComplierParser::DirectDeclaratorContext* ctx) override;
-    std::any visitParameterTypeList(ComplierParser::ParameterTypeListContext* ctx) override;
     std::any visitParameterList(ComplierParser::ParameterListContext* ctx) override;
     std::any visitParameterDeclaration(ComplierParser::ParameterDeclarationContext* ctx) override;
     std::any visitDeclarationSpecifiers2(
@@ -41,6 +40,7 @@ struct astVisitor : public ComplierBaseVisitor
     std::any visitDirectAbstractDeclarator(
         ComplierParser::DirectAbstractDeclaratorContext* ctx) override;
     std::any visitTypeName(ComplierParser::TypeNameContext* ctx) override;
+    std::any visitParameterTypeList(ComplierParser::ParameterTypeListContext* ctx) override;
     std::any visitSpecifierQualifierList(
         ComplierParser::SpecifierQualifierListContext* ctx) override;
 };
