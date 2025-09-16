@@ -41,6 +41,7 @@ struct astVisitor : public ComplierBaseVisitor
         ComplierParser::DirectAbstractDeclaratorContext* ctx) override;
     std::any visitTypeName(ComplierParser::TypeNameContext* ctx) override;
     std::any visitParameterTypeList(ComplierParser::ParameterTypeListContext* ctx) override;
+    std::any visitCompoundStatement(ComplierParser::CompoundStatementContext* ctx) override;
     std::any visitSpecifierQualifierList(
         ComplierParser::SpecifierQualifierListContext* ctx) override;
 };

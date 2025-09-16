@@ -114,19 +114,101 @@ std::any astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
 }
 std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx)
 {
+    Type basetype;
+    auto ret = ac<std::expected<Type, error>>(visitDeclarator(ctx->declarator()));
+    if (ret)
+    {
+        basetype = ret.value();
+    }
+    else
+    {
+        return std::unexpected<error>(ret.error());
+    }
+    if (ctx->declarationSpecifiers()) // 前类型
+    {
+        auto ret = ac<std::expected<std::vector<Type>, error>>(
+            visitDeclarationSpecifiers(ctx->declarationSpecifiers()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        auto& declarationSpecifiers = ret.value();
+        bool flag = false;
+        for (auto each : ctx->declarationSpecifiers()->declarationSpecifier())
+        {
+            if (each->typeSpecifier())
+            {
+                if (each->typeSpecifier()->typedefName())
+                {
+                    auto id = each->typeSpecifier()->typedefName()->toString();
+                    if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id,忽略
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        if (flag)
+                        {
+                            return std::unexpected<error>(error::double_type);
+                        }
+                        basetype.pushTop(obj.typedefs.find(id)->second);
+                        flag = true;
+                    }
+                }
+                if (flag)
+                {
+                    return std::unexpected<error>(error::double_type);
+                }
+                basetype.pushTop(
+                    ac<std::expected<Type, error>>(visitTypeSpecifier(each->typeSpecifier()))
+                        .value());
+                flag = true;
+
+            } // [TODO] 考虑修饰符
+        }
+    }
+    auto funnowptr = obj.symbol_table.add_global_func_def(basetype);
+    if(!funnowptr)
+    {
+        return std::unexpected<error>(error::double_defined);
+    }
+    funcnow = funnowptr;
+    auto ret = ac<std::expected<bool, error>>(visitCompoundStatement(ctx->compoundStatement()));
+    if(!ret)
+    {
+        funcnow = nullptr;
+        return std::unexpected<error>(ret.error());
+    }
+    else
+    {
+        funcnow = nullptr;
+        return std::expected<bool, error>(true);
+    }
 }
 std::any astVisitor::visitExternalDeclaration(ComplierParser::ExternalDeclarationContext* ctx)
 {
     // 检查是否为函数定义
     if (ctx->functionDefinition())
     {
-        return visitFunctionDefinition(ctx->functionDefinition());
+        // 在visitFunctionDefinition内部处理
+        visitFunctionDefinition(ctx->functionDefinition());
+        return {};
     }
 
-    // 检查是否为变量声明
+    // 检查是否为变量定义
+    // [TODO] 区分变量定义与声明
     else if (ctx->declaration())
     {
-        return visitDeclaration(ctx->declaration());
+        auto ret =
+            ac<std::expected<std::vector<Type>, error>>(visitDeclaration(ctx->declaration()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        for (auto& each : ret.value())
+        {
+            obj.symbol_table.add_global_var_def(each);
+        }
     }
 
     // 检查是否为单独的分号（空语句）
@@ -362,6 +444,10 @@ std::any astVisitor::visitDirectDeclarator(ComplierParser::DirectDeclaratorConte
 std::any astVisitor::visitParameterTypeList(ComplierParser::ParameterTypeListContext* ctx)
 {
     return visitParameterList(ctx->parameterList());
+}
+std::any astVisitor::visitCompoundStatement(ComplierParser::CompoundStatementContext* ctx)
+{
+    return std::any();
 }
 std::any astVisitor::visitParameterList(ComplierParser::ParameterListContext* ctx)
 {
@@ -642,10 +728,14 @@ long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext
 };
 astVisitor::astVisitor(std::string name, OBJ& ob) : obj(ob)
 {
-    funcDef fun;
-    fun.name = "__global_init" + name;
-    obj.symbol_table.add_global_symbol(fun);
-    globalinitfun = obj.symbol_table.lookup_fun("__global_init" + name);
+    Type global_init_fun;
+    global_init_fun.kind = Type::Kind::ID;
+    global_init_fun.id = "__global_init" + name;
+    global_init_fun.pushTop(Type{Type::Kind::Function, std::vector<Type>()});
+    global_init_fun.pushTop(Type{Type::Kind::Basic, Type::BasicType::Void});
+    obj.symbol_table.add_global_func_decl(global_init_fun);
+    obj.symbol_table.add_global_func_def(global_init_fun);
+    globalinitfun = obj.symbol_table.lookup_func_def("__global_init" + name);
 }
 std::any astVisitor::visitByTypeIndex(antlr4::ParserRuleContext* ctx)
 {

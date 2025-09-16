@@ -1,1 +1,1 @@
-int* func(char,long (*funptr)(short,int arr[12]));
+int a(char b,long c){}

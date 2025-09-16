@@ -64,7 +64,11 @@ template <class T> class copyed_ptr
     {
         return ptr.get();
     }
-
+    // ==运算符
+    bool operator==(std::nullptr_t) const
+    {
+        return ptr == nullptr;
+    }
     // 解引用运算符
     T& operator*() const
     {
