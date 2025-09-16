@@ -300,8 +300,7 @@ std::any astVisitor::visitDeclarator(ComplierParser::DeclaratorContext* ctx)
     {
         auto str = ctx->pointer()->getText();
         auto tp =
-            Type{Type::Kind::Pointer,
-                 static_cast<int>(std::count(str.begin(), str.end(), '*'))};
+            Type{Type::Kind::Pointer, static_cast<int>(std::count(str.begin(), str.end(), '*'))};
         var.pushTop(tp);
     }
     return std::expected<Type, error>(var);
@@ -443,6 +442,64 @@ std::any astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarat
             } // [TODO] 考虑修饰符
         }
     }
+    else if (ctx->declarationSpecifiers2()) // 与declarationSpecifiers一致
+    {
+        auto ret = ac<std::expected<std::vector<Type>, error>>(
+            visitDeclarationSpecifiers2(ctx->declarationSpecifiers2()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        auto& declarationSpecifiers = ret.value();
+        bool flag = false;
+
+        if (declarationSpecifiers.back().id != "") // 可能是typedef或变量名
+        {
+            auto id = declarationSpecifiers.back().id;
+            if (obj.typedefs.find(id) ==
+                obj.typedefs.end()) // 不是typedef,是id(在函数参数申明中应该不会发生)
+            {
+                return std::unexpected<error>(error::undifined_type);
+            }
+            else // 是type
+            {
+                basetype = obj.typedefs.find(id)->second;
+                flag = true;
+            }
+        }
+
+        for (auto each : ctx->declarationSpecifiers2()->declarationSpecifier())
+        {
+            if (each->typeSpecifier())
+            {
+                if (each->typeSpecifier()->typedefName())
+                {
+                    auto id = each->typeSpecifier()->typedefName()->toString();
+                    if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id,忽略
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        if (flag)
+                        {
+                            return std::unexpected<error>(error::double_type);
+                        }
+                        basetype = obj.typedefs.find(id)->second;
+                        flag = true;
+                    }
+                }
+                if (flag)
+                {
+                    return std::unexpected<error>(error::double_type);
+                }
+                basetype = ac<std::expected<Type, error>>(visitTypeSpecifier(each->typeSpecifier()))
+                               .value();
+                flag = true;
+
+            } // [TODO] 考虑修饰符
+        }
+    }
     if (ctx->declarator()) // 数组/函数/指针的组合s
     {
         auto ret = ac<std::expected<Type, error>>(visitDeclarator(ctx->declarator()));
@@ -454,11 +511,50 @@ std::any astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarat
         {
             return std::unexpected<error>(ret.error());
         }
+        vars.pushTop(basetype);
+        return std::expected<Type, error>(vars);
+    }
+    else if (ctx->abstractDeclarator())
+    {
+        auto ret =
+            ac<std::expected<Type, error>>(visitAbstractDeclarator(ctx->abstractDeclarator()));
+        if (ret)
+        {
+            vars = ret.value();
+        }
+        else
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        vars.pushTop(basetype);
+        return std::expected<Type, error>(vars);
+    }
+    else
+    {
+        return std::expected<Type, error>(basetype);
     }
     return std::expected<Type, error>(vars);
 }
 std::any astVisitor::visitDeclarationSpecifiers2(ComplierParser::DeclarationSpecifiers2Context* ctx)
 {
+    std::vector<Type> Types;
+    // 遍历所有声明说明符
+    for (auto& each : ctx->declarationSpecifier())
+    {
+        // 解析每个声明说明符
+        std::any result = visitDeclarationSpecifier(each);
+        auto ret = std::any_cast<std::expected<Type, error>>(result);
+        if (ret)
+        {
+            Types.push_back(ret.value());
+        }
+        else
+        {
+            // 返回错误
+            return std::unexpected(ret.error());
+        }
+    }
+    return std::expected<std::vector<Type>, error>(Types);
 }
 
 std::any astVisitor::visitTypeName(ComplierParser::TypeNameContext* ctx)
@@ -472,11 +568,73 @@ std::any astVisitor::visitSpecifierQualifierList(ComplierParser::SpecifierQualif
 
 std::any astVisitor::visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx)
 {
+    Type rettype;
+    if (ctx->directAbstractDeclarator())
+    {
+        auto ret = ac<std::expected<Type, error>>(
+            visitDirectAbstractDeclarator(ctx->directAbstractDeclarator()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        rettype = ret.value();
+    }
+    if (ctx->pointer())
+    {
+        rettype.pushTop(
+            Type{Type::Kind::Pointer, std::count(ctx->pointer()->getText().begin(),
+                                                 ctx->pointer()->getText().end(), '*')});
+    }
+    return std::expected<Type, error>(rettype);
 }
 
 std::any astVisitor::visitDirectAbstractDeclarator(
     ComplierParser::DirectAbstractDeclaratorContext* ctx)
 {
+    Type basetype;
+    if (ctx->LeftParen() && ctx->abstractDeclarator()) // (abst)
+    {
+        auto ret =
+            ac<std::expected<Type, error>>(visitAbstractDeclarator(ctx->abstractDeclarator()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        basetype = ret.value();
+        return std::expected<Type, error>(basetype);
+    }
+    if (ctx->directAbstractDeclarator())
+    {
+        auto ret = ac<std::expected<Type, error>>(
+            visitDirectAbstractDeclarator(ctx->directAbstractDeclarator()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        basetype = ret.value();
+    }
+    if (ctx->LeftBracket() && ctx->assignmentExpression()) // arr
+    {
+        basetype.pushTop(Type{Type::Kind::Array, parseConstexpr(ctx->assignmentExpression())});
+        return std::expected<Type, error>(basetype);
+    }
+    else if (ctx->LeftParen()) // func
+    {
+        std::vector<Type> args;
+        if (ctx->parameterTypeList())
+        {
+            auto ret = ac<std::expected<std::vector<Type>, error>>(
+                visitParameterTypeList(ctx->parameterTypeList()));
+            if (!ret)
+            {
+                return std::unexpected<error>(ret.error());
+            }
+            args = ret.value();
+        }
+        basetype.pushTop(Type{Type::Kind::Function, args});
+        return basetype;
+    }
+    return std::unexpected<error>(error::unsurpport_abstractDeclarator);
 }
 long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext* expr)
 {

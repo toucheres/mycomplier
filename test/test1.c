@@ -1,1 +1,1 @@
-int fun(int a, char* arr[12][13]);
+int* func(char,long (*funptr)(short,int arr[12]));

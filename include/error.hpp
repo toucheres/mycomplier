@@ -13,6 +13,7 @@ enum class error
     illegal_calcu,
     unsurpport_basictype,
     unsurpport_directDeclarator,
+    unsurpport_abstractDeclarator,
     unsurpported_op,
     expected_lvalue
 };
