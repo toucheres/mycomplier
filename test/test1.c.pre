@@ -1,1 +1,1 @@
-int a(char b,long c){}
+int a(char b, long* (*c)[12]);

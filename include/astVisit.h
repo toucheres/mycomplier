@@ -34,12 +34,33 @@ struct astVisitor : public ComplierBaseVisitor
     std::any visitDirectDeclarator(ComplierParser::DirectDeclaratorContext* ctx) override;
     std::any visitParameterList(ComplierParser::ParameterListContext* ctx) override;
     std::any visitParameterDeclaration(ComplierParser::ParameterDeclarationContext* ctx) override;
+    std::any visitBlockItemList(ComplierParser::BlockItemListContext* ctx) override;
+    std::any visitStatement(ComplierParser::StatementContext* ctx) override;
+    std::any visitExpressionStatement(ComplierParser::ExpressionStatementContext* ctx) override;
+    std::any visitExpression(ComplierParser::ExpressionContext* ctx) override;
+    std::any visitAssignmentExpression(ComplierParser::AssignmentExpressionContext* ctx) override;
+    std::any visitConditionalExpression(ComplierParser::ConditionalExpressionContext* ctx) override;
+    std::any visitLogicalOrExpression(ComplierParser::LogicalOrExpressionContext* ctx) override;
+    std::any visitLogicalAndExpression(ComplierParser::LogicalAndExpressionContext* ctx) override;
+    std::any visitInclusiveOrExpression(ComplierParser::InclusiveOrExpressionContext* ctx) override;
+    std::any visitExclusiveOrExpression(ComplierParser::ExclusiveOrExpressionContext* ctx) override;
+    std::any visitAndExpression(ComplierParser::AndExpressionContext* ctx) override;
+    std::any visitEqualityExpression(ComplierParser::EqualityExpressionContext* ctx) override;
+    std::any visitRelationalExpression(ComplierParser::RelationalExpressionContext* ctx) override;
+    std::any visitShiftExpression(ComplierParser::ShiftExpressionContext* ctx) override;
+    std::any visitAdditiveExpression(ComplierParser::AdditiveExpressionContext* ctx) override;
+    std::any visitMultiplicativeExpression(
+        ComplierParser::MultiplicativeExpressionContext* ctx) override;
+    std::any visitCastExpression(ComplierParser::CastExpressionContext* ctx) override;
+    std::any visitUnaryExpression(ComplierParser::UnaryExpressionContext* ctx) override;
+    std::any visitPostfixExpression(ComplierParser::PostfixExpressionContext* ctx) override;
     std::any visitDeclarationSpecifiers2(
         ComplierParser::DeclarationSpecifiers2Context* ctx) override;
     std::any visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx) override;
     std::any visitDirectAbstractDeclarator(
         ComplierParser::DirectAbstractDeclaratorContext* ctx) override;
     std::any visitTypeName(ComplierParser::TypeNameContext* ctx) override;
+    std::any visitBlockItem(ComplierParser::BlockItemContext* ctx) override;
     std::any visitParameterTypeList(ComplierParser::ParameterTypeListContext* ctx) override;
     std::any visitCompoundStatement(ComplierParser::CompoundStatementContext* ctx) override;
     std::any visitSpecifierQualifierList(

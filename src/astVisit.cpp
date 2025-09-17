@@ -2,6 +2,7 @@
 #include "ComplierBaseVisitor.h"
 #include "ComplierLexer.h"
 #include "ComplierParser.h"
+#include <ASM.hpp>
 #include <functional>
 #include <tree/TerminalNode.h>
 template <class CAST> CAST ac(auto&& in)
@@ -168,16 +169,17 @@ std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionC
         }
     }
     auto funnowptr = obj.symbol_table.add_global_func_def(basetype);
-    if(!funnowptr)
+    if (!funnowptr)
     {
         return std::unexpected<error>(error::double_defined);
     }
     funcnow = funnowptr;
-    auto ret = ac<std::expected<bool, error>>(visitCompoundStatement(ctx->compoundStatement()));
-    if(!ret)
+    auto compoundRet =
+        ac<std::expected<bool, error>>(visitCompoundStatement(ctx->compoundStatement()));
+    if (!compoundRet)
     {
         funcnow = nullptr;
-        return std::unexpected<error>(ret.error());
+        return std::unexpected<error>(compoundRet.error());
     }
     else
     {
@@ -447,7 +449,11 @@ std::any astVisitor::visitParameterTypeList(ComplierParser::ParameterTypeListCon
 }
 std::any astVisitor::visitCompoundStatement(ComplierParser::CompoundStatementContext* ctx)
 {
-    return std::any();
+    if (auto ptr = ctx->blockItemList())
+    {
+        return visitBlockItemList(ctx->blockItemList());
+    }
+    return std::expected<bool, error>(true);
 }
 std::any astVisitor::visitParameterList(ComplierParser::ParameterListContext* ctx)
 {
@@ -621,6 +627,220 @@ std::any astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarat
     }
     return std::expected<Type, error>(vars);
 }
+std::any astVisitor::visitBlockItemList(ComplierParser::BlockItemListContext* ctx)
+{
+    for (auto each : ctx->blockItem())
+    {
+        if (auto ret = ac<std::expected<bool, error>>(visitBlockItem(each)); !ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+    }
+    return std::expected<bool, error>(true);
+}
+std::any astVisitor::visitStatement(ComplierParser::StatementContext* ctx)
+{
+    if (ctx->compoundStatement())
+    {
+        return visitCompoundStatement(ctx->compoundStatement());
+    }
+    else if (ctx->expressionStatement())
+    {
+        return visitExpressionStatement(ctx->expressionStatement());
+    }
+    else if (ctx->selectionStatement())
+    {
+        return visitSelectionStatement(ctx->selectionStatement());
+    }
+    else if (ctx->iterationStatement())
+    {
+        return visitIterationStatement(ctx->iterationStatement());
+    }
+    else if (ctx->jumpStatement())
+    {
+        return visitJumpStatement(ctx->jumpStatement());
+    }
+    else if (ctx->labeledStatement())
+    {
+        return visitLabeledStatement(ctx->labeledStatement());
+    }
+}
+std::any astVisitor::visitExpressionStatement(ComplierParser::ExpressionStatementContext* ctx)
+{
+    if (ctx->expression())
+    {
+        auto ret = ac<std::expected<bool, error>>(visitExpression(ctx->expression()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        funcnow->asms.push_back(ASM{ASM::basic_asm::POP});
+    }
+    return std::expected<bool, error>(true);
+}
+std::any astVisitor::visitExpression(ComplierParser::ExpressionContext* ctx)
+{
+    for (int i = 0; i < ctx->assignmentExpression().size(); i++)
+    {
+        auto ret = ac<std::expected<Type, error>>(
+            visitAssignmentExpression(ctx->assignmentExpression()[i]));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        if (i != ctx->assignmentExpression().size() - 1)
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::POP});
+        }
+        else
+        {
+            return std::expected<Type, error>(ret.value());
+        }
+    }
+}
+std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionContext* ctx)
+{
+    // [TODO] DigitSequence
+    if (ctx->conditionalExpression())
+    {
+        return visitConditionalExpression(ctx->conditionalExpression());
+    }
+    else if (ctx->assignmentOperator())
+    {
+        auto uret = ac<std::expected<Type, error>>(visitUnaryExpression(ctx->unaryExpression()));
+        if (!uret)
+        {
+            return std::unexpected<error>(uret.error());
+        }
+        if (funcnow->asms.back() != "LC" && funcnow->asms.back() != "LI") // 不是左值
+        {
+            return std::unexpected<error>(error::expected_lvalue);
+        }
+        funcnow->asms.pop_back();
+        if (ctx->assignmentOperator()->getText() == "=")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::MOVE, "stack", "ax"});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH}); // 拷贝一份左值地址实现返回值
+            auto aret = ac<std::expected<Type, error>>(
+                visitAssignmentExpression(ctx->assignmentExpression()));
+            if (!aret)
+            {
+                return std::unexpected<error>(aret.error());
+            }
+            if (uret.value().getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SC});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+            }
+            else if (uret.value().getsize() ==
+                     Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+        }
+        else
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::MOVE, "stack", "ax"});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
+            funcnow->asms.push_back(
+                ASM{ASM::basic_asm::PUSH}); // 拷贝两份左值地址实现取值运算，存值，返回值
+            if (uret.value().getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+            }
+            else if (uret.value().getsize() ==
+                     Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+            auto aret = ac<std::expected<Type, error>>(
+                visitAssignmentExpression(ctx->assignmentExpression()));
+            if (!aret)
+            {
+                return std::unexpected<error>(aret.error());
+            }
+
+            if (ctx->assignmentOperator()->getText() == "+=")
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
+            }
+            else if (ctx->assignmentOperator()->getText() == "-=")
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SUB});
+            }
+            else if (ctx->assignmentOperator()->getText() == "*=")
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::MUL});
+            }
+            else if (ctx->assignmentOperator()->getText() == "/=")
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::DIV});
+            }
+            else if (ctx->assignmentOperator()->getText() == "%=")
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::MOD});
+            }
+            else if (ctx->assignmentOperator()->getText() == "<<=")
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LSHIFT});
+            }
+            else if (ctx->assignmentOperator()->getText() == ">>=")
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::RSHIFT});
+            }
+            else if (ctx->assignmentOperator()->getText() == "^=")
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::XOR});
+            }
+            // [TODO] bit operator asm
+
+            if (uret.value().getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SC});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+            }
+            else if (uret.value().getsize() ==
+                     Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+        }
+    }
+}
+std::any astVisitor::visitConditionalExpression(ComplierParser::ConditionalExpressionContext* ctx)
+{
+    if (ctx->logicalOrExpression())
+    {
+        auto lret =
+            ac<std::expected<Type, error>>(visitLogicalOrExpression(ctx->logicalOrExpression()));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+    }
+    if (ctx->expression() && ctx->conditionalExpression())
+    {
+        int pos = funcnow->asms.size();
+        funcnow->asms.push_back("HOLD");
+        auto eret = ac<std::expected<Type, error>>(visitExpression(ctx->expression()));
+        if (!eret)
+        {
+            return std::unexpected<error>(eret.error());
+        }
+        funcnow->asms[pos] = ASM{ASM::basic_asm::JZ, funcnow->asms.size() + 1}; // 跳过JMP
+        int pos2 = funcnow->asms.size();
+        funcnow->asms.push_back("HOLD");
+        auto cret = ac<std::expected<Type, error>>(
+            visitConditionalExpression(ctx->conditionalExpression()));
+        if (!cret)
+        {
+            return std::unexpected<error>(cret.error());
+        }
+        funcnow->asms[pos2] = ASM{ASM::basic_asm::JMP, funcnow->asms.size()};
+    }
+}
 std::any astVisitor::visitDeclarationSpecifiers2(ComplierParser::DeclarationSpecifiers2Context* ctx)
 {
     std::vector<Type> Types;
@@ -642,10 +862,585 @@ std::any astVisitor::visitDeclarationSpecifiers2(ComplierParser::DeclarationSpec
     }
     return std::expected<std::vector<Type>, error>(Types);
 }
+std::any astVisitor::visitLogicalOrExpression(ComplierParser::LogicalOrExpressionContext* ctx)
+{
+    // 注意处理多个||
+    std::function<std::expected<Type, error>(
+        std::span<ComplierParser::LogicalAndExpressionContext*>)>
+        func = [&func, this](std::span<ComplierParser::LogicalAndExpressionContext*> in)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitLogicalAndExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitLogicalAndExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 保存当前位置，用于生成条件跳转指令
+        int pos = funcnow->asms.size();
+        funcnow->asms.push_back("HOLD"); // 占位，后面会替换为实际指令
+        // 如果左操作数为true（非零），跳过右操作数的计算（短路）
+        // JNZ指令：当栈顶值非零时跳转
+        // 弹出左操作数结果，为右操作数腾出栈顶位置
+        funcnow->asms.push_back(ASM{ASM::basic_asm::POP});
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1)));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        funcnow->asms[pos] = ASM{ASM::basic_asm::JNZ, funcnow->asms.size()};
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::LogicalAndExpressionContext*>(
+        ctx->logicalAndExpression().data(), ctx->logicalAndExpression().size()));
+}
+std::any astVisitor::visitLogicalAndExpression(ComplierParser::LogicalAndExpressionContext* ctx)
+{
+    // 注意处理多个&&
+    std::function<std::expected<Type, error>(
+        std::span<ComplierParser::InclusiveOrExpressionContext*>)>
+        func = [&func, this](std::span<ComplierParser::InclusiveOrExpressionContext*> in)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitInclusiveOrExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitInclusiveOrExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 保存当前位置，用于生成条件跳转指令
+        int pos = funcnow->asms.size();
+        funcnow->asms.push_back("HOLD"); // 占位，后面会替换为实际指令
+        // 如果左操作数为true（非零），跳过右操作数的计算（短路）
+        // JNZ指令：当栈顶值非零时跳转
+        // 弹出左操作数结果，为右操作数腾出栈顶位置
+        funcnow->asms.push_back(ASM{ASM::basic_asm::POP});
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1)));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        funcnow->asms[pos] = ASM{ASM::basic_asm::JZ, funcnow->asms.size()};
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::InclusiveOrExpressionContext*>(
+        ctx->inclusiveOrExpression().data(), ctx->inclusiveOrExpression().size()));
+}
+std::any astVisitor::visitInclusiveOrExpression(ComplierParser::InclusiveOrExpressionContext* ctx)
+{
+    // 注意处理多个|
+    std::function<std::expected<Type, error>(
+        std::span<ComplierParser::ExclusiveOrExpressionContext*>)>
+        func = [&func, this](std::span<ComplierParser::ExclusiveOrExpressionContext*> in)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitExclusiveOrExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitExclusiveOrExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1)));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        funcnow->asms.push_back(ASM{ASM::basic_asm::OR});
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::ExclusiveOrExpressionContext*>(
+        ctx->exclusiveOrExpression().data(), ctx->exclusiveOrExpression().size()));
+}
+std::any astVisitor::visitExclusiveOrExpression(ComplierParser::ExclusiveOrExpressionContext* ctx)
+{
+    // 注意处理多个^
+    std::function<std::expected<Type, error>(std::span<ComplierParser::AndExpressionContext*>)>
+        func = [&func, this](std::span<ComplierParser::AndExpressionContext*> in)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitAndExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitAndExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1)));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        funcnow->asms.push_back(ASM{ASM::basic_asm::XOR});
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::AndExpressionContext*>(ctx->andExpression().data(),
+                                                                 ctx->andExpression().size()));
+}
+std::any astVisitor::visitAndExpression(ComplierParser::AndExpressionContext* ctx)
+{
+    // 注意处理多个&
+    std::function<std::expected<Type, error>(std::span<ComplierParser::EqualityExpressionContext*>)>
+        func = [&func, this](std::span<ComplierParser::EqualityExpressionContext*> in)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitEqualityExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitEqualityExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1)));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        funcnow->asms.push_back(ASM{ASM::basic_asm::XOR});
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::EqualityExpressionContext*>(
+        ctx->equalityExpression().data(), ctx->equalityExpression().size()));
+}
+std::any astVisitor::visitEqualityExpression(ComplierParser::EqualityExpressionContext* ctx)
+{
+    // 注意处理多个!= / ==
+    std::function<std::expected<Type, error>(
+        std::span<ComplierParser::RelationalExpressionContext*>, int)>
+        func = [&func, this, ctx](std::span<ComplierParser::RelationalExpressionContext*> in,
+                                  int index)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitRelationalExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitRelationalExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1), index + 1));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        if (ctx->children[index * 2 + 1]->getText() == "==")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::CMP});
+        }
+        else if (ctx->children[index * 2 + 1]->getText() == "!=")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::CMPN});
+        }
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::RelationalExpressionContext*>(
+                    ctx->relationalExpression().data(), ctx->relationalExpression().size()),
+                0);
+}
+std::any astVisitor::visitRelationalExpression(ComplierParser::RelationalExpressionContext* ctx)
+{
+    // 注意处理多个< > <= >=
+    std::function<std::expected<Type, error>(std::span<ComplierParser::ShiftExpressionContext*>,
+                                             int)>
+        func = [&func, this, ctx](std::span<ComplierParser::ShiftExpressionContext*> in, int index)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitShiftExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitShiftExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1), index + 1));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        if (ctx->children[index * 2 + 1]->getText() == "<")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::SMALL});
+        }
+        else if (ctx->children[index * 2 + 1]->getText() == ">")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::BIG});
+        }
+        else if (ctx->children[index * 2 + 1]->getText() == "<=")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::SMALLE});
+        }
+        else if (ctx->children[index * 2 + 1]->getText() == ">=")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::BIGE});
+        }
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::ShiftExpressionContext*>(ctx->shiftExpression().data(),
+                                                                   ctx->shiftExpression().size()),
+                0);
+}
+std::any astVisitor::visitShiftExpression(ComplierParser::ShiftExpressionContext* ctx)
+{
+    // 注意处理多个<< >>
+    std::function<std::expected<Type, error>(std::span<ComplierParser::AdditiveExpressionContext*>,
+                                             int)>
+        func =
+            [&func, this, ctx](std::span<ComplierParser::AdditiveExpressionContext*> in, int index)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitAdditiveExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitAdditiveExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1), index + 1));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        if (ctx->children[index * 2 + 1]->getText() == "<<")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::LSHIFT});
+        }
+        else if (ctx->children[index * 2 + 1]->getText() == ">>")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::RSHIFT});
+        }
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::AdditiveExpressionContext*>(
+                    ctx->additiveExpression().data(), ctx->additiveExpression().size()),
+                0);
+}
+std::any astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionContext* ctx)
+{
+    // 注意处理多个+ -
+    std::function<std::expected<Type, error>(
+        std::span<ComplierParser::MultiplicativeExpressionContext*>, int)>
+        func = [&func, this, ctx](std::span<ComplierParser::MultiplicativeExpressionContext*> in,
+                                  int index)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitMultiplicativeExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitMultiplicativeExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1), index + 1));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        if (ctx->children[index * 2 + 1]->getText() == "+")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
+        }
+        else if (ctx->children[index * 2 + 1]->getText() == "-")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::SUB});
+        }
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::MultiplicativeExpressionContext*>(
+                    ctx->multiplicativeExpression().data(), ctx->multiplicativeExpression().size()),
+                0);
+}
+std::any astVisitor::visitMultiplicativeExpression(
+    ComplierParser::MultiplicativeExpressionContext* ctx)
+{
+    // 注意处理多个* / %
+    std::function<std::expected<Type, error>(std::span<ComplierParser::CastExpressionContext*>,
+                                             int)>
+        func = [&func, this, ctx](std::span<ComplierParser::CastExpressionContext*> in, int index)
+    {
+        if (in.size() == 1)
+        {
+            return ac<std::expected<Type, error>>(visitCastExpression(in[0]));
+        }
+        auto lret = ac<std::expected<Type, error>>(visitCastExpression(in[0]));
+        if (!lret)
+        {
+            return std::unexpected<error>(lret.error());
+        }
+        // 计算右侧表达式
+        auto rret = ac<std::expected<Type, error>>(func(in.subspan(1, in.size() - 1), index + 1));
+        if (!rret)
+        {
+            return std::unexpected<error>(rret.error());
+        }
+        if (ctx->children[index * 2 + 1]->getText() == "*")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::MUL});
+        }
+        else if (ctx->children[index * 2 + 1]->getText() == "/")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::DIV});
+        }
+        else if (ctx->children[index * 2 + 1]->getText() == "%")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::MOD});
+        }
+        // 返回计算结果类型
+        return rret;
+    };
+    return func(std::span<ComplierParser::CastExpressionContext*>(ctx->castExpression().data(),
+                                                                  ctx->castExpression().size()),
+                0);
+}
+std::any astVisitor::visitCastExpression(ComplierParser::CastExpressionContext* ctx)
+{
+    if (ctx->castExpression())
+    {
+        auto cret = ac<std::expected<Type, error>>(visitCastExpression(ctx->castExpression()));
+        if (!cret)
+        {
+            return std::unexpected<error>(cret.error());
+        }
+        // [TODO] visitTypeName
+        auto tret = ac<std::expected<Type, error>>(visitTypeName(ctx->typeName()));
+        if (!tret)
+        {
+            return std::unexpected<error>(tret.error());
+        }
+        return std::expected<Type, error>(tret.value());
+    }
+    else if (ctx->unaryExpression())
+    {
+        return visitUnaryExpression(ctx->unaryExpression());
+    }
+    //[TODO] DigitSequence 何意义?
+}
 
+std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ctx)
+{
+    Type type;
+    if (ctx->postfixExpression())
+    {
+        auto pret =
+            ac<std::expected<Type, error>>(visitPostfixExpression(ctx->postfixExpression()));
+        if (!pret)
+        {
+            return std::unexpected<error>(pret.error());
+        }
+        type = pret.value();
+    }
+    else if (ctx->unaryOperator())
+    {
+        if (ctx->unaryOperator()->getText() == "&")
+        {
+            auto cret = ac<std::expected<Type, error>>(visitCastExpression(ctx->castExpression()));
+            if (!cret)
+            {
+                return std::unexpected<error>(cret.error());
+            }
+            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI")
+            {
+                funcnow->asms.pop_back();
+            }
+            else
+            {
+                return std::unexpected<error>(error::expected_lvalue);
+            }
+            if (cret.value().kind == Type::Kind::Pointer)
+            {
+                type = cret.value();
+                type.arr_or_ptr_num++;
+            }
+            else
+            {
+                type = Type{Type::Kind::Pointer, 1};
+                type.pushTop(cret.value());
+            }
+        }
+        else if (ctx->unaryOperator()->getText() == "*")
+        {
+            auto cret = ac<std::expected<Type, error>>(visitCastExpression(ctx->castExpression()));
+            if (!cret)
+            {
+                return std::unexpected<error>(cret.error());
+            }
+            type = cret.value();
+            if (cret.value().getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+            else if (cret.value().getsize() ==
+                     Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+            }
+            type = Type{Type::Kind::Basic, Type::BasicType::Int};
+        }
+        else if (ctx->unaryOperator()->getText() == "+") //+12
+        {
+            auto cret = ac<std::expected<Type, error>>(visitCastExpression(ctx->castExpression()));
+            if (!cret)
+            {
+                return std::unexpected<error>(cret.error());
+            }
+            type = cret.value();
+        }
+        else if (ctx->unaryOperator()->getText() == "-") //-12
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 0});
+            auto cret = ac<std::expected<Type, error>>(visitCastExpression(ctx->castExpression()));
+            if (!cret)
+            {
+                return std::unexpected<error>(cret.error());
+            }
+            type = cret.value();
+            funcnow->asms.push_back(ASM{ASM::basic_asm::SUB});
+        }
+    }
+    else if (ctx->typeName())
+    {
+        auto cret = ac<std::expected<Type, error>>(visitTypeName(ctx->typeName()));
+        if (!cret)
+        {
+            return std::unexpected<error>(cret.error());
+        }
+        if ((ctx->typeName() - 1)->getText() == "sizeof")
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, cret.value().getsize()});
+            type = Type{Type::Kind::Basic, Type::BasicType::Int};
+        }
+        // [TODO] alignas
+    }
+    for (int i = ctx->children.size() - 1; i >= 0; i--)
+    {
+        if (ctx->children[i]->getText() == "++")
+        {
+            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI")
+            {
+                funcnow->asms.pop_back();
+            }
+            else
+            {
+                return std::unexpected<error>(error::expected_lvalue);
+            }
+            funcnow->asms.push_back(ASM{ASM::basic_asm::MOVE, "stack", "ax"});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
+            if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SC});
+            }
+            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
+            }
+        }
+        else if (ctx->children[i]->getText() == "--")
+        {
+            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI")
+            {
+                funcnow->asms.pop_back();
+            }
+            else
+            {
+                return std::unexpected<error>(error::expected_lvalue);
+            }
+            funcnow->asms.push_back(ASM{ASM::basic_asm::MOVE, "stack", "ax"});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
+            if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SUB});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SC});
+            }
+            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SUB});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
+            }
+        }
+        //[TODO] sizeof无副作用
+        else if (ctx->children[i]->getText() == "sizeof" &&
+                 ctx->children[i + 1]->getText() != "(") // 排除分支3的sizeof
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM,type.getsize()});
+            type = Type{Type::Kind::Basic, Type::BasicType::Int};
+        }
+    }
+    return std::expected<Type, error>(type);
+}
+std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext* ctx)
+{
+     
+}
 std::any astVisitor::visitTypeName(ComplierParser::TypeNameContext* ctx)
 {
     // typeName由specifierQualifierList和可选的abstractDeclarator组成
+}
+
+std::any astVisitor::visitBlockItem(ComplierParser::BlockItemContext* ctx)
+{
+    if (ctx->statement())
+    {
+        return visitStatement(ctx->statement());
+    }
+    else if (ctx->declaration())
+    {
+        auto ret =
+            ac<std::expected<std::vector<Type>, error>>(visitDeclaration(ctx->declaration()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        for (auto& each : ret.value())
+        {
+            varDef var;
+            var.name = each.id;
+            var.type = *each.subType;
+            auto varptr = funcnow->add_var(var);
+            if (!varptr)
+            {
+                return std::unexpected<error>(error::double_defined);
+            }
+        }
+    }
+    return std::expected<bool, error>(true);
 }
 
 std::any astVisitor::visitSpecifierQualifierList(ComplierParser::SpecifierQualifierListContext* ctx)

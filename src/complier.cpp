@@ -4,6 +4,7 @@
 #include "ComplierParser.h"
 #include "obj.h"
 #include "preprocessor.hpp"
+#include "ASM.hpp"
 #include <antlr4-runtime/antlr4-runtime.h>
 #include <astVisit.h>
 #include <filesystem>
