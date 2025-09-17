@@ -1399,7 +1399,7 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
         else if (ctx->children[i]->getText() == "sizeof" &&
                  ctx->children[i + 1]->getText() != "(") // 排除分支3的sizeof
         {
-            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM,type.getsize()});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, type.getsize()});
             type = Type{Type::Kind::Basic, Type::BasicType::Int};
         }
     }
@@ -1407,7 +1407,92 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
 }
 std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext* ctx)
 {
-     
+    // 注意处理多个后缀
+    std::function<std::expected<Type, error>(int, int)> func =
+        [&func, this, ctx](int start, int end) -> std::expected<Type, error>
+    {
+        auto todo = ctx->children[end - 1];
+        if (todo->getText() == "(") // func call
+        {
+            if (ctx->children[end]->getText() != ")") // 有experionlist
+            {
+                auto el = ac<std::expected<bool, error>>((visitArgumentExpressionList(
+                    dc<ComplierParser::ArgumentExpressionListContext*>(ctx->children[end]))));
+                if (!el)
+                {
+                    return std::unexpected<error>(el.error());
+                }
+            }
+            auto funcaddr = ac<std::expected<Type, error>>(func(0, end - 1)); // 解析函数地址
+            if (!funcaddr)
+            {
+                return std::unexpected<error>(funcaddr.error());
+            }
+            funcnow->asms.push_back(ASM{ASM::basic_asm::CALL});
+            Type rettype = funcaddr.value();
+            if (funcaddr.value().kind == Type::Kind::Pointer &&
+                funcaddr.value().arr_or_ptr_num == 1 &&
+                funcaddr.value().subType->kind == Type::Kind::Function) // 函数指针
+            {
+                rettype = *funcaddr.value().subType->subType;
+            }
+            else if (funcaddr.value().kind == Type::Kind::Function) // 函数
+            {
+                rettype = *funcaddr.value().subType;
+            }
+            else
+            {
+                return std::unexpected<error>(error::expected_func_or_funcptr);
+            }
+            return std::expected<Type, error>(rettype);
+        }
+        else if (todo->getText() == "[") // arr[] ptr[]
+        {
+            auto paret = ac<std::expected<Type, error>>(func(0, end - 1));
+            if (!paret)
+            {
+                return std::unexpected<error>(paret.error());
+            }
+            Type eleType;
+            if (paret.value().kind == Type::Kind::Pointer && paret.value().arr_or_ptr_num == 1)
+            {
+                eleType = *paret.value().subType;
+            }
+            else if (paret.value().kind == Type::Kind::Pointer && paret.value().arr_or_ptr_num > 1)
+            {
+                eleType = paret.value();
+                eleType.arr_or_ptr_num--;
+            }
+            else if (paret.value().kind == Type::Kind::Array)
+            {
+                eleType = *paret.value().subType;
+            }
+            auto eret = ac<std::expected<Type, error>>(
+                visitExpression(dc<ComplierParser::ExpressionContext*>(ctx->children[end])));
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, eleType.getsize()});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::MUL});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
+            if (eleType.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+            else if (eleType.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+            }
+            return std::expected<Type, error>(eleType);
+        }
+        else if (end == 0)
+        {
+            return ac<std::expected<Type, error>>(visitPrimaryExpression(
+                dc<ComplierParser::PrimaryExpressionContext*>(ctx->children[0])));
+        }
+    };
+    return func(0, ctx->children.size());
+}
+std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext* ctx)
+{
+    return std::any();
 }
 std::any astVisitor::visitTypeName(ComplierParser::TypeNameContext* ctx)
 {

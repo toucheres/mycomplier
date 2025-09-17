@@ -54,6 +54,7 @@ struct astVisitor : public ComplierBaseVisitor
     std::any visitCastExpression(ComplierParser::CastExpressionContext* ctx) override;
     std::any visitUnaryExpression(ComplierParser::UnaryExpressionContext* ctx) override;
     std::any visitPostfixExpression(ComplierParser::PostfixExpressionContext* ctx) override;
+    std::any visitPrimaryExpression(ComplierParser::PrimaryExpressionContext* ctx) override;
     std::any visitDeclarationSpecifiers2(
         ComplierParser::DeclarationSpecifiers2Context* ctx) override;
     std::any visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx) override;
