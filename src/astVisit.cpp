@@ -451,7 +451,13 @@ std::any astVisitor::visitCompoundStatement(ComplierParser::CompoundStatementCon
 {
     if (auto ptr = ctx->blockItemList())
     {
-        return visitBlockItemList(ctx->blockItemList());
+        funcnow->enter_scope();
+        auto ret = ac<std::expected<bool, error>>(visitBlockItemList(ctx->blockItemList()));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+        funcnow->exit_scope();
     }
     return std::expected<bool, error>(true);
 }
@@ -648,6 +654,7 @@ std::any astVisitor::visitStatement(ComplierParser::StatementContext* ctx)
     {
         return visitExpressionStatement(ctx->expressionStatement());
     }
+    // [TODO] finish
     else if (ctx->selectionStatement())
     {
         return visitSelectionStatement(ctx->selectionStatement());
@@ -1639,6 +1646,47 @@ std::any astVisitor::visitBlockItem(ComplierParser::BlockItemContext* ctx)
 
 std::any astVisitor::visitSpecifierQualifierList(ComplierParser::SpecifierQualifierListContext* ctx)
 {
+}
+
+std::any astVisitor::visitSelectionStatement(ComplierParser::SelectionStatementContext* ctx)
+{
+    if (ctx->children[0]->getText() == "if")
+    {
+        auto eret = ac<std::expected<Type, error>>(visitExpression(ctx->expression()));
+        if (!eret)
+        {
+            return std::unexpected<error>(eret.error());
+        }
+        int after_expr = funcnow->asms.size();
+        funcnow->asms.push_back("HOLD"); // for jz
+        auto fret = ac<std::expected<bool, error>>(visitStatement(ctx->statement()[0]));
+        if (!fret)
+        {
+            return std::unexpected<error>(fret.error());
+        }
+        if (ctx->statement().size() == 2) // 有else
+        {
+            int after_id = funcnow->asms.size();
+            funcnow->asms.push_back("HOLD"); // for 'if' statments jump through 'else' to end
+            funcnow->asms[after_expr] =
+                ASM{ASM::basic_asm::JZ, "thisfunc@" + std::to_string(funcnow->asms.size())};
+
+            auto elret = ac<std::expected<bool, error>>(visitStatement(ctx->statement()[1]));
+            if (!elret)
+            {
+                return std::unexpected<error>(elret.error());
+            }
+            funcnow->asms[after_id] =
+                ASM{ASM::basic_asm::JZ, "thisfunc@" + std::to_string(funcnow->asms.size())};
+        }
+        else // 无else
+        {
+            funcnow->asms[after_expr] =
+                ASM{ASM::basic_asm::JZ, "thisfunc@" + std::to_string(funcnow->asms.size())};
+        }
+    }
+    // [TODO] switch
+    return std::expected<bool, error>(true);
 }
 
 std::any astVisitor::visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx)

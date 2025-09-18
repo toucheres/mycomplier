@@ -1,6 +1,11 @@
 int main()
 {
-    int a;
-    char b;
-    a + b;
+    if (1)
+    {
+        2;
+    }
+    else
+    {
+        3;
+    }
 }

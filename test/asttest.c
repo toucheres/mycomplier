@@ -11,12 +11,3 @@ int funcdef()
     int b;
     int c;
 }
-/*
-Type        <- ArrType / PointerType / BasicType
-ArrType     <- ArrSubType  '[' expr ']'
-PointerType <- PtrSubType '*'
-ArrSubType  <- PointerType / BasicType
-PointerSubType <- BasicType
-BasicType   <- 'int'
-%whitespace <- [ \t\r\n]*
-*/
