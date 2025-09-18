@@ -1,11 +1,8 @@
+int fun(int a, int b)
+{
+    1;
+}
 int main()
 {
-    if (1)
-    {
-        2;
-    }
-    else
-    {
-        3;
-    }
+    fun(1, 2);
 }

@@ -1447,6 +1447,7 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
         {
             if (ctx->children[end]->getText() != ")") // 有experionlist
             {
+                auto str = ctx->children[end]->getText();
                 auto el = ac<std::expected<bool, error>>((visitArgumentExpressionList(
                     dc<ComplierParser::ArgumentExpressionListContext*>(ctx->children[end]))));
                 if (!el)
@@ -1686,6 +1687,21 @@ std::any astVisitor::visitSelectionStatement(ComplierParser::SelectionStatementC
         }
     }
     // [TODO] switch
+    return std::expected<bool, error>(true);
+}
+
+std::any astVisitor::visitArgumentExpressionList(ComplierParser::ArgumentExpressionListContext* ctx)
+{
+    // 实参从右向左入栈
+    for (int i = ctx->assignmentExpression().size() - 1; i >= 0; i--)
+    {
+        auto ret = ac<std::expected<Type, error>>(
+            visitAssignmentExpression(ctx->assignmentExpression()[i]));
+        if (!ret)
+        {
+            return std::unexpected<error>(ret.error());
+        }
+    }
     return std::expected<bool, error>(true);
 }
 
