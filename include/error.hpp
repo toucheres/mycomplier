@@ -6,6 +6,7 @@ enum class error
     undifined_type,
     undifined_func,
     undifined_var,
+    undifined_id,
     undifined_obj_init_fun,
     double_defined,
     double_type,

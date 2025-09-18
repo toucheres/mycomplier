@@ -669,7 +669,7 @@ std::any astVisitor::visitExpressionStatement(ComplierParser::ExpressionStatemen
 {
     if (ctx->expression())
     {
-        auto ret = ac<std::expected<bool, error>>(visitExpression(ctx->expression()));
+        auto ret = ac<std::expected<Type, error>>(visitExpression(ctx->expression()));
         if (!ret)
         {
             return std::unexpected<error>(ret.error());
@@ -819,6 +819,7 @@ std::any astVisitor::visitConditionalExpression(ComplierParser::ConditionalExpre
         {
             return std::unexpected<error>(lret.error());
         }
+        return std::expected<Type, error>(lret.value());
     }
     if (ctx->expression() && ctx->conditionalExpression())
     {
@@ -839,6 +840,7 @@ std::any astVisitor::visitConditionalExpression(ComplierParser::ConditionalExpre
             return std::unexpected<error>(cret.error());
         }
         funcnow->asms[pos2] = ASM{ASM::basic_asm::JMP, funcnow->asms.size()};
+        return std::expected<Type, error>(Type{Type::Kind::Basic, Type::BasicType::Char});
     }
 }
 std::any astVisitor::visitDeclarationSpecifiers2(ComplierParser::DeclarationSpecifiers2Context* ctx)
@@ -1201,7 +1203,6 @@ std::any astVisitor::visitMultiplicativeExpression(
                                              int)>
         func = [&func, this, ctx](std::span<ComplierParser::CastExpressionContext*> in,
                                   int index) -> std::expected<Type, error>
-
     {
         if (in.size() == 1)
         {
@@ -1428,6 +1429,12 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
     std::function<std::expected<Type, error>(int, int)> func =
         [&func, this, ctx](int start, int end) -> std::expected<Type, error>
     {
+        if (end == 0)
+        {
+            auto str = ctx->children[0]->getText();
+            return ac<std::expected<Type, error>>(visitPrimaryExpression(
+                dc<ComplierParser::PrimaryExpressionContext*>(ctx->children[0])));
+        }
         auto todo = ctx->children[end - 1];
         if (todo->getText() == "(") // func call
         {
@@ -1499,10 +1506,9 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
             }
             return std::expected<Type, error>(eleType);
         }
-        else if (end == 0)
+        else
         {
-            return ac<std::expected<Type, error>>(visitPrimaryExpression(
-                dc<ComplierParser::PrimaryExpressionContext*>(ctx->children[0])));
+            return func(0, end - 1);
         }
     };
     return func(0, ctx->children.size());
@@ -1512,29 +1518,7 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
     if (ctx->Identifier())
     {
         auto var = funcnow->lookup_var(ctx->Identifier()->getText());
-        if (!var) // 函数局部为找到
-        {
-            auto varg = obj.symbol_table.lookup_var_decl(ctx->Identifier()->getText());
-            if (!varg)
-            {
-                return std::unexpected<error>(error::undifined_var);
-            }
-            else
-            {
-                funcnow->asms.push_back(
-                    ASM{ASM::basic_asm::IMM, "globalvar@" + ctx->Identifier()->getText()});
-                if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-                {
-                    funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
-                }
-                else if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-                {
-                    funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
-                }
-                return std::expected<Type, error>(*varg);
-            }
-        }
-        else
+        if (var) // 函数局部找到
         {
             funcnow->asms.push_back(ASM{ASM::basic_asm::LEA, var->addr});
             if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
@@ -1547,6 +1531,29 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
             }
             return std::expected<Type, error>(var->type);
         }
+        auto varg = obj.symbol_table.lookup_var_decl(ctx->Identifier()->getText());
+        if (varg) // 全局变量
+        {
+            funcnow->asms.push_back(
+                ASM{ASM::basic_asm::IMM, "globalvar@" + ctx->Identifier()->getText()});
+            if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+            }
+            else if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+            return std::expected<Type, error>(*varg);
+        }
+        auto funcret = obj.symbol_table.lookup_func_decl(ctx->Identifier()->getText());
+        if (funcret)
+        {
+            funcnow->asms.push_back(
+                ASM{ASM::basic_asm::IMM, "func@" + ctx->Identifier()->getText()});
+            return std::expected<Type, error>(*funcret);
+        }
+        return std::unexpected<error>(error::undifined_id);
     }
     else if (ctx->Constant()) // 常量处理
     {
@@ -1586,7 +1593,15 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
             return std::unexpected<error>(error::unsurpported_num);
         }
     }
-    // 处理字符串字面量和其他表达式类型...
+    else if (ctx->expression()) // (expr)
+    {
+        return visitExpression(ctx->expression());
+    }
+    else
+    {
+        auto str = ctx->getText();
+        return std::unexpected<error>(error::invalid_constant);
+    }
 }
 std::any astVisitor::visitTypeName(ComplierParser::TypeNameContext* ctx)
 {

@@ -1,20 +1,45 @@
 #include "complier.hpp"
+#include "ASM.hpp"
 #include "ComplierBaseVisitor.h"
 #include "ComplierLexer.h"
 #include "ComplierParser.h"
 #include "obj.h"
 #include "preprocessor.hpp"
-#include "ASM.hpp"
 #include <antlr4-runtime/antlr4-runtime.h>
 #include <astVisit.h>
 #include <filesystem>
 #include <format>
 #include <iostream>
 #include <regex>
-//[REWRITE] 修改 getsize() 方法以支持新的类型表示
 size_t Type::getsize() const
 {
-    return 0;
+    if (this->kind == Kind::Pointer)
+    {
+        return VCPU::size_word;
+    }
+    else if (this->kind == Kind::Basic)
+    {
+        if (this->basic_type == Type::BasicType::Char)
+        {
+            return 1;
+        }
+        else if (this->basic_type == Type::BasicType::Int)
+        {
+            return VCPU::size_word;
+        }
+    }
+    else if (this->kind == Kind::Array)
+    {
+        return this->arr_or_ptr_num * subType->getsize();
+    }
+    else if (this->kind == Kind::ID )
+    {
+        return  subType->getsize();
+    }
+    else if (this->kind == Kind::Function)
+    {
+        return VCPU::size_word;
+    }
 }
 
 bool Type::operator==(const Type& other_) const
@@ -44,20 +69,20 @@ bool Type::operator==(const Type& other_) const
     }
     else if (dkind == Type::Kind::Function)
     {
-        if(one->args.size()!=other->args.size())
+        if (one->args.size() != other->args.size())
         {
             return false;
         }
-        for (size_t i = 0; i < one->args.size();i++)
+        for (size_t i = 0; i < one->args.size(); i++)
         {
-            if(one->args[i]!= other->args[i])
+            if (one->args[i] != other->args[i])
             {
                 return false;
             }
         }
         return one->basic_type == other->basic_type;
     }
-    else if(dkind==Type::Kind::Undefined)
+    else if (dkind == Type::Kind::Undefined)
     {
         return false;
     }

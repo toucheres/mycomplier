@@ -42,8 +42,8 @@ struct Type
     };
     Type() = default;
     Type(const Type&) = default;
-    Type(Kind kind, BasicType arg);                   // for basic
-    Type(Kind kind, int arg);                  // for arr ,ptr
+    Type(Kind kind, BasicType arg);          // for basic
+    Type(Kind kind, int arg);                // for arr ,ptr
     Type(Kind kind, std::string arg);        // for id
     Type(Kind kind, std::vector<Type> args); // for function
     Kind kind = Kind::Undefined;
@@ -84,7 +84,12 @@ struct funcDef : Identifi
     const varDef* lookup_var(const std::string& name) const;
     const varDef* add_var(const varDef& vardef);
     bool add_arg(std::vector<varDef>& vardef);
-    funcDef() = default;
+    funcDef(const funcDef&) = default;
+    funcDef& operator=(const funcDef&) = default;
+    funcDef()
+    {
+        funcvar_stack.push_back(std::vector<varDef>());
+    };
 };
 
 struct OBJ;

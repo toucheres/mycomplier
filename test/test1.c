@@ -1,1 +1,9 @@
-int a(char b, long* (*c)[12]);
+int main()
+{
+    int* ptrdoublearr[12][13];
+    1 + 1;
+}
+int fun()
+{
+    sizeof(main);
+}
