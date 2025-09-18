@@ -15,6 +15,8 @@ enum class error
     unsurpport_directDeclarator,
     unsurpport_abstractDeclarator,
     unsurpported_op,
+    invalid_constant,
     expected_lvalue,
     expected_func_or_funcptr,
+    unsurpported_num
 };

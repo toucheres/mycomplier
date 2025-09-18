@@ -868,6 +868,7 @@ std::any astVisitor::visitLogicalOrExpression(ComplierParser::LogicalOrExpressio
     std::function<std::expected<Type, error>(
         std::span<ComplierParser::LogicalAndExpressionContext*>)>
         func = [&func, this](std::span<ComplierParser::LogicalAndExpressionContext*> in)
+        -> std::expected<Type, error>
     {
         if (in.size() == 1)
         {
@@ -904,6 +905,8 @@ std::any astVisitor::visitLogicalAndExpression(ComplierParser::LogicalAndExpress
     std::function<std::expected<Type, error>(
         std::span<ComplierParser::InclusiveOrExpressionContext*>)>
         func = [&func, this](std::span<ComplierParser::InclusiveOrExpressionContext*> in)
+        -> std::expected<Type, error>
+
     {
         if (in.size() == 1)
         {
@@ -940,6 +943,8 @@ std::any astVisitor::visitInclusiveOrExpression(ComplierParser::InclusiveOrExpre
     std::function<std::expected<Type, error>(
         std::span<ComplierParser::ExclusiveOrExpressionContext*>)>
         func = [&func, this](std::span<ComplierParser::ExclusiveOrExpressionContext*> in)
+        -> std::expected<Type, error>
+
     {
         if (in.size() == 1)
         {
@@ -967,7 +972,10 @@ std::any astVisitor::visitExclusiveOrExpression(ComplierParser::ExclusiveOrExpre
 {
     // 注意处理多个^
     std::function<std::expected<Type, error>(std::span<ComplierParser::AndExpressionContext*>)>
-        func = [&func, this](std::span<ComplierParser::AndExpressionContext*> in)
+        func =
+            [&func, this](
+                std::span<ComplierParser::AndExpressionContext*> in) -> std::expected<Type, error>
+
     {
         if (in.size() == 1)
         {
@@ -996,6 +1004,8 @@ std::any astVisitor::visitAndExpression(ComplierParser::AndExpressionContext* ct
     // 注意处理多个&
     std::function<std::expected<Type, error>(std::span<ComplierParser::EqualityExpressionContext*>)>
         func = [&func, this](std::span<ComplierParser::EqualityExpressionContext*> in)
+        -> std::expected<Type, error>
+
     {
         if (in.size() == 1)
         {
@@ -1025,7 +1035,8 @@ std::any astVisitor::visitEqualityExpression(ComplierParser::EqualityExpressionC
     std::function<std::expected<Type, error>(
         std::span<ComplierParser::RelationalExpressionContext*>, int)>
         func = [&func, this, ctx](std::span<ComplierParser::RelationalExpressionContext*> in,
-                                  int index)
+                                  int index) -> std::expected<Type, error>
+
     {
         if (in.size() == 1)
         {
@@ -1062,7 +1073,9 @@ std::any astVisitor::visitRelationalExpression(ComplierParser::RelationalExpress
     // 注意处理多个< > <= >=
     std::function<std::expected<Type, error>(std::span<ComplierParser::ShiftExpressionContext*>,
                                              int)>
-        func = [&func, this, ctx](std::span<ComplierParser::ShiftExpressionContext*> in, int index)
+        func = [&func, this, ctx](std::span<ComplierParser::ShiftExpressionContext*> in,
+                                  int index) -> std::expected<Type, error>
+
     {
         if (in.size() == 1)
         {
@@ -1107,8 +1120,9 @@ std::any astVisitor::visitShiftExpression(ComplierParser::ShiftExpressionContext
     // 注意处理多个<< >>
     std::function<std::expected<Type, error>(std::span<ComplierParser::AdditiveExpressionContext*>,
                                              int)>
-        func =
-            [&func, this, ctx](std::span<ComplierParser::AdditiveExpressionContext*> in, int index)
+        func = [&func, this, ctx](std::span<ComplierParser::AdditiveExpressionContext*> in,
+                                  int index) -> std::expected<Type, error>
+
     {
         if (in.size() == 1)
         {
@@ -1146,7 +1160,8 @@ std::any astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionC
     std::function<std::expected<Type, error>(
         std::span<ComplierParser::MultiplicativeExpressionContext*>, int)>
         func = [&func, this, ctx](std::span<ComplierParser::MultiplicativeExpressionContext*> in,
-                                  int index)
+                                  int index) -> std::expected<Type, error>
+
     {
         if (in.size() == 1)
         {
@@ -1184,7 +1199,9 @@ std::any astVisitor::visitMultiplicativeExpression(
     // 注意处理多个* / %
     std::function<std::expected<Type, error>(std::span<ComplierParser::CastExpressionContext*>,
                                              int)>
-        func = [&func, this, ctx](std::span<ComplierParser::CastExpressionContext*> in, int index)
+        func = [&func, this, ctx](std::span<ComplierParser::CastExpressionContext*> in,
+                                  int index) -> std::expected<Type, error>
+
     {
         if (in.size() == 1)
         {
@@ -1492,7 +1509,84 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
 }
 std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext* ctx)
 {
-    return std::any();
+    if (ctx->Identifier())
+    {
+        auto var = funcnow->lookup_var(ctx->Identifier()->getText());
+        if (!var) // 函数局部为找到
+        {
+            auto varg = obj.symbol_table.lookup_var_decl(ctx->Identifier()->getText());
+            if (!varg)
+            {
+                return std::unexpected<error>(error::undifined_var);
+            }
+            else
+            {
+                funcnow->asms.push_back(
+                    ASM{ASM::basic_asm::IMM, "globalvar@" + ctx->Identifier()->getText()});
+                if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+                }
+                else if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+                }
+                return std::expected<Type, error>(*varg);
+            }
+        }
+        else
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::LEA, var->addr});
+            if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+            }
+            else if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+            return std::expected<Type, error>(var->type);
+        }
+    }
+    else if (ctx->Constant()) // 常量处理
+    {
+        std::string text = ctx->Constant()->getText();
+
+        // 处理字符常量
+        if (isCharacterConstant(text))
+        {
+            try
+            {
+                int value = parseCharacterConstant(text);
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, value});
+                return std::expected<Type, error>(Type{Type::Kind::Basic, Type::BasicType::Char});
+            }
+            catch (...)
+            {
+                return std::unexpected<error>(error::invalid_constant);
+            }
+        }
+        // 处理整型常量
+        else if (isIntegerConstant(text))
+        {
+            try
+            {
+                int value = parseIntegerConstant(text);
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, value});
+                return std::expected<Type, error>(Type{Type::Kind::Basic, Type::BasicType::Int});
+            }
+            catch (...)
+            {
+                return std::unexpected<error>(error::invalid_constant);
+            }
+        }
+        // [TODO] 其他类型的常量（如浮点数）
+        else
+        {
+            return std::unexpected<error>(error::unsurpported_num);
+        }
+    }
+    // 处理字符串字面量和其他表达式类型...
 }
 std::any astVisitor::visitTypeName(ComplierParser::TypeNameContext* ctx)
 {
@@ -1653,4 +1747,114 @@ std::any astVisitor::visitByTypeIndex(antlr4::ParserRuleContext* ctx)
     }
 
     return true; // 默认返回成功
+}
+// 处理整型常量，支持十进制、十六进制、八进制格式
+int astVisitor::parseIntegerConstant(const std::string& text)
+{
+    try
+    {
+        // 检查十六进制格式 (0x 或 0X 前缀)
+        if (text.size() > 2 && (text.substr(0, 2) == "0x" || text.substr(0, 2) == "0X"))
+        {
+            return std::stoi(text, nullptr, 16);
+        }
+        // 检查八进制格式 (0 前缀)
+        else if (text.size() > 0 && text[0] == '0')
+        {
+            return std::stoi(text, nullptr, 8);
+        }
+        // 默认十进制
+        else
+        {
+            return std::stoi(text, nullptr, 10);
+        }
+    }
+    catch (const std::exception& e)
+    {
+        throw error::invalid_constant;
+    }
+}
+
+// 处理字符常量，支持转义序列
+int astVisitor::parseCharacterConstant(const std::string& text)
+{
+    // 移除前后的单引号
+    std::string content = text.substr(1, text.size() - 2);
+
+    // 处理转义序列
+    if (content.size() > 0 && content[0] == '\\')
+    {
+        if (content.size() < 2)
+        {
+            throw error::invalid_constant;
+        }
+
+        switch (content[1])
+        {
+        case 'n':
+            return '\n'; // 换行
+        case 't':
+            return '\t'; // 制表符
+        case 'r':
+            return '\r'; // 回车
+        case '0':
+            return '\0'; // 空字符
+        case '\\':
+            return '\\'; // 反斜杠
+        case '\'':
+            return '\''; // 单引号
+        case '\"':
+            return '\"'; // 双引号
+        case 'x':
+        { // 十六进制表示 \xhh
+            if (content.size() < 4)
+            {
+                throw error::invalid_constant;
+            }
+            std::string hexValue = content.substr(2, 2);
+            try
+            {
+                return std::stoi(hexValue, nullptr, 16);
+            }
+            catch (...)
+            {
+                throw error::invalid_constant;
+            }
+        }
+        default:
+            throw error::invalid_constant;
+        }
+    }
+    else if (content.size() == 1)
+    {
+        // 普通字符
+        return static_cast<int>(content[0]);
+    }
+
+    throw error::invalid_constant;
+}
+
+// 检查是否为整型常量
+bool astVisitor::isIntegerConstant(const std::string& text)
+{
+    // 判断首字符是否为数字或负号
+    if (text.empty() || (text[0] != '-' && text[0] != '+' && !std::isdigit(text[0])))
+    {
+        return false;
+    }
+
+    // 检查是否包含单引号（字符常量特征）
+    if (text[0] == '\'' || text.find('\'') != std::string::npos)
+    {
+        return false;
+    }
+
+    return true;
+}
+
+// 检查是否为字符常量
+bool astVisitor::isCharacterConstant(const std::string& text)
+{
+    // 字符常量格式: 'x' 或 '\x'
+    return text.size() >= 3 && text[0] == '\'' && text[text.size() - 1] == '\'';
 }

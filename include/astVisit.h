@@ -15,6 +15,10 @@ struct astVisitor : public ComplierBaseVisitor
     // 辅助函数
     Type& getrootdecltor(Type& in);
     long long parseConstexpr(ComplierParser::AssignmentExpressionContext* expr);
+    int parseIntegerConstant(const std::string& text);
+    int parseCharacterConstant(const std::string& text);
+    bool isIntegerConstant(const std::string& text);
+    bool isCharacterConstant(const std::string& text);
 
   public:
     astVisitor(std::string name, OBJ& obj);
