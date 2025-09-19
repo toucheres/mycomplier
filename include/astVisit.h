@@ -73,4 +73,5 @@ struct astVisitor : public ComplierBaseVisitor
     std::any visitSelectionStatement(ComplierParser::SelectionStatementContext* ctx) override;
     std::any visitArgumentExpressionList(
         ComplierParser::ArgumentExpressionListContext* ctx) override;
+    std::any visitIterationStatement(ComplierParser::IterationStatementContext* ctx) override;
 };

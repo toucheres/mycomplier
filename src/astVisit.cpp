@@ -654,11 +654,11 @@ std::any astVisitor::visitStatement(ComplierParser::StatementContext* ctx)
     {
         return visitExpressionStatement(ctx->expressionStatement());
     }
-    // [TODO] finish
     else if (ctx->selectionStatement())
     {
         return visitSelectionStatement(ctx->selectionStatement());
     }
+    // [TODO] finish
     else if (ctx->iterationStatement())
     {
         return visitIterationStatement(ctx->iterationStatement());
@@ -1702,6 +1702,46 @@ std::any astVisitor::visitArgumentExpressionList(ComplierParser::ArgumentExpress
             return std::unexpected<error>(ret.error());
         }
     }
+    return std::expected<bool, error>(true);
+}
+
+std::any astVisitor::visitIterationStatement(ComplierParser::IterationStatementContext* ctx)
+{
+    if (ctx->children[0]->getText() == "while")
+    {
+        int startppos = funcnow->asms.size();
+        auto eret = ac<std::expected<Type, error>>(visitExpression(ctx->expression()));
+        if (!eret)
+        {
+            return std::unexpected<error>(eret.error());
+        }
+        int after_expr = funcnow->asms.size();
+        funcnow->asms.push_back("HOLD"); // for jz end
+        auto sret = ac<std::expected<bool, error>>(visitStatement(ctx->statement()));
+        if (!sret)
+        {
+            return std::unexpected<error>(sret.error());
+        }
+        funcnow->asms.push_back(ASM{ASM::basic_asm::JMP, "thisfunc@" + std::to_string(startppos)});
+        funcnow->asms[after_expr] =
+            ASM{ASM::basic_asm::JZ, "thisfunc@" + std::to_string(funcnow->asms.size())};
+
+        for (int i = startppos; i < funcnow->asms.size(); i++)
+        {
+            if (funcnow->asms[i] == "lable@break")
+            {
+                funcnow->asms[i] =
+                    ASM{ASM::basic_asm::JMP, "thisfunc@" + std::to_string(funcnow->asms.size())};
+            }
+            else if (funcnow->asms[i] == "lable@continue")
+            {
+                funcnow->asms[i] =
+                    ASM{ASM::basic_asm::JMP, "thisfunc@" + std::to_string(startppos)};
+            }
+        }
+        return std::expected<bool, error>(true);
+    }
+    // [TODO] 'for' statement
     return std::expected<bool, error>(true);
 }
 
