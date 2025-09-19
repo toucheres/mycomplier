@@ -3,6 +3,10 @@ int main()
     while (1)
     {
         2;
+        continue;
+        3;
+        break;
+        4;
     }
-    3;
+    5;
 }

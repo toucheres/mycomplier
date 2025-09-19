@@ -658,11 +658,11 @@ std::any astVisitor::visitStatement(ComplierParser::StatementContext* ctx)
     {
         return visitSelectionStatement(ctx->selectionStatement());
     }
-    // [TODO] finish
     else if (ctx->iterationStatement())
     {
         return visitIterationStatement(ctx->iterationStatement());
     }
+    // [TODO] finish
     else if (ctx->jumpStatement())
     {
         return visitJumpStatement(ctx->jumpStatement());
@@ -1743,6 +1743,31 @@ std::any astVisitor::visitIterationStatement(ComplierParser::IterationStatementC
     }
     // [TODO] 'for' statement
     return std::expected<bool, error>(true);
+}
+
+std::any astVisitor::visitJumpStatement(ComplierParser::JumpStatementContext* ctx)
+{
+    // [TODO] goto statement
+    if (ctx->children[0]->getText() == "continue")
+    {
+        funcnow->asms.push_back("lable@continue");
+        return std::expected<bool, error>(true);
+    }
+    else if (ctx->children[0]->getText() == "break")
+    {
+        funcnow->asms.push_back("lable@break");
+        return std::expected<bool, error>(true);
+    }
+    else if (ctx->children[0]->getText() == "return")
+    {
+        auto eret = ac<std::expected<Type, error>>(visitExpression(ctx->expression()));
+        if(!eret)
+        {
+            return std::unexpected<error>(eret.error());
+        }
+        funcnow->asms.push_back(ASM{ASM::basic_asm::RET});
+        return std::expected<bool, error>(true);
+    }
 }
 
 std::any astVisitor::visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx)
