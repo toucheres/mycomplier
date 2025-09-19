@@ -1,8 +1,9 @@
 #include "astVisit.h"
+#include "ASM.hpp"
 #include "ComplierBaseVisitor.h"
 #include "ComplierLexer.h"
 #include "ComplierParser.h"
-#include <ASM.hpp>
+#include "vm.h"
 #include <functional>
 #include <tree/TerminalNode.h>
 template <class CAST> CAST ac(auto&& in)
@@ -195,9 +196,10 @@ std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionC
                 return num + (align - num % align);
             }
         };
-        funcnow->asms[0] =
-            ASM{ASM::basic_asm::NVAR,
-                align_up(funcnow->max_stack_size, VCPU::size_word) / VCPU::size_word};
+        funcnow->asms[0] = ASM{ASM::basic_asm::NVAR,
+                               align_up(funcnow->max_stack_size - funcDef::parpera_for_stack_frame,
+                                        VCPU<>::size_word) /
+                                   VCPU<>::size_word};
         funcnow = nullptr;
         return std::expected<bool, error>(true);
     }

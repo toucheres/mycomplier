@@ -15,7 +15,7 @@ size_t Type::getsize() const
 {
     if (this->kind == Kind::Pointer)
     {
-        return VCPU::size_word;
+        return VCPU<>::size_word;
     }
     else if (this->kind == Kind::Basic)
     {
@@ -25,20 +25,24 @@ size_t Type::getsize() const
         }
         else if (this->basic_type == Type::BasicType::Int)
         {
-            return VCPU::size_word;
+            return VCPU<>::size_word / 2;
+        }
+        else if (this->basic_type == Type::BasicType::Long)
+        {
+            return VCPU<>::size_word;
         }
     }
     else if (this->kind == Kind::Array)
     {
         return this->arr_or_ptr_num * subType->getsize();
     }
-    else if (this->kind == Kind::ID )
+    else if (this->kind == Kind::ID)
     {
-        return  subType->getsize();
+        return subType->getsize();
     }
     else if (this->kind == Kind::Function)
     {
-        return VCPU::size_word;
+        return VCPU<>::size_word;
     }
 }
 
@@ -221,6 +225,37 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                             continue;
                         }
                     }
+                    for (int i = thisfuncstart; i < this->exe.asms.size(); i++)
+                    {
+                        std::regex pattern("globalvar@([a-zA-Z_][a-zA-Z0-9_]*)");
+                        std::smatch match;
+                        if (std::regex_search(this->exe.asms[i], match, pattern) &&
+                            match.size() > 1)
+                        {
+                            auto funnametoreaddr = match[1].str(); // 返回第一个捕获组
+                            size_t pos = match.position(0);
+                            size_t len = match.length(0);
+                            auto it = addrmap.find("globalvar@" + funnametoreaddr);
+                            if (it != addrmap.end())
+                            {
+                                // 替换为实际地址
+                                this->exe.asms[i].replace(pos, len, std::to_string(it->second));
+                            }
+                            else
+                            {
+                                auto ret = pushfunc(funnametoreaddr);
+                                if (!ret)
+                                {
+                                    return std::unexpected(error::undifined_func);
+                                }
+                                this->exe.asms[i].replace(pos, len, std::to_string(ret.value()));
+                            }
+                        }
+                        else
+                        {
+                            continue;
+                        }
+                    }
                 }
             }
         }
@@ -253,9 +288,6 @@ std::expected<std::vector<std::string>, error> linker::process()
         // x 必须是 2 的幂
         return (n + x - 1) & ~(x - 1);
     };
-    // 对其stack到4倍数
-    exe.asms.push_back(ASM{ASM::basic_asm::UP,                          // 整体移动sp,bp
-                           ceiling(exe.global_size, VCPU::size_word)}); // 向上对齐到 4 字节边界});
     // 拼接obj初始化函数
     for (auto& eachobj : objs)
     {
@@ -289,7 +321,7 @@ std::expected<std::vector<std::string>, error> linker::process()
 //     {
 //         return 1;
 //     }
-//     return VCPU::size_word;
+//     return VCPU<>::size_word;
 // }
 
 // Type::Type(std::shared_ptr<peg::Ast> astnode)
@@ -340,7 +372,7 @@ void funcDef::enter_scope()
 void funcDef::exit_scope()
 {
     funcvar_stack.pop_back();
-    stack_size_now = VCPU::size_word * 2;
+    stack_size_now = VCPU<>::size_word * 2;
     // 使用反向迭代器
     for (auto it = funcvar_stack.rbegin(); it != funcvar_stack.rend(); ++it)
     {
@@ -387,9 +419,9 @@ const varDef* funcDef::lookup_var(const std::string& inname) const
 const varDef* funcDef::add_var(const varDef& vardef)
 {
     varDef var = vardef;
-    var.addr = var.get_addr_in_mem(stack_size_now);
+    var.addr = -var.get_addr_in_mem(stack_size_now);
     var.is_defined = true;
-    stack_size_now = var.addr + var.type.getsize();
+    stack_size_now += var.type.getsize();
     max_stack_size = std::max(stack_size_now, max_stack_size);
     funcvar_stack.back().push_back(var);
     return &funcvar_stack.back().back();
@@ -397,10 +429,12 @@ const varDef* funcDef::add_var(const varDef& vardef)
 
 bool funcDef::add_arg(std::vector<varDef>& vardef)
 {
+    // argn ... arg1  ret oldbp localvar1
+    //           +16   +8    0       -8
     args = vardef;
     for (int i = 0; i < vardef.size(); i++)
     {
-        args[i].addr = -VCPU::size_word * (i + 3);
+        args[i].addr = VCPU<>::size_word * (i + 2);
     }
     return true;
 }
@@ -416,7 +450,7 @@ size_t varDef::get_addr_in_mem(size_t posnow)
     };
     if (type.getsize() > 1)
     {
-        return ceiling(posnow, VCPU::size_word);
+        return ceiling(posnow, std::min(VCPU<>::size_word, this->type.getsize()));
     }
     return posnow;
 }

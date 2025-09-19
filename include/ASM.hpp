@@ -15,8 +15,10 @@ struct ASM
         LEA,  // 将bp+arg推入栈顶
         LI,   // 栈顶为地址，替换栈顶为值
         LC,   // 栈顶为地址，替换栈顶为值
+        LW,   // 栈顶为地址，替换栈顶为值
         SI,   // 栈顶为值，次栈顶为地址
         SC,   // 栈顶为值，次栈顶为地址
+        SW,   // 栈顶为值，次栈顶为地址
         ADD,  // 二元运算符汇编栈顶为右操作数，次栈顶为左操作数，出栈操作数，入栈结果
         SUB,
         MUL,
@@ -44,7 +46,6 @@ struct ASM
         RET,
         EXIT,
         DARG,
-        UP, // 分配data段
         SYSTEMCALL
     };
     static std::string asm2string(basic_asm in)
@@ -73,7 +74,6 @@ struct ASM
             {basic_asm::EXIT, "EXIT"},
             {basic_asm::DARG, "DARG"},
             {basic_asm::COPY, "COPY"},
-            {basic_asm::UP, "UP"},
             {basic_asm::SYSTEMCALL, "SYSTEMCALL"}};
         auto it = asm2stringmap.find(in);
         if (it != asm2stringmap.end())

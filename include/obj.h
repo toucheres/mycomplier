@@ -77,8 +77,9 @@ struct funcDef : Identifi
     std::vector<varDef> args;
     Type rettype;
     std::vector<std::vector<varDef>> funcvar_stack;
-    size_t max_stack_size = 0; // 预留oldbp
-    size_t stack_size_now = 0; // 预留oldbp
+    inline static  size_t parpera_for_stack_frame = VCPU<>::size_word;
+    size_t max_stack_size = parpera_for_stack_frame; // 预留oldbp
+    size_t stack_size_now = parpera_for_stack_frame; // 预留oldbp
     void enter_scope();
     void exit_scope();
     const varDef* lookup_var(const std::string& name) const;

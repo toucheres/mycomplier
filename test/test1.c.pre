@@ -1,16 +1,12 @@
-int fun(int a, int b)
+int main(int arg1,int arg2,int arg3)
 {
-    return a + b;
-}
-int a;
-int main()
-{
-    int b;
-    a = b = 12;
-    {
-        int c;
-        c = fun(a, b);
-        b = c;
-    }
-    return b + 1;
+    int var1;
+    int var2;
+    int var3;
+    arg1;
+    arg2;
+    arg3;
+    var1;
+    var2;
+    var3;
 }
