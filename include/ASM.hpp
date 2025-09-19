@@ -10,6 +10,7 @@ struct ASM
     enum class basic_asm
     {
         MOVE, // MOVE ax stack;ax值替换栈顶值
+        COPY, // 栈顶复制一份到栈顶
         IMM,  // 立即数入栈
         LEA,  // 将bp+arg推入栈顶
         LI,   // 栈顶为地址，替换栈顶为值
@@ -31,7 +32,7 @@ struct ASM
         SMALLE, // <=
         BIGE,   // >=
         CMP,    // 相等为1,不相等为0
-        CMPN,    // CMP取反
+        CMPN,   // CMP取反
         NOT,
         JMP,
         JZ,
@@ -49,18 +50,31 @@ struct ASM
     static std::string asm2string(basic_asm in)
     {
         static const std::unordered_map<basic_asm, std::string> asm2stringmap{
-            {basic_asm::MOVE, "MOVE"}, {basic_asm::IMM, "IMM"},
-            {basic_asm::LEA, "LEA"},   {basic_asm::LI, "LI"},
-            {basic_asm::LC, "LC"},     {basic_asm::SI, "SI"},
-            {basic_asm::SC, "SC"},     {basic_asm::ADD, "ADD"},
-            {basic_asm::SUB, "SUB"},   {basic_asm::MUL, "MUL"},
-            {basic_asm::DIV, "DIV"},   {basic_asm::MOD, "MOD"},
-            {basic_asm::JMP, "JMP"},   {basic_asm::JZ, "JZ"},
-            {basic_asm::JNZ, "JNZ"},   {basic_asm::PUSH, "PUSH"},
-            {basic_asm::POP, "POP"},   {basic_asm::CALL, "CALL"},
-            {basic_asm::NVAR, "NVAR"}, {basic_asm::RET, "RET"},
-            {basic_asm::EXIT, "EXIT"}, {basic_asm::DARG, "DARG"},
-            {basic_asm::UP, "UP"},     {basic_asm::SYSTEMCALL, "SYSTEMCALL"}};
+            {basic_asm::MOVE, "MOVE"},
+            {basic_asm::IMM, "IMM"},
+            {basic_asm::LEA, "LEA"},
+            {basic_asm::LI, "LI"},
+            {basic_asm::LC, "LC"},
+            {basic_asm::SI, "SI"},
+            {basic_asm::SC, "SC"},
+            {basic_asm::ADD, "ADD"},
+            {basic_asm::SUB, "SUB"},
+            {basic_asm::MUL, "MUL"},
+            {basic_asm::DIV, "DIV"},
+            {basic_asm::MOD, "MOD"},
+            {basic_asm::JMP, "JMP"},
+            {basic_asm::JZ, "JZ"},
+            {basic_asm::JNZ, "JNZ"},
+            {basic_asm::PUSH, "PUSH"},
+            {basic_asm::POP, "POP"},
+            {basic_asm::CALL, "CALL"},
+            {basic_asm::NVAR, "NVAR"},
+            {basic_asm::RET, "RET"},
+            {basic_asm::EXIT, "EXIT"},
+            {basic_asm::DARG, "DARG"},
+            {basic_asm::COPY, "COPY"},
+            {basic_asm::UP, "UP"},
+            {basic_asm::SYSTEMCALL, "SYSTEMCALL"}};
         auto it = asm2stringmap.find(in);
         if (it != asm2stringmap.end())
             return it->second;

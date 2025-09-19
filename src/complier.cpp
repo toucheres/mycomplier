@@ -142,6 +142,7 @@ std::string Type::to_string() const
 
 std::expected<size_t, error> linker::pushfunc(std::string funcname)
 {
+    // [TODO] globalvar@name 的链接
     funcDef* func = nullptr;
     auto ret = addrmap.find("func@" + funcname);
     if (ret == addrmap.end()) // 重定向表未记录
@@ -258,7 +259,7 @@ std::expected<std::vector<std::string>, error> linker::process()
     // 拼接obj初始化函数
     for (auto& eachobj : objs)
     {
-        auto ret = eachobj.symbol_table.globalfuncdef.find("__global_init_" + eachobj.name);
+        auto ret = eachobj.symbol_table.globalfuncdef.find("__global_init" + eachobj.name);
         if (ret == eachobj.symbol_table.globalfuncdef.end())
         {
             return std::unexpected(error::undifined_obj_init_fun);
@@ -425,6 +426,7 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
     for (auto each : paths)
     {
         OBJ obj;
+        obj.name = each;
         // 创建输入流
         Preprocessor{}.process(each);
         std::ifstream in(each + ".pre");
@@ -443,5 +445,5 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
         objs.push_back(visitor.obj);
     }
     linker linker{objs};
-    return linker.exe.asms;
+    return linker.process();
 }

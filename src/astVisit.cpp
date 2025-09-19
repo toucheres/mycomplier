@@ -174,6 +174,7 @@ std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionC
         return std::unexpected<error>(error::double_defined);
     }
     funcnow = funnowptr;
+    funcnow->asms.push_back("HOLD");
     auto compoundRet =
         ac<std::expected<bool, error>>(visitCompoundStatement(ctx->compoundStatement()));
     if (!compoundRet)
@@ -183,6 +184,20 @@ std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionC
     }
     else
     {
+        auto align_up = [](int num, int align) -> int
+        {
+            if (num % align == 0)
+            {
+                return num;
+            }
+            else
+            {
+                return num + (align - num % align);
+            }
+        };
+        funcnow->asms[0] =
+            ASM{ASM::basic_asm::NVAR,
+                align_up(funcnow->max_stack_size, VCPU::size_word) / VCPU::size_word};
         funcnow = nullptr;
         return std::expected<bool, error>(true);
     }
@@ -662,11 +677,11 @@ std::any astVisitor::visitStatement(ComplierParser::StatementContext* ctx)
     {
         return visitIterationStatement(ctx->iterationStatement());
     }
-    // [TODO] finish
     else if (ctx->jumpStatement())
     {
         return visitJumpStatement(ctx->jumpStatement());
     }
+    // [TODO] lable system
     else if (ctx->labeledStatement())
     {
         return visitLabeledStatement(ctx->labeledStatement());
@@ -726,8 +741,7 @@ std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpress
         funcnow->asms.pop_back();
         if (ctx->assignmentOperator()->getText() == "=")
         {
-            funcnow->asms.push_back(ASM{ASM::basic_asm::MOVE, "stack", "ax"});
-            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH}); // 拷贝一份左值地址实现返回值
+            funcnow->asms.push_back(ASM{ASM::basic_asm::COPY}); // 拷贝一份左值地址实现返回值
             auto aret = ac<std::expected<Type, error>>(
                 visitAssignmentExpression(ctx->assignmentExpression()));
             if (!aret)
@@ -748,8 +762,7 @@ std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpress
         }
         else
         {
-            funcnow->asms.push_back(ASM{ASM::basic_asm::MOVE, "stack", "ax"});
-            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
             funcnow->asms.push_back(
                 ASM{ASM::basic_asm::PUSH}); // 拷贝两份左值地址实现取值运算，存值，返回值
             if (uret.value().getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
@@ -814,6 +827,7 @@ std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpress
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
             }
         }
+        return std::expected<Type, error>(uret.value());
     }
 }
 std::any astVisitor::visitConditionalExpression(ComplierParser::ConditionalExpressionContext* ctx)
@@ -1376,8 +1390,7 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
             {
                 return std::unexpected<error>(error::expected_lvalue);
             }
-            funcnow->asms.push_back(ASM{ASM::basic_asm::MOVE, "stack", "ax"});
-            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
             if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
@@ -1403,8 +1416,7 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
             {
                 return std::unexpected<error>(error::expected_lvalue);
             }
-            funcnow->asms.push_back(ASM{ASM::basic_asm::MOVE, "stack", "ax"});
-            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
             if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
@@ -1761,7 +1773,7 @@ std::any astVisitor::visitJumpStatement(ComplierParser::JumpStatementContext* ct
     else if (ctx->children[0]->getText() == "return")
     {
         auto eret = ac<std::expected<Type, error>>(visitExpression(ctx->expression()));
-        if(!eret)
+        if (!eret)
         {
             return std::unexpected<error>(eret.error());
         }

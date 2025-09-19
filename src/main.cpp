@@ -4,6 +4,17 @@
 int main(int argc, const char* argv[])
 {
     std::vector<std::string> args(argv + 1, argv + argc);
-    complier::process(args);
+    auto ret = complier::process(args);
+    if (!ret)
+    {
+        std::cout << "error\n";
+    }
+    else
+    {
+        for (int i = 0; i < ret.value().size(); i++)
+        {
+            std::cout << '[' << i << "]:" << ret.value()[i] << '\n';
+        }
+    }
     return 0;
 }

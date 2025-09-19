@@ -1,12 +1,16 @@
+int fun(int a, int b)
+{
+    return a + b;
+}
+int a;
 int main()
 {
-    while (1)
+    int b;
+    a = b = 12;
     {
-        2;
-        continue;
-        3;
-        break;
-        4;
+        int c;
+        c = fun(a, b);
+        b = c;
     }
-    5;
+    return b + 1;
 }
