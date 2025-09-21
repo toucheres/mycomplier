@@ -9,10 +9,10 @@ struct ASM
     std::string content;
     enum class basic_asm
     {
-        MOVE, // MOVE ax stack;ax值替换栈顶值
         COPY, // 栈顶复制一份到栈顶
         IMM,  // 立即数入栈
         LEA,  // 将bp+arg推入栈顶
+        LEAD, // 将ds+arg推入栈顶
         LI,   // 栈顶为地址，替换栈顶为值
         LC,   // 栈顶为地址，替换栈顶为值
         LW,   // 栈顶为地址，替换栈顶为值
@@ -51,9 +51,9 @@ struct ASM
     static std::string asm2string(basic_asm in)
     {
         static const std::unordered_map<basic_asm, std::string> asm2stringmap{
-            {basic_asm::MOVE, "MOVE"},
             {basic_asm::IMM, "IMM"},
             {basic_asm::LEA, "LEA"},
+            {basic_asm::LEAD, "LEAD"},
             {basic_asm::LI, "LI"},
             {basic_asm::LC, "LC"},
             {basic_asm::SI, "SI"},
@@ -74,7 +74,21 @@ struct ASM
             {basic_asm::EXIT, "EXIT"},
             {basic_asm::DARG, "DARG"},
             {basic_asm::COPY, "COPY"},
-            {basic_asm::SYSTEMCALL, "SYSTEMCALL"}};
+            {basic_asm::SYSTEMCALL, "SYSTEMCALL"},
+            {basic_asm::LW, "LW"},
+            {basic_asm::SW, "SW"},
+            {basic_asm::AND, "AND"},
+            {basic_asm::OR, "OR"},
+            {basic_asm::LSHIFT, "LSHIFT"},
+            {basic_asm::RSHIFT, "RSHIFT"},
+            {basic_asm::XOR, "XOR"},
+            {basic_asm::SMALL, "SMALL"},
+            {basic_asm::BIG, "BIG"},
+            {basic_asm::SMALLE, "SMALLE"},
+            {basic_asm::BIGE, "BIGE"},
+            {basic_asm::CMP, "CMP"},
+            {basic_asm::CMPN, "CMPN"},
+            {basic_asm::NOT, "NOT"}};
         auto it = asm2stringmap.find(in);
         if (it != asm2stringmap.end())
             return it->second;

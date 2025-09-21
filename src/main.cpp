@@ -1,4 +1,5 @@
 #include "complier.hpp"
+#include "vm.h"
 #include <iostream>
 // [TODO] 函数调用与变量地址处理
 int main(int argc, const char* argv[])
@@ -15,6 +16,16 @@ int main(int argc, const char* argv[])
         {
             std::cout << "[" << i << "]:" << ret.value()[i] << '\n';
         }
+    }
+    VM vm{ret.value()};
+    auto retval = vm.run();
+    if (retval)
+    {
+        std::cout << "ret: " << retval.value() << '\n';
+    }
+    else
+    {
+        std::cout << "error\n";
     }
     return 0;
 }

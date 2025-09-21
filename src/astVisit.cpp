@@ -1490,6 +1490,8 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
             {
                 return std::unexpected<error>(error::expected_func_or_funcptr);
             }
+            funcnow->asms.push_back(ASM{ASM::basic_asm::DARG, rettype.args.size()});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
             return std::expected<Type, error>(rettype);
         }
         else if (todo->getText() == "[") // arr[] ptr[]
@@ -1557,7 +1559,7 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
         if (varg) // 全局变量
         {
             funcnow->asms.push_back(
-                ASM{ASM::basic_asm::IMM, "globalvar@" + ctx->Identifier()->getText()});
+                ASM{ASM::basic_asm::LEAD, "globalvar@" + ctx->Identifier()->getText()});
             if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
@@ -1684,7 +1686,7 @@ std::any astVisitor::visitSelectionStatement(ComplierParser::SelectionStatementC
             int after_id = funcnow->asms.size();
             funcnow->asms.push_back("HOLD"); // for 'if' statments jump through 'else' to end
             funcnow->asms[after_expr] =
-                ASM{ASM::basic_asm::JZ, "thisfunc@" + std::to_string(funcnow->asms.size())};
+                ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(funcnow->asms.size())};
 
             auto elret = ac<std::expected<bool, error>>(visitStatement(ctx->statement()[1]));
             if (!elret)
@@ -1692,12 +1694,12 @@ std::any astVisitor::visitSelectionStatement(ComplierParser::SelectionStatementC
                 return std::unexpected<error>(elret.error());
             }
             funcnow->asms[after_id] =
-                ASM{ASM::basic_asm::JZ, "thisfunc@" + std::to_string(funcnow->asms.size())};
+                ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(funcnow->asms.size())};
         }
         else // 无else
         {
             funcnow->asms[after_expr] =
-                ASM{ASM::basic_asm::JZ, "thisfunc@" + std::to_string(funcnow->asms.size())};
+                ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(funcnow->asms.size())};
         }
     }
     // [TODO] switch
@@ -1736,21 +1738,20 @@ std::any astVisitor::visitIterationStatement(ComplierParser::IterationStatementC
         {
             return std::unexpected<error>(sret.error());
         }
-        funcnow->asms.push_back(ASM{ASM::basic_asm::JMP, "thisfunc@" + std::to_string(startppos)});
+        funcnow->asms.push_back(ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(startppos)});
         funcnow->asms[after_expr] =
-            ASM{ASM::basic_asm::JZ, "thisfunc@" + std::to_string(funcnow->asms.size())};
+            ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(funcnow->asms.size())};
 
         for (int i = startppos; i < funcnow->asms.size(); i++)
         {
             if (funcnow->asms[i] == "lable@break")
             {
                 funcnow->asms[i] =
-                    ASM{ASM::basic_asm::JMP, "thisfunc@" + std::to_string(funcnow->asms.size())};
+                    ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(funcnow->asms.size())};
             }
             else if (funcnow->asms[i] == "lable@continue")
             {
-                funcnow->asms[i] =
-                    ASM{ASM::basic_asm::JMP, "thisfunc@" + std::to_string(startppos)};
+                funcnow->asms[i] = ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(startppos)};
             }
         }
         return std::expected<bool, error>(true);
