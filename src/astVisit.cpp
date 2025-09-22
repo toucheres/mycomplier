@@ -100,7 +100,8 @@ std::any astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
             visitInitDeclaratorList(ctx->initDeclaratorList()));
         if (ret)
         {
-            // vars.insert(vars.end(), ret.value().begin(), ret.value().end()); // 已在initdecltor中添加
+            // vars.insert(vars.end(), ret.value().begin(), ret.value().end()); //
+            // 已在initdecltor中添加
         }
         else
         {
@@ -447,21 +448,30 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
         }
         else if (arg.kind == Type::Kind::Array)
         {
-            for (int i = 0; i < arg.arr_or_ptr_num; i++)
+            for (size_t i = 0; i < std::min(static_cast<size_t>(arg.arr_or_ptr_num),
+                                            init->initializerList()->initializer().size()) -
+                                       1;
+                 i++)
+            {
+                asmholder->asms.push_back(ASM{ASM::basic_asm::COPY});
+            }
+            for (size_t i = 0; i < std::min(static_cast<size_t>(arg.arr_or_ptr_num),
+                                            init->initializerList()->initializer().size()) -
+                                       1;
+                 i++)
             {
                 if (i != 0)
                 {
-                    asmholder->asms.push_back(ASM{ASM::basic_asm::IMM, arg.subType->getsize()});
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::IMM, arg.subType->getsize() * i});
                     asmholder->asms.push_back(ASM{ASM::basic_asm::ADD});
                 }
-                if (!init->initializerList())
+                if (init->initializerList()->initializer(i))
                 {
-                    return std::unexpected<error>(error::expected_arr_initor);
-                }
-                auto ret = func(*arg.subType, init->initializerList()->initializer(i));
-                if (!ret)
-                {
-                    return std::unexpected<error>(ret.error());
+                    auto ret = func(*arg.subType, init->initializerList()->initializer(i));
+                    if (!ret)
+                    {
+                        return std::unexpected<error>(ret.error());
+                    }
                 }
             }
         }
@@ -1947,7 +1957,357 @@ std::any astVisitor::visitDirectAbstractDeclarator(
 }
 long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext* expr)
 {
-    return 42;
+    // 递归下降求值，仅用于编译期整型常量表达式（如数组维度）
+    // 支持：括号、整型/字符常量、单目 + - ~
+    // !、*,/,%、+,-、<<,>>、<,<=,>,>=、==,!=、&,^,|、&&,||、?:、逗号表达式
+    // 不支持：标识符、函数调用、下标、sizeof/_Alignof、赋值类运算等
+
+    // 前置声明一组局部 lambda，互相递归
+    std::function<long long(ComplierParser::PrimaryExpressionContext*)> evalPrimary;
+    std::function<long long(ComplierParser::PostfixExpressionContext*)> evalPostfix;
+    std::function<long long(ComplierParser::UnaryExpressionContext*)> evalUnary;
+    std::function<long long(ComplierParser::CastExpressionContext*)> evalCast;
+    std::function<long long(ComplierParser::MultiplicativeExpressionContext*)> evalMul;
+    std::function<long long(ComplierParser::AdditiveExpressionContext*)> evalAdd;
+    std::function<long long(ComplierParser::ShiftExpressionContext*)> evalShift;
+    std::function<long long(ComplierParser::RelationalExpressionContext*)> evalRel;
+    std::function<long long(ComplierParser::EqualityExpressionContext*)> evalEq;
+    std::function<long long(ComplierParser::AndExpressionContext*)> evalBitAnd;
+    std::function<long long(ComplierParser::ExclusiveOrExpressionContext*)> evalBitXor;
+    std::function<long long(ComplierParser::InclusiveOrExpressionContext*)> evalBitOr;
+    std::function<long long(ComplierParser::LogicalAndExpressionContext*)> evalLogAnd;
+    std::function<long long(ComplierParser::LogicalOrExpressionContext*)> evalLogOr;
+    std::function<long long(ComplierParser::ExpressionContext*)> evalExpr;
+    std::function<long long(ComplierParser::ConditionalExpressionContext*)> evalCond;
+    std::function<long long(ComplierParser::AssignmentExpressionContext*)> evalAssign;
+
+    auto truth = [](long long v) -> long long { return v != 0 ? 1LL : 0LL; };
+
+    evalPrimary = [this, &evalExpr](ComplierParser::PrimaryExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        if (ctx->Identifier())
+        {
+            // 常量表达式不允许普通标识符（尚未实现宏常量等）
+            throw error::invalid_constant;
+        }
+        if (ctx->Constant())
+        {
+            const std::string t = ctx->Constant()->getText();
+            if (isCharacterConstant(t))
+                return parseCharacterConstant(t);
+            if (isIntegerConstant(t))
+                return parseIntegerConstant(t);
+            throw error::invalid_constant;
+        }
+        if (ctx->expression())
+        {
+            // 括号表达式
+            return evalExpr(ctx->expression());
+        }
+        // 其他扩展（如__builtin等）不支持
+        throw error::invalid_constant;
+    };
+
+    evalPostfix = [&evalPrimary](ComplierParser::PostfixExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        // 仅接受“纯 primary”的情况；带 [], (), ., ->, ++/-- 等均不支持
+        if (ctx->primaryExpression() && ctx->children.size() == 1)
+            return evalPrimary(ctx->primaryExpression());
+        // GNU 扩展、聚合初始化等均不在常量表达式支持范围
+        throw error::invalid_constant;
+    };
+
+    evalCast = [&evalCast, &evalUnary](ComplierParser::CastExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        // 若为显式类型转换 '(' typeName ')' castExpression -> 忽略类型，直接求右侧值
+        if (ctx->castExpression())
+            return evalCast(ctx->castExpression());
+        // 其余分支：unary 或 DigitSequence（for 场景）
+        if (ctx->unaryExpression())
+            return evalUnary(ctx->unaryExpression());
+        if (ctx->DigitSequence())
+        {
+            // 纯数字序列，十进制
+            return std::stoll(ctx->DigitSequence()->getText(), nullptr, 10);
+        }
+        throw error::invalid_constant;
+    };
+
+    evalUnary = [&evalPostfix, &evalCast](ComplierParser::UnaryExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        if (ctx->postfixExpression())
+            return evalPostfix(ctx->postfixExpression());
+
+        // 处理一元运算符：+ - ~ !
+        if (ctx->unaryOperator() && ctx->castExpression())
+        {
+            const std::string op = ctx->unaryOperator()->getText();
+            long long v = evalCast(ctx->castExpression());
+            if (op == "+")
+                return +v;
+            if (op == "-")
+                return -v;
+            if (op == "~")
+                return ~v;
+            if (op == "!")
+                return (v == 0) ? 1LL : 0LL;
+            throw error::invalid_constant;
+        }
+
+        // sizeof/_Alignof等未实现
+        throw error::invalid_constant;
+    };
+
+    auto evalBinaryByChildren =
+        [](antlr4::ParserRuleContext* ctx, auto evalLhs,
+           const std::function<long long(antlr4::tree::ParseTree*)>& evalRhs,
+           const std::function<long long(long long, const std::string&, long long)>& apply)
+        -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        const auto& kids = ctx->children;
+        if (kids.empty())
+            throw error::invalid_constant;
+
+        // 第一个子节点是一个子表达式上下文
+        long long acc = evalLhs(kids[0]);
+        // 之后按 [op, rhs, op, rhs, ...] 交替
+        for (size_t i = 1; i + 1 < kids.size(); i += 2)
+        {
+            std::string op = kids[i]->getText();
+            long long rhs = evalRhs(kids[i + 1]);
+            acc = apply(acc, op, rhs);
+        }
+        return acc;
+    };
+
+    // 以下 evalXxx 采用 children 轮询的通用策略，避免依赖 ANTLR 生成的 vector API 差异
+    evalMul = [&evalBinaryByChildren,
+               &evalCast](ComplierParser::MultiplicativeExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalCast](antlr4::tree::ParseTree* n)
+        { return evalCast(dynamic_cast<ComplierParser::CastExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [](long long a, const std::string& op, long long b) -> long long
+        {
+            if (op == "*")
+                return a * b;
+            if (op == "/")
+            {
+                if (b == 0)
+                    throw error::invalid_constant;
+                return a / b;
+            }
+            if (op == "%")
+            {
+                if (b == 0)
+                    throw error::invalid_constant;
+                return a % b;
+            }
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalAdd = [&evalBinaryByChildren,
+               &evalMul](ComplierParser::AdditiveExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalMul](antlr4::tree::ParseTree* n)
+        { return evalMul(dynamic_cast<ComplierParser::MultiplicativeExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [](long long a, const std::string& op, long long b) -> long long
+        {
+            if (op == "+")
+                return a + b;
+            if (op == "-")
+                return a - b;
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalShift = [&evalBinaryByChildren,
+                 &evalAdd](ComplierParser::ShiftExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalAdd](antlr4::tree::ParseTree* n)
+        { return evalAdd(dynamic_cast<ComplierParser::AdditiveExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [](long long a, const std::string& op, long long b) -> long long
+        {
+            if (b < 0)
+                throw error::invalid_constant;
+            if (op == "<<")
+                return a << b;
+            if (op == ">>")
+                return a >> b;
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalRel = [&evalBinaryByChildren, &evalShift,
+               &truth](ComplierParser::RelationalExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalShift](antlr4::tree::ParseTree* n)
+        { return evalShift(dynamic_cast<ComplierParser::ShiftExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [&truth](long long a, const std::string& op, long long b) -> long long
+        {
+            if (op == "<")
+                return truth(a < b);
+            if (op == "<=")
+                return truth(a <= b);
+            if (op == ">")
+                return truth(a > b);
+            if (op == ">=")
+                return truth(a >= b);
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalEq = [&evalBinaryByChildren, &evalRel,
+              &truth](ComplierParser::EqualityExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalRel](antlr4::tree::ParseTree* n)
+        { return evalRel(dynamic_cast<ComplierParser::RelationalExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [&truth](long long a, const std::string& op, long long b) -> long long
+        {
+            if (op == "==")
+                return truth(a == b);
+            if (op == "!=")
+                return truth(a != b);
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalBitAnd = [&evalBinaryByChildren,
+                  &evalEq](ComplierParser::AndExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalEq](antlr4::tree::ParseTree* n)
+        { return evalEq(dynamic_cast<ComplierParser::EqualityExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [](long long a, const std::string& op, long long b) -> long long
+        {
+            if (op == "&")
+                return a & b;
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalBitXor = [&evalBinaryByChildren,
+                  &evalBitAnd](ComplierParser::ExclusiveOrExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalBitAnd](antlr4::tree::ParseTree* n)
+        { return evalBitAnd(dynamic_cast<ComplierParser::AndExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [](long long a, const std::string& op, long long b) -> long long
+        {
+            if (op == "^")
+                return a ^ b;
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalBitOr = [&evalBinaryByChildren,
+                 &evalBitXor](ComplierParser::InclusiveOrExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalBitXor](antlr4::tree::ParseTree* n)
+        { return evalBitXor(dynamic_cast<ComplierParser::ExclusiveOrExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [](long long a, const std::string& op, long long b) -> long long
+        {
+            if (op == "|")
+                return a | b;
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalLogAnd = [&evalBinaryByChildren, &evalBitOr,
+                  &truth](ComplierParser::LogicalAndExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalBitOr](antlr4::tree::ParseTree* n)
+        { return evalBitOr(dynamic_cast<ComplierParser::InclusiveOrExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [&truth](long long a, const std::string& op, long long b) -> long long
+        {
+            if (op == "&&")
+                return truth(truth(a) && truth(b));
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalLogOr = [&evalBinaryByChildren, &evalLogAnd,
+                 &truth](ComplierParser::LogicalOrExpressionContext* ctx) -> long long
+    {
+        auto evalL = [&evalLogAnd](antlr4::tree::ParseTree* n)
+        { return evalLogAnd(dynamic_cast<ComplierParser::LogicalAndExpressionContext*>(n)); };
+        auto evalR = evalL;
+        auto apply = [&truth](long long a, const std::string& op, long long b) -> long long
+        {
+            if (op == "||")
+                return truth(truth(a) || truth(b));
+            throw error::invalid_constant;
+        };
+        return evalBinaryByChildren(ctx, evalL, evalR, apply);
+    };
+
+    evalExpr = [this](ComplierParser::ExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        // 逗号表达式的值为最后一个 assignmentExpression
+        long long val = 0;
+        for (auto* ae : ctx->assignmentExpression())
+        {
+            // 递归调用 parseConstexpr 以复用逻辑
+            val = this->parseConstexpr(ae);
+        }
+        return val;
+    };
+
+    evalCond = [&evalLogOr, &evalExpr, &evalCond,
+                &truth](ComplierParser::ConditionalExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        long long c = evalLogOr(ctx->logicalOrExpression());
+        if (ctx->expression() && ctx->conditionalExpression())
+        {
+            if (truth(c))
+                return evalExpr(ctx->expression());
+            else
+                return evalCond(ctx->conditionalExpression());
+        }
+        return c;
+    };
+
+    evalAssign = [&evalCond](ComplierParser::AssignmentExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        if (ctx->conditionalExpression())
+            return evalCond(ctx->conditionalExpression());
+        // 赋值类表达式不属于常量表达式
+        throw error::invalid_constant;
+    };
+
+    return evalAssign(expr);
 };
 astVisitor::astVisitor(std::string name, OBJ& ob) : obj(ob)
 {
@@ -1964,17 +2324,20 @@ std::any astVisitor::visitByTypeIndex(antlr4::ParserRuleContext* ctx)
     switch (ctx->getRuleIndex())
     {
     case ComplierParser::RuleCompilationUnit:
-        return visitCompilationUnit(dynamic_cast<ComplierParser::CompilationUnitContext*>(ctx));
+        return visitCompilationUnit(
+            dynamic_cast<ComplierParser::ComplierParser::CompilationUnitContext*>(ctx));
         break;
     case ComplierParser::RuleTranslationUnit:
-        return visitTranslationUnit(dynamic_cast<ComplierParser::TranslationUnitContext*>(ctx));
+        return visitTranslationUnit(
+            dynamic_cast<ComplierParser::ComplierParser::TranslationUnitContext*>(ctx));
         break;
     case ComplierParser::RuleExternalDeclaration:
         return visitExternalDeclaration(
             dynamic_cast<ComplierParser::ExternalDeclarationContext*>(ctx));
         break;
     case ComplierParser::RuleDeclaration:
-        return visitDeclaration(dynamic_cast<ComplierParser::DeclarationContext*>(ctx));
+        return visitDeclaration(
+            dynamic_cast<ComplierParser::ComplierParser::DeclarationContext*>(ctx));
         break;
     case ComplierParser::RuleFunctionDefinition:
         return visitFunctionDefinition(

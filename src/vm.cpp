@@ -36,6 +36,7 @@ std::optional<int> VM::run()
 void VM::debug()
 {
     std::cout << "next ins: " << vcpu.asms[vcpu.ip] << '\n';
+    std::cout << "ip: " << vcpu.ip << '\n';
     std::cout << "ax: " << *vcpu.ax << '\n';
     std::cout << "stack:\n";
     for (int i = 0; i < &vcpu.mem.back() - vcpu.sp; i++)

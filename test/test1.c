@@ -1,5 +1,5 @@
+int arr[12] = {1, 2, 3, 4, 5, 6, 7, 8};
 int main()
 {
-    int a = 12;
-    return a;
+    return 1;
 }
