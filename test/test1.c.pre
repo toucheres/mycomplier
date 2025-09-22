@@ -1,4 +1,10 @@
+int func(int arg)
+{
+    return arg + 1;
+}
 int main()
 {
-    return 1;
+    int b;
+    b = 4;
+    return func(b);
 }

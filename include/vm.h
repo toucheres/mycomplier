@@ -285,28 +285,35 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
     }
     else if (ins == "JMP")
     {
-        auto right = *sp;
-        sp++;
-        ip = right - 1; // 抵消ip自增
+        std::string arg;
+        str >> arg;
+        int num = std::stoi(arg);
+        ip = num - 1; // 抵消ip自增
         return;
     }
     else if (ins == "JZ")
     {
+        std::string arg;
+        str >> arg;
+        int num = std::stoi(arg);
         auto right = *sp;
         sp++;
         if (!right)
         {
-            ip = right - 1; // 抵消ip自增
+            ip = num - 1; // 抵消ip自增
         }
         return;
     }
     else if (ins == "JNZ")
     {
+        std::string arg;
+        str >> arg;
+        int num = std::stoi(arg);
         auto right = *sp;
         sp++;
         if (right)
         {
-            ip = right - 1; // 抵消ip自增
+            ip = num - 1; // 抵消ip自增
         }
         return;
     }

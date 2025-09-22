@@ -40,7 +40,14 @@ void VM::debug()
     std::cout << "stack:\n";
     for (int i = 0; i < &vcpu.mem.back() - vcpu.sp; i++)
     {
-        std::cout << "[" << &vcpu.sp[i] << "]: " << std::hex << vcpu.sp[i] << '\n';
+        if (&vcpu.sp[i] == vcpu.bp)
+        {
+            std::cout << "[" << &vcpu.sp[i] << "]: " << std::hex << vcpu.sp[i] << "<- bp" << '\n';
+        }
+        else
+        {
+            std::cout << "[" << &vcpu.sp[i] << "]: " << std::hex << vcpu.sp[i] << '\n';
+        }
     }
     std::cout << "data:\n";
     for (int i = 0; i < 4; i++)

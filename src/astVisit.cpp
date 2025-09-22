@@ -1476,21 +1476,24 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
             }
             funcnow->asms.push_back(ASM{ASM::basic_asm::CALL});
             Type rettype = funcaddr.value();
+            int args_num = 0;
             if (funcaddr.value().kind == Type::Kind::Pointer &&
                 funcaddr.value().arr_or_ptr_num == 1 &&
                 funcaddr.value().subType->kind == Type::Kind::Function) // 函数指针
             {
                 rettype = *funcaddr.value().subType->subType;
+                args_num  = funcaddr.value().subType->args.size();
             }
             else if (funcaddr.value().kind == Type::Kind::Function) // 函数
             {
                 rettype = *funcaddr.value().subType;
+                args_num = funcaddr.value().args.size();
             }
             else
             {
                 return std::unexpected<error>(error::expected_func_or_funcptr);
             }
-            funcnow->asms.push_back(ASM{ASM::basic_asm::DARG, rettype.args.size()});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::DARG, args_num});
             funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
             return std::expected<Type, error>(rettype);
         }
@@ -1570,6 +1573,7 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
             }
             return std::expected<Type, error>(*varg);
         }
+        auto str = ctx->Identifier()->getText();
         auto funcret = obj.symbol_table.lookup_func_decl(ctx->Identifier()->getText());
         if (funcret)
         {
