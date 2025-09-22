@@ -298,7 +298,7 @@ std::expected<std::vector<std::string>, error> linker::process()
         }
         for (auto& eachasm : ret->second.asms)
         {
-            exe.asms.push_back(eachasm);
+            pushfunc("__global_init" + eachobj.name);
         }
     }
     this->exe.asms.push_back(ASM{ASM::basic_asm::IMM, exe.asms.size() + 3}); // call main

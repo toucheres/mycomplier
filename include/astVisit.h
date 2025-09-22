@@ -9,11 +9,11 @@
 struct astVisitor : public ComplierBaseVisitor
 {
   private:
-    funcDef* funcnow;
-    funcDef* globalinitfun;
-
+    funcDef* funcnow = nullptr;
+    // funcDef* globalinitfun = nullptr;
+    // "__global_init" + name
     // 辅助函数
-    Type& getrootdecltor(Type& in);
+    Type baseType; // just for args, wait to modifiy
     long long parseConstexpr(ComplierParser::AssignmentExpressionContext* expr);
     int parseIntegerConstant(const std::string& text);
     int parseCharacterConstant(const std::string& text);

@@ -95,6 +95,7 @@ std::any astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
     }
     if (ctx->initDeclaratorList()) // 带初始化的参数
     {
+        baseType = basetype;
         auto ret = ac<std::expected<std::vector<Type>, error>>(
             visitInitDeclaratorList(ctx->initDeclaratorList()));
         if (ret)
@@ -174,13 +175,14 @@ std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionC
     {
         return std::unexpected<error>(error::double_defined);
     }
+    auto gfunptr = funcnow;
     funcnow = funnowptr;
     funcnow->asms.push_back("HOLD");
     auto compoundRet =
         ac<std::expected<bool, error>>(visitCompoundStatement(ctx->compoundStatement()));
     if (!compoundRet)
     {
-        funcnow = nullptr;
+        funcnow = gfunptr;
         return std::unexpected<error>(compoundRet.error());
     }
     else
@@ -200,7 +202,7 @@ std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionC
                                align_up(funcnow->max_stack_size - funcDef::parpera_for_stack_frame,
                                         VCPU<>::size_word) /
                                    VCPU<>::size_word};
-        funcnow = nullptr;
+        funcnow = gfunptr;
         return std::expected<bool, error>(true);
     }
 }
@@ -385,7 +387,8 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
     {
         return std::unexpected<error>(ret.error());
     }
-    if (funcnow) // 局部
+    ret.value().pushTop(baseType);
+    if (funcnow->name != "__global_init" + obj.name) // 局部
     {
         varDef var;
         var.type = *ret.value().subType;
@@ -401,18 +404,17 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
                       ComplierParser::InitializerContext* init) -> std::expected<bool, error>
     {
         // addr通过运行时栈传递
-        auto asmholder = funcnow ? funcnow : globalinitfun;
+        auto asmholder = funcnow;
         if (arg.kind == Type::Kind::ID)
         {
-            if (funcnow) // 函数局部
+            if (funcnow->lookup_var(arg.id)) // 函数局部
             {
                 funcnow->asms.push_back(
                     ASM{ASM::basic_asm::LEA, funcnow->lookup_var(arg.id)->addr});
             }
-            else if (globalinitfun)
+            else if (obj.symbol_table.lookup_var_decl(arg.id))
             {
-                globalinitfun->asms.push_back(
-                    ASM{ASM::basic_asm::LEAD, globalinitfun->lookup_var(arg.id)->addr});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD, "globalvar@" + arg.id});
             }
             arg = *arg.subType;
         }
@@ -429,17 +431,17 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
                 if (ret.value().getsize() ==
                     Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
                 {
-                    asmholder->asms.push_back(ASM{ASM::basic_asm::LI});
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::SC});
                 }
                 else if (ret.value().getsize() ==
                          Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
                 {
-                    asmholder->asms.push_back(ASM{ASM::basic_asm::LI});
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::SI});
                 }
                 else if (ret.value().getsize() ==
                          Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
                 {
-                    asmholder->asms.push_back(ASM{ASM::basic_asm::LW});
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::SW});
                 }
             }
         }
@@ -1954,9 +1956,8 @@ astVisitor::astVisitor(std::string name, OBJ& ob) : obj(ob)
     global_init_fun.id = "__global_init" + name;
     global_init_fun.pushTop(Type{Type::Kind::Function, std::vector<Type>()});
     global_init_fun.pushTop(Type{Type::Kind::Basic, Type::BasicType::Void});
-    obj.symbol_table.add_global_func_decl(global_init_fun);
     obj.symbol_table.add_global_func_def(global_init_fun);
-    globalinitfun = obj.symbol_table.lookup_func_def("__global_init" + name);
+    funcnow = obj.symbol_table.lookup_func_def("__global_init" + name);
 }
 std::any astVisitor::visitByTypeIndex(antlr4::ParserRuleContext* ctx)
 {
