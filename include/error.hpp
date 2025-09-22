@@ -18,6 +18,7 @@ enum class error
     unsurpported_op,
     invalid_constant,
     expected_lvalue,
+    expected_arr_initor,
     expected_func_or_funcptr,
     unsurpported_num
 };

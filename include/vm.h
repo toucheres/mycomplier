@@ -16,7 +16,7 @@ template <size_t StackSize = 1024, class Word = int64_t> struct VCPU
 {
     friend VM;
     inline static const size_t size_word = sizeof(Word);
-    std::vector<std::string> asms;
+    alignas(8) std::vector<std::string> asms;
     std::array<Word, StackSize / size_word> mem{0};
     Word axmem = 0;
     Word* ax = &axmem;

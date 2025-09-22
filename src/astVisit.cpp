@@ -34,7 +34,7 @@ std::any astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
     if (ctx->declarationSpecifiers()) // 前类型
     {
         auto ret = ac<std::expected<std::vector<Type>, error>>(
-            visitDeclarationSpecifiers(ctx->declarationSpecifiers()));
+            visitDeclarationSpecifiers(ctx->declarationSpecifiers())); // 不带初始化的声明
         if (!ret)
         {
             return std::unexpected<error>(ret.error());
@@ -93,7 +93,7 @@ std::any astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
             } // [TODO] 考虑修饰符
         }
     }
-    if (ctx->initDeclaratorList()) // 数组/函数/指针的组合s
+    if (ctx->initDeclaratorList()) // 带初始化的参数
     {
         auto ret = ac<std::expected<std::vector<Type>, error>>(
             visitInitDeclaratorList(ctx->initDeclaratorList()));
@@ -383,10 +383,94 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
     auto ret = ac<std::expected<Type, error>>(visitDeclarator(ctx->declarator()));
     if (!ret)
     {
-        return ret;
+        return std::unexpected<error>(ret.error());
     }
-    return ret;
-    // [TODO]初始化ctx->initializer
+    if (funcnow) // 局部
+    {
+        varDef var;
+        var.type = *ret.value().subType;
+        var.name = ret.value().id;
+        funcnow->add_var(var);
+    }
+    else
+    {
+        obj.symbol_table.add_global_var_def(ret.value());
+    }
+    std::function<std::expected<bool, error>(Type, ComplierParser::InitializerContext*)> func =
+        [&func, this](Type arg,
+                      ComplierParser::InitializerContext* init) -> std::expected<bool, error>
+    {
+        // addr通过运行时栈传递
+        auto asmholder = funcnow ? funcnow : globalinitfun;
+        if (arg.kind == Type::Kind::ID)
+        {
+            if (funcnow) // 函数局部
+            {
+                funcnow->asms.push_back(
+                    ASM{ASM::basic_asm::LEA, funcnow->lookup_var(arg.id)->addr});
+            }
+            else if (globalinitfun)
+            {
+                globalinitfun->asms.push_back(
+                    ASM{ASM::basic_asm::LEAD, globalinitfun->lookup_var(arg.id)->addr});
+            }
+            arg = *arg.subType;
+        }
+        if (arg.kind == Type::Kind::Basic || arg.kind == Type::Kind::Pointer)
+        {
+            if (init->assignmentExpression()) // = expr
+            {
+                auto ret = ac<std::expected<Type, error>>(
+                    visitAssignmentExpression(init->assignmentExpression()));
+                if (!ret)
+                {
+                    return std::unexpected<error>(ret.error());
+                }
+                if (ret.value().getsize() ==
+                    Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+                {
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::LI});
+                }
+                else if (ret.value().getsize() ==
+                         Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+                {
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::LI});
+                }
+                else if (ret.value().getsize() ==
+                         Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+                {
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::LW});
+                }
+            }
+        }
+        else if (arg.kind == Type::Kind::Array)
+        {
+            for (int i = 0; i < arg.arr_or_ptr_num; i++)
+            {
+                if (i != 0)
+                {
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::IMM, arg.subType->getsize()});
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::ADD});
+                }
+                if (!init->initializerList())
+                {
+                    return std::unexpected<error>(error::expected_arr_initor);
+                }
+                auto ret = func(*arg.subType, init->initializerList()->initializer(i));
+                if (!ret)
+                {
+                    return std::unexpected<error>(ret.error());
+                }
+            }
+        }
+        return true;
+    };
+    auto fret = func(ret.value(), ctx->initializer());
+    if (!fret)
+    {
+        return std::unexpected<error>(fret.error());
+    }
+    return std::expected<Type, error>(ret);
 }
 // 后序递归生成
 std::any astVisitor::visitDeclarator(ComplierParser::DeclaratorContext* ctx)
@@ -1482,7 +1566,7 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
                 funcaddr.value().subType->kind == Type::Kind::Function) // 函数指针
             {
                 rettype = *funcaddr.value().subType->subType;
-                args_num  = funcaddr.value().subType->args.size();
+                args_num = funcaddr.value().subType->args.size();
             }
             else if (funcaddr.value().kind == Type::Kind::Function) // 函数
             {
