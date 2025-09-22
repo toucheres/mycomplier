@@ -100,7 +100,7 @@ std::any astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
             visitInitDeclaratorList(ctx->initDeclaratorList()));
         if (ret)
         {
-            vars.insert(vars.end(), ret.value().begin(), ret.value().end());
+            // vars.insert(vars.end(), ret.value().begin(), ret.value().end()); // 已在initdecltor中添加
         }
         else
         {
