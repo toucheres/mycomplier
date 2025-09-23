@@ -1416,24 +1416,33 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
             {
                 return std::unexpected<error>(cret.error());
             }
-            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI" ||
-                funcnow->asms.back() == "LW")
-            {
-                funcnow->asms.pop_back();
-            }
-            else
-            {
-                return std::unexpected<error>(error::expected_lvalue);
-            }
-            if (cret.value().kind == Type::Kind::Pointer)
-            {
-                type = cret.value();
-                type.arr_or_ptr_num++;
-            }
-            else
+            if (cret.value().kind == Type::Kind::Function ||
+                cret.value().kind == Type::Kind::Array) // arr/function无LC/LI/LW,取地址与值相同，无需处理
             {
                 type = Type{Type::Kind::Pointer, 1};
                 type.pushTop(cret.value());
+            }
+            else
+            {
+                if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI" ||
+                    funcnow->asms.back() == "LW")
+                {
+                    funcnow->asms.pop_back();
+                }
+                else
+                {
+                    return std::unexpected<error>(error::expected_lvalue);
+                }
+                if (cret.value().kind == Type::Kind::Pointer)
+                {
+                    type = cret.value();
+                    type.arr_or_ptr_num++;
+                }
+                else
+                {
+                    type = Type{Type::Kind::Pointer, 1};
+                    type.pushTop(cret.value());
+                }
             }
         }
         else if (ctx->unaryOperator()->getText() == "*")
@@ -1842,7 +1851,7 @@ std::any astVisitor::visitSelectionStatement(ComplierParser::SelectionStatementC
                 return std::unexpected<error>(elret.error());
             }
             funcnow->asms[after_id] =
-                ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(funcnow->asms.size())};
+                ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(funcnow->asms.size())};
         }
         else // 无else
         {

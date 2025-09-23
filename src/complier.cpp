@@ -449,8 +449,7 @@ size_t varDef::get_addr_in_stack(size_t posnow)
     };
     if (type.getsize() > 1)
     {
-        return ceiling(posnow + this->type.getsize(),
-                       std::min(VCPU<>::size_word, this->type.getsize()));
+        return ceiling(posnow + this->type.getsize(), VCPU<>::size_word); // 姑且对齐到size_word
     }
     return posnow;
 }

@@ -1,11 +1,15 @@
-int fun(long* ptr)
+int fun2()
 {
-    ptr[2] = 12;
-    return 0;
+    return 43;
 }
-long arr[4] = {1, 2, 3, 4};
+int fun()
+{
+    return 42;
+}
 int main()
 {
-    fun(arr);
-    return arr[2];
+    int (*funcptr)() = &fun;
+    int a;
+    a = funcptr();
+    return a;
 }
