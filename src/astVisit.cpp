@@ -448,17 +448,18 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
         }
         else if (arg.kind == Type::Kind::Array)
         {
-            for (size_t i = 0; i < std::min(static_cast<size_t>(arg.arr_or_ptr_num),
-                                            init->initializerList()->initializer().size()) -
-                                       1;
-                 i++)
+            size_t initListSize = 0;
+            if (init->initializerList())
+            {
+                initListSize = init->initializerList()->initializer().size();
+            }
+            for (size_t i = 0;
+                 i < std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize) - 1; i++)
             {
                 asmholder->asms.push_back(ASM{ASM::basic_asm::COPY});
             }
-            for (size_t i = 0; i < std::min(static_cast<size_t>(arg.arr_or_ptr_num),
-                                            init->initializerList()->initializer().size()) -
-                                       1;
-                 i++)
+            for (size_t i = 0;
+                 i < std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize) - 1; i++)
             {
                 if (i != 0)
                 {
@@ -477,10 +478,13 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
         }
         return true;
     };
-    auto fret = func(ret.value(), ctx->initializer());
-    if (!fret)
+    if (ctx->initializer())
     {
-        return std::unexpected<error>(fret.error());
+        auto fret = func(ret.value(), ctx->initializer());
+        if (!fret)
+        {
+            return std::unexpected<error>(fret.error());
+        }
     }
     return std::expected<Type, error>(ret);
 }
@@ -832,7 +836,8 @@ std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpress
         {
             return std::unexpected<error>(uret.error());
         }
-        if (funcnow->asms.back() != "LC" && funcnow->asms.back() != "LI") // 不是左值
+        if (funcnow->asms.back() != "LC" && funcnow->asms.back() != "LI" &&
+            funcnow->asms.back() != "LW") // 不是左值
         {
             return std::unexpected<error>(error::expected_lvalue);
         }
@@ -1403,7 +1408,8 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
             {
                 return std::unexpected<error>(cret.error());
             }
-            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI")
+            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI" ||
+                funcnow->asms.back() == "LW")
             {
                 funcnow->asms.pop_back();
             }
@@ -1438,6 +1444,11 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
                      Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+            }
+            else if (cret.value().getsize() ==
+                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
             }
             type = Type{Type::Kind::Basic, Type::BasicType::Int};
         }
@@ -1480,7 +1491,8 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
     {
         if (ctx->children[i]->getText() == "++")
         {
-            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI")
+            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI" ||
+                funcnow->asms.back() == "LW")
             {
                 funcnow->asms.pop_back();
             }
@@ -1502,11 +1514,19 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
                 funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
+            }
+            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SW});
             }
         }
         else if (ctx->children[i]->getText() == "--")
         {
-            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI")
+            if (funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI" ||
+                funcnow->asms.back() == "LW")
             {
                 funcnow->asms.pop_back();
             }
@@ -1528,6 +1548,13 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
                 funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SUB});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
+            }
+            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SUB});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SW});
             }
         }
         //[TODO] sizeof无副作用
@@ -1627,6 +1654,10 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
             }
+            else if (eleType.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+            }
             return std::expected<Type, error>(eleType);
         }
         else
@@ -1652,6 +1683,11 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
             }
+            else if (var->type.getsize() ==
+                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+            }
             return std::expected<Type, error>(var->type);
         }
         auto varg = obj.symbol_table.lookup_var_decl(ctx->Identifier()->getText());
@@ -1666,6 +1702,10 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
             else if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+            else if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
             }
             return std::expected<Type, error>(*varg);
         }

@@ -1,5 +1,6 @@
-int arr[12] = {1, 2, 3, 4, 5, 6, 7, 8};
 int main()
 {
-    return 1;
+    int arr[12];
+    arr[3] = 14;
+    return arr[3] + 3;
 }
