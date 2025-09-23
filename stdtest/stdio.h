@@ -1,7 +1,10 @@
-void write(char in)
+#include <systemcall.h>
+void print_str(char* str)
 {
-    _asm_("LEA 16");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 0");
+    while (*str != '\0')
+    {
+        write(*str);
+        str = str + 1;
+    }
     return;
 }

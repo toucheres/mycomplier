@@ -1787,6 +1787,10 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
     {
         return visitExpression(ctx->expression());
     }
+    else if(ctx->StringLiteral().size())
+    {
+        return 0;
+    }
     else
     {
         auto str = ctx->getText();
