@@ -83,21 +83,12 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
     }
     else if (ins == "LEA")
     {
-        std::string arg;
-        str >> arg;
-        int num = std::stoi(arg);
-        // push address: bp + byte_offset
-        sp--;
-        *sp = reinterpret_cast<Word>(reinterpret_cast<char*>(bp) + num);
+        *sp = reinterpret_cast<Word>(reinterpret_cast<char*>(bp) + *sp);
         return;
     }
     else if (ins == "LEAD")
     {
-        std::string arg;
-        str >> arg;
-        int num = std::stoi(arg);
-        sp--;
-        *sp = reinterpret_cast<Word>(reinterpret_cast<char*>(ds) + num);
+        *sp = reinterpret_cast<Word>(reinterpret_cast<char*>(ds) + *sp);
         return;
     }
     else if (ins == "COPY")
@@ -403,43 +394,6 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
         systemcall_table[num](*this);
         return;
     }
-    // COPY, // 栈顶复制一份到栈顶a
-    // IMM,  // 立即数入栈a
-    // LEA,  // 将bp+arg推入栈顶a
-    // LI,   // 栈顶为地址，替换栈顶为值a
-    // LC,   // 栈顶为地址，替换栈顶为值a
-    // LW,   // 栈顶为地址，替换栈顶为值a
-    // SI,   // 栈顶为值，次栈顶为地址a
-    // SC,   // 栈顶为值，次栈顶为地址a
-    // SW,   // 栈顶为值，次栈顶为地址a
-    // ADD,  // 二元运算符汇编栈顶为右操作数，次栈顶为左操作数，出栈操作数，入栈结果a
-    // SUB,
-    // MUL,
-    // DIV,
-    // MOD,
-    // AND,
-    // OR,
-    // LSHIFT,
-    // RSHIFT,
-    // XOR,
-    // SMALL,  // <
-    // BIG,    // >
-    // SMALLE, // <=
-    // BIGE,   // >=
-    // CMP,    // 相等为1,不相等为0
-    // CMPN,   // CMP取反
-    // NOT,
-    // JMP,
-    // JZ,
-    // JNZ,
-    // PUSH, // ax->stack a
-    // POP,  // stack->ax a
-    // CALL, // 栈顶为地址
-    // NVAR, // 分配函数局部变量栈空间,word字节为单位
-    // RET,
-    // EXIT,
-    // DARG,
-    // SYSTEMCALL
 }
 
 template <size_t StackSize, class Word> inline void VCPU<StackSize, Word>::step()

@@ -414,11 +414,13 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
             if (funcnow->lookup_var(arg.id)) // 函数局部
             {
                 funcnow->asms.push_back(
-                    ASM{ASM::basic_asm::LEA, funcnow->lookup_var(arg.id)->addr});
+                    ASM{ASM::basic_asm::IMM, funcnow->lookup_var(arg.id)->addr});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
             }
             else if (obj.symbol_table.lookup_var_decl(arg.id))
             {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD, "globalvar@" + arg.id});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + arg.id});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
             }
             arg = *arg.subType;
         }
@@ -459,7 +461,7 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
                 asmholder->asms.push_back(ASM{ASM::basic_asm::COPY});
             }
             for (size_t i = 0;
-                 i < std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize) - 1; i++)
+                 i < std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize); i++)
             {
                 if (i != 0)
                 {
@@ -1700,7 +1702,8 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
         auto var = funcnow->lookup_var(ctx->Identifier()->getText());
         if (var) // 函数局部找到
         {
-            funcnow->asms.push_back(ASM{ASM::basic_asm::LEA, var->addr});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
             if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
@@ -1720,7 +1723,8 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
         if (varg) // 全局变量
         {
             funcnow->asms.push_back(
-                ASM{ASM::basic_asm::LEAD, "globalvar@" + ctx->Identifier()->getText()});
+                ASM{ASM::basic_asm::IMM, "globalvar@" + ctx->Identifier()->getText()});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
             if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
@@ -1787,7 +1791,7 @@ std::any astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionCon
     {
         return visitExpression(ctx->expression());
     }
-    else if(ctx->StringLiteral().size())
+    else if (ctx->StringLiteral().size())
     {
         return 0;
     }

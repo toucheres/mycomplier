@@ -11,8 +11,8 @@ struct ASM
     {
         COPY, // 栈顶复制一份到栈顶
         IMM,  // 立即数入栈
-        LEA,  // 将bp+arg推入栈顶
-        LEAD, // 将ds+arg推入栈顶
+        LEA,  // 将bp+stacktop推入栈顶
+        LEAD, // 将ds+stacktop推入栈顶
         LI,   // 栈顶为地址，替换栈顶为值
         LC,   // 栈顶为地址，替换栈顶为值
         LW,   // 栈顶为地址，替换栈顶为值
