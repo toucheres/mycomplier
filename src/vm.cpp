@@ -5,7 +5,8 @@ VM::VM(const std::vector<std::string>& asms)
     vcpu.asms = asms;
     vcpu.systemcall_table[VM::systemcall::WRITE] = [](VCPU<> thiscpu)
     {
-        std::cout << *thiscpu.sp;
+        char tp = *thiscpu.sp;
+        std::cout << tp;
         thiscpu.sp++;
     };
 }

@@ -1,7 +1,12 @@
-
+#include <stdio.h>
 int main()
 {
-    _asm_("IMM 42");
-    _asm_("SYSTEMCALL 0");
+    char arr[15] = {'h', 'e', 'l', 'l', 'o', ',', ' ', 'w', 'o', 'r', 'l', 'd', '!', '\n', '\0'};
+    char* ptr = arr;
+    while (*ptr != '\0')
+    {
+        write(*ptr);
+        ptr = ptr + 1;
+    }
     return 0;
 }

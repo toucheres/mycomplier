@@ -1457,22 +1457,23 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
             {
                 return std::unexpected<error>(cret.error());
             }
-            type = cret.value();
-            if (cret.value().getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            if (cret.value().kind != Type::Kind::Pointer)
+            {
+                return std::unexpected<error>(error::expected_ptr);
+            }
+            type = *cret.value().subType;
+            if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
             }
-            else if (cret.value().getsize() ==
-                     Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
             }
-            else if (cret.value().getsize() ==
-                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
             }
-            type = Type{Type::Kind::Basic, Type::BasicType::Int};
         }
         else if (ctx->unaryOperator()->getText() == "+") //+12
         {
@@ -1944,10 +1945,17 @@ std::any astVisitor::visitJumpStatement(ComplierParser::JumpStatementContext* ct
     }
     else if (ctx->children[0]->getText() == "return")
     {
-        auto eret = ac<std::expected<Type, error>>(visitExpression(ctx->expression()));
-        if (!eret)
+        if (ctx->expression())
         {
-            return std::unexpected<error>(eret.error());
+            auto eret = ac<std::expected<Type, error>>(visitExpression(ctx->expression()));
+            if (!eret)
+            {
+                return std::unexpected<error>(eret.error());
+            }
+        }
+        else
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 0});
         }
         funcnow->asms.push_back(ASM{ASM::basic_asm::RET});
         return std::expected<bool, error>(true);

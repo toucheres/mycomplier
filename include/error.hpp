@@ -20,5 +20,6 @@ enum class error
     expected_lvalue,
     expected_arr_initor,
     expected_func_or_funcptr,
+    expected_ptr,
     unsurpported_num
 };
