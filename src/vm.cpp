@@ -39,7 +39,7 @@ void VM::debug()
     std::cout << "ip: " << vcpu.ip << '\n';
     std::cout << "ax: " << *vcpu.ax << '\n';
     std::cout << "stack:\n";
-    for (int i = 0; i < &vcpu.mem.back() - vcpu.sp; i++)
+    for (int i = &vcpu.mem.back() - vcpu.sp - 1; i >= 0; i--)
     {
         if (&vcpu.sp[i] == vcpu.bp)
         {
@@ -51,7 +51,7 @@ void VM::debug()
         }
     }
     std::cout << "data:\n";
-    for (int i = 0; i < 4; i++)
+    for (int i = 3; i >= 0; i--)
     {
         std::cout << "[" << &vcpu.mem[i] << "]: " << std::hex << vcpu.mem[i] << '\n';
     }

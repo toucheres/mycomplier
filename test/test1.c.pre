@@ -1,6 +1,11 @@
+int fun(long* ptr)
+{
+    ptr[2] = 12;
+    return 0;
+}
+long arr[4] = {1, 2, 3, 4};
 int main()
 {
-    int arr[12];
-    arr[3] = 14;
-    return arr[3] + 3;
+    fun(arr);
+    return arr[2];
 }

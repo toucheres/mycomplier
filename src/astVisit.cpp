@@ -199,10 +199,9 @@ std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionC
                 return num + (align - num % align);
             }
         };
-        funcnow->asms[0] = ASM{ASM::basic_asm::NVAR,
-                               align_up(funcnow->max_stack_size - funcDef::parpera_for_stack_frame,
-                                        VCPU<>::size_word) /
-                                   VCPU<>::size_word};
+        funcnow->asms[0] =
+            ASM{ASM::basic_asm::NVAR,
+                align_up(funcnow->max_stack_size, VCPU<>::size_word) / VCPU<>::size_word};
         funcnow = gfunptr;
         return std::expected<bool, error>(true);
     }
@@ -429,18 +428,15 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
                 {
                     return std::unexpected<error>(ret.error());
                 }
-                if (ret.value().getsize() ==
-                    Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+                if (arg.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
                 {
                     asmholder->asms.push_back(ASM{ASM::basic_asm::SC});
                 }
-                else if (ret.value().getsize() ==
-                         Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+                else if (arg.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
                 {
                     asmholder->asms.push_back(ASM{ASM::basic_asm::SI});
                 }
-                else if (ret.value().getsize() ==
-                         Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+                else if (arg.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
                 {
                     asmholder->asms.push_back(ASM{ASM::basic_asm::SW});
                 }
@@ -862,6 +858,12 @@ std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpress
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
             }
+            else if (uret.value().getsize() ==
+                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SW});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+            }
         }
         else
         {
@@ -928,6 +930,12 @@ std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpress
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+            else if (uret.value().getsize() ==
+                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SW});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
             }
         }
         return std::expected<Type, error>(uret.value());

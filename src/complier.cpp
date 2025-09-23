@@ -273,7 +273,7 @@ std::expected<std::vector<std::string>, error> linker::process()
     {
         for (auto& [name, eachgvar] : eachobj.symbol_table.globalvardef)
         {
-            eachgvar.addr = eachgvar.get_addr_in_mem(exe.global_size);
+            eachgvar.addr = eachgvar.get_addr_in_stack(exe.global_size);
             exe.global_size = eachgvar.addr + eachgvar.type.getsize();
             auto labal = "globalvar@" + eachgvar.name;
             if (addrmap.find(labal) != addrmap.end())
@@ -372,7 +372,6 @@ void funcDef::enter_scope()
 void funcDef::exit_scope()
 {
     funcvar_stack.pop_back();
-    stack_size_now = VCPU<>::size_word * 2;
     // 使用反向迭代器
     for (auto it = funcvar_stack.rbegin(); it != funcvar_stack.rend(); ++it)
     {
@@ -382,7 +381,7 @@ void funcDef::exit_scope()
         }
         else
         {
-            stack_size_now = it->back().addr + it->back().type.getsize();
+            stack_size_now = -it->back().addr;
         }
     }
 }
@@ -419,7 +418,7 @@ const varDef* funcDef::lookup_var(const std::string& inname) const
 const varDef* funcDef::add_var(const varDef& vardef)
 {
     varDef var = vardef;
-    var.addr = -var.get_addr_in_mem(stack_size_now);
+    var.addr = -var.get_addr_in_stack(stack_size_now);
     var.is_defined = true;
     stack_size_now += var.type.getsize();
     max_stack_size = std::max(stack_size_now, max_stack_size);
@@ -439,7 +438,7 @@ bool funcDef::add_arg(std::vector<varDef>& vardef)
     return true;
 }
 
-size_t varDef::get_addr_in_mem(size_t posnow)
+size_t varDef::get_addr_in_stack(size_t posnow)
 {
     // [TODO] char的考虑
     // 考虑对齐要求
@@ -450,7 +449,8 @@ size_t varDef::get_addr_in_mem(size_t posnow)
     };
     if (type.getsize() > 1)
     {
-        return ceiling(posnow, std::min(VCPU<>::size_word, this->type.getsize()));
+        return ceiling(posnow + this->type.getsize(),
+                       std::min(VCPU<>::size_word, this->type.getsize()));
     }
     return posnow;
 }

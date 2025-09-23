@@ -68,7 +68,7 @@ struct Identifi
 };
 struct varDef : Identifi
 {
-    size_t get_addr_in_mem(size_t posnow);
+    size_t get_addr_in_stack(size_t posnow);
     varDef() = default;
 };
 struct funcDef : Identifi
@@ -78,8 +78,8 @@ struct funcDef : Identifi
     Type rettype;
     std::vector<std::vector<varDef>> funcvar_stack;
     inline static  size_t parpera_for_stack_frame = VCPU<>::size_word;
-    size_t max_stack_size = parpera_for_stack_frame; // 预留oldbp
-    size_t stack_size_now = parpera_for_stack_frame; // 预留oldbp
+    size_t max_stack_size = 0;
+    size_t stack_size_now = 0;
     void enter_scope();
     void exit_scope();
     const varDef* lookup_var(const std::string& name) const;
