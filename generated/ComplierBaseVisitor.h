@@ -315,6 +315,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitAsmADDer(ComplierParser::AsmADDerContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitBlockItem(ComplierParser::BlockItemContext *ctx) override {
     return visitChildren(ctx);
   }

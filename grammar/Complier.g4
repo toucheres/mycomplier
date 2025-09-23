@@ -412,9 +412,14 @@ blockItemList
     :   blockItem+
     ;
  
+asmADDer
+    :   '_asm_' LeftParen StringLiteral RightParen ';'
+    ;
+
 blockItem
     :   statement
     |   declaration
+    |   asmADDer
     ;
  
 expressionStatement
@@ -466,8 +471,9 @@ translationUnit
     ;
  
 externalDeclaration
-    :   functionDefinition
-    |   declaration
+    :   asmADDer
+    |   functionDefinition
+    |   declaration  
     |   ';' // stray ;
     ;
  

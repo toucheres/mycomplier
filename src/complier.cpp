@@ -414,13 +414,12 @@ const varDef* funcDef::lookup_var(const std::string& inname) const
     }
     return ptr;
 }
-
 const varDef* funcDef::add_var(const varDef& vardef)
 {
     varDef var = vardef;
     var.addr = -var.get_addr_in_stack(stack_size_now);
     var.is_defined = true;
-    stack_size_now += var.type.getsize();
+    stack_size_now = -var.addr;
     max_stack_size = std::max(stack_size_now, max_stack_size);
     funcvar_stack.back().push_back(var);
     return &funcvar_stack.back().back();

@@ -169,6 +169,8 @@ public:
 
     virtual std::any visitBlockItemList(ComplierParser::BlockItemListContext *context) = 0;
 
+    virtual std::any visitAsmADDer(ComplierParser::AsmADDerContext *context) = 0;
+
     virtual std::any visitBlockItem(ComplierParser::BlockItemContext *context) = 0;
 
     virtual std::any visitExpressionStatement(ComplierParser::ExpressionStatementContext *context) = 0;

@@ -1,5 +1,15 @@
 #include "vm.h"
 
+VM::VM(const std::vector<std::string>& asms)
+{
+    vcpu.asms = asms;
+    vcpu.systemcall_table[VM::systemcall::WRITE] = [](VCPU<> thiscpu)
+    {
+        std::cout << *thiscpu.sp;
+        thiscpu.sp++;
+    };
+}
+
 std::optional<int> VM::run()
 {
     if (enable_debug)

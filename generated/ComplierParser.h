@@ -14,27 +14,27 @@ public:
   enum {
     T__0 = 1, T__1 = 2, T__2 = 3, T__3 = 4, T__4 = 5, T__5 = 6, T__6 = 7, 
     T__7 = 8, T__8 = 9, T__9 = 10, T__10 = 11, T__11 = 12, T__12 = 13, T__13 = 14, 
-    T__14 = 15, T__15 = 16, T__16 = 17, T__17 = 18, T__18 = 19, Auto = 20, 
-    Break = 21, Case = 22, Char = 23, Const = 24, Continue = 25, Default = 26, 
-    Do = 27, Double = 28, Else = 29, Enum = 30, Extern = 31, Float = 32, 
-    For = 33, Goto = 34, If = 35, Inline = 36, Int = 37, Long = 38, Register = 39, 
-    Restrict = 40, Return = 41, Short = 42, Signed = 43, Sizeof = 44, Static = 45, 
-    Struct = 46, Switch = 47, Typedef = 48, Union = 49, Unsigned = 50, Void = 51, 
-    Volatile = 52, While = 53, Alignas = 54, Alignof = 55, Atomic = 56, 
-    Bool = 57, Complex = 58, Generic = 59, Imaginary = 60, Noreturn = 61, 
-    StaticAssert = 62, ThreadLocal = 63, LeftParen = 64, RightParen = 65, 
-    LeftBracket = 66, RightBracket = 67, LeftBrace = 68, RightBrace = 69, 
-    Less = 70, LessEqual = 71, Greater = 72, GreaterEqual = 73, LeftShift = 74, 
-    RightShift = 75, Plus = 76, PlusPlus = 77, Minus = 78, MinusMinus = 79, 
-    Star = 80, Div = 81, Mod = 82, And = 83, Or = 84, AndAnd = 85, OrOr = 86, 
-    Caret = 87, Not = 88, Tilde = 89, Question = 90, Colon = 91, Semi = 92, 
-    Comma = 93, Assign = 94, StarAssign = 95, DivAssign = 96, ModAssign = 97, 
-    PlusAssign = 98, MinusAssign = 99, LeftShiftAssign = 100, RightShiftAssign = 101, 
-    AndAssign = 102, XorAssign = 103, OrAssign = 104, Equal = 105, NotEqual = 106, 
-    Arrow = 107, Dot = 108, Ellipsis = 109, Identifier = 110, Constant = 111, 
-    DigitSequence = 112, StringLiteral = 113, MultiLineMacro = 114, Directive = 115, 
-    AsmBlock = 116, Whitespace = 117, Newline = 118, BlockComment = 119, 
-    LineComment = 120
+    T__14 = 15, T__15 = 16, T__16 = 17, T__17 = 18, T__18 = 19, T__19 = 20, 
+    Auto = 21, Break = 22, Case = 23, Char = 24, Const = 25, Continue = 26, 
+    Default = 27, Do = 28, Double = 29, Else = 30, Enum = 31, Extern = 32, 
+    Float = 33, For = 34, Goto = 35, If = 36, Inline = 37, Int = 38, Long = 39, 
+    Register = 40, Restrict = 41, Return = 42, Short = 43, Signed = 44, 
+    Sizeof = 45, Static = 46, Struct = 47, Switch = 48, Typedef = 49, Union = 50, 
+    Unsigned = 51, Void = 52, Volatile = 53, While = 54, Alignas = 55, Alignof = 56, 
+    Atomic = 57, Bool = 58, Complex = 59, Generic = 60, Imaginary = 61, 
+    Noreturn = 62, StaticAssert = 63, ThreadLocal = 64, LeftParen = 65, 
+    RightParen = 66, LeftBracket = 67, RightBracket = 68, LeftBrace = 69, 
+    RightBrace = 70, Less = 71, LessEqual = 72, Greater = 73, GreaterEqual = 74, 
+    LeftShift = 75, RightShift = 76, Plus = 77, PlusPlus = 78, Minus = 79, 
+    MinusMinus = 80, Star = 81, Div = 82, Mod = 83, And = 84, Or = 85, AndAnd = 86, 
+    OrOr = 87, Caret = 88, Not = 89, Tilde = 90, Question = 91, Colon = 92, 
+    Semi = 93, Comma = 94, Assign = 95, StarAssign = 96, DivAssign = 97, 
+    ModAssign = 98, PlusAssign = 99, MinusAssign = 100, LeftShiftAssign = 101, 
+    RightShiftAssign = 102, AndAssign = 103, XorAssign = 104, OrAssign = 105, 
+    Equal = 106, NotEqual = 107, Arrow = 108, Dot = 109, Ellipsis = 110, 
+    Identifier = 111, Constant = 112, DigitSequence = 113, StringLiteral = 114, 
+    MultiLineMacro = 115, Directive = 116, AsmBlock = 117, Whitespace = 118, 
+    Newline = 119, BlockComment = 120, LineComment = 121
   };
 
   enum {
@@ -63,11 +63,11 @@ public:
     RuleInitializerList = 66, RuleDesignation = 67, RuleDesignatorList = 68, 
     RuleDesignator = 69, RuleStaticAssertDeclaration = 70, RuleStatement = 71, 
     RuleLabeledStatement = 72, RuleCompoundStatement = 73, RuleBlockItemList = 74, 
-    RuleBlockItem = 75, RuleExpressionStatement = 76, RuleSelectionStatement = 77, 
-    RuleIterationStatement = 78, RuleForCondition = 79, RuleForDeclaration = 80, 
-    RuleForExpression = 81, RuleJumpStatement = 82, RuleCompilationUnit = 83, 
-    RuleTranslationUnit = 84, RuleExternalDeclaration = 85, RuleFunctionDefinition = 86, 
-    RuleDeclarationList = 87
+    RuleAsmADDer = 75, RuleBlockItem = 76, RuleExpressionStatement = 77, 
+    RuleSelectionStatement = 78, RuleIterationStatement = 79, RuleForCondition = 80, 
+    RuleForDeclaration = 81, RuleForExpression = 82, RuleJumpStatement = 83, 
+    RuleCompilationUnit = 84, RuleTranslationUnit = 85, RuleExternalDeclaration = 86, 
+    RuleFunctionDefinition = 87, RuleDeclarationList = 88
   };
 
   explicit ComplierParser(antlr4::TokenStream *input);
@@ -162,6 +162,7 @@ public:
   class LabeledStatementContext;
   class CompoundStatementContext;
   class BlockItemListContext;
+  class AsmADDerContext;
   class BlockItemContext;
   class ExpressionStatementContext;
   class SelectionStatementContext;
@@ -1487,12 +1488,29 @@ public:
 
   BlockItemListContext* blockItemList();
 
+  class  AsmADDerContext : public antlr4::ParserRuleContext {
+  public:
+    AsmADDerContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *LeftParen();
+    antlr4::tree::TerminalNode *StringLiteral();
+    antlr4::tree::TerminalNode *RightParen();
+    antlr4::tree::TerminalNode *Semi();
+
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  AsmADDerContext* asmADDer();
+
   class  BlockItemContext : public antlr4::ParserRuleContext {
   public:
     BlockItemContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     StatementContext *statement();
     DeclarationContext *declaration();
+    AsmADDerContext *asmADDer();
 
 
     virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
@@ -1656,6 +1674,7 @@ public:
   public:
     ExternalDeclarationContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
+    AsmADDerContext *asmADDer();
     FunctionDefinitionContext *functionDefinition();
     DeclarationContext *declaration();
     antlr4::tree::TerminalNode *Semi();

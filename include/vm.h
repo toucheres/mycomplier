@@ -10,12 +10,14 @@
 #include <stack>
 #include <string>
 #include <unordered_map>
+#include <map>
+#include <functional>
 #include <vector>
 class VM;
 template <size_t StackSize = 1024, class Word = int64_t> struct VCPU
 {
-    friend VM;
     inline static const size_t size_word = sizeof(Word);
+    std::map<int, std::function<void(VCPU<>&)>> systemcall_table;
     alignas(8) std::vector<std::string> asms;
     std::array<Word, StackSize / size_word> mem{0};
     Word axmem = 0;
@@ -38,10 +40,11 @@ template <size_t StackSize = 1024, class Word = int64_t> struct VCPU
 };
 struct VM
 {
-    VM(const std::vector<std::string>& asms)
+    enum systemcall
     {
-        vcpu.asms = asms;
-    }
+        WRITE,
+    };
+    VM(const std::vector<std::string>& asms);
     bool enable_debug = true;
     VCPU<> vcpu;
     std::optional<int> run();
@@ -390,6 +393,14 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
     else if (ins == "EXIT")
     {
         state = VCPU::CpuState::OVER;
+        return;
+    }
+    else if (ins == "SYSTEMCALL") // systemcall由调用者(系统)清理参数
+    {
+        std::string arg;
+        str >> arg;
+        int num = std::stoi(arg);
+        systemcall_table[num](*this);
         return;
     }
     // COPY, // 栈顶复制一份到栈顶a

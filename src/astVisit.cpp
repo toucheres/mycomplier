@@ -231,6 +231,10 @@ std::any astVisitor::visitExternalDeclaration(ComplierParser::ExternalDeclaratio
             obj.symbol_table.add_global_var_def(each);
         }
     }
+    else if (ctx->asmADDer()) // 拓展
+    {
+        visitAsmADDer(ctx->asmADDer());
+    }
 
     // 检查是否为单独的分号（空语句）
     else if (ctx->children.size() == 1 && ctx->children[0]->getText() == ";")
@@ -1417,7 +1421,8 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
                 return std::unexpected<error>(cret.error());
             }
             if (cret.value().kind == Type::Kind::Function ||
-                cret.value().kind == Type::Kind::Array) // arr/function无LC/LI/LW,取地址与值相同，无需处理
+                cret.value().kind ==
+                    Type::Kind::Array) // arr/function无LC/LI/LW,取地址与值相同，无需处理
             {
                 type = Type{Type::Kind::Pointer, 1};
                 type.pushTop(cret.value());
@@ -1599,6 +1604,7 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
         auto todo = ctx->children[end - 1];
         if (todo->getText() == "(") // func call
         {
+            int args_num = 0;
             if (ctx->children[end]->getText() != ")") // 有experionlist
             {
                 auto str = ctx->children[end]->getText();
@@ -1608,6 +1614,9 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
                 {
                     return std::unexpected<error>(el.error());
                 }
+                args_num = dc<ComplierParser::ArgumentExpressionListContext*>(ctx->children[end])
+                               ->assignmentExpression()
+                               .size();
             }
             auto funcaddr = ac<std::expected<Type, error>>(func(0, end - 1)); // 解析函数地址
             if (!funcaddr)
@@ -1616,18 +1625,17 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
             }
             funcnow->asms.push_back(ASM{ASM::basic_asm::CALL});
             Type rettype = funcaddr.value();
-            int args_num = 0;
             if (funcaddr.value().kind == Type::Kind::Pointer &&
                 funcaddr.value().arr_or_ptr_num == 1 &&
                 funcaddr.value().subType->kind == Type::Kind::Function) // 函数指针
             {
                 rettype = *funcaddr.value().subType->subType;
-                args_num = funcaddr.value().subType->args.size();
+                // args_num = funcaddr.value().subType->args.size();// 由实参决定以支持可变参
             }
             else if (funcaddr.value().kind == Type::Kind::Function) // 函数
             {
                 rettype = *funcaddr.value().subType;
-                args_num = funcaddr.value().args.size();
+                // args_num = funcaddr.value().args.size();
             }
             else
             {
@@ -1814,6 +1822,10 @@ std::any astVisitor::visitBlockItem(ComplierParser::BlockItemContext* ctx)
                 return std::unexpected<error>(error::double_defined);
             }
         }
+    }
+    else if (ctx->asmADDer())
+    {
+        visitAsmADDer(ctx->asmADDer());
     }
     return std::expected<bool, error>(true);
 }
@@ -2375,6 +2387,87 @@ astVisitor::astVisitor(std::string name, OBJ& ob) : obj(ob)
     global_init_fun.pushTop(Type{Type::Kind::Basic, Type::BasicType::Void});
     obj.symbol_table.add_global_func_def(global_init_fun);
     funcnow = obj.symbol_table.lookup_func_def("__global_init" + name);
+}
+std::any astVisitor::visitAsmADDer(ComplierParser::AsmADDerContext* ctx)
+{
+    auto str = ctx->StringLiteral()->getText();
+    std::string text = ctx->StringLiteral()->getText();
+    std::string content;
+    size_t first_quote = text.find('"');
+    size_t last_quote = text.rfind('"');
+    if (first_quote != std::string::npos && last_quote != std::string::npos &&
+        last_quote > first_quote)
+    {
+        std::string raw = text.substr(first_quote + 1, last_quote - first_quote - 1);
+        content.reserve(raw.size());
+        for (size_t i = 0; i < raw.size(); ++i)
+        {
+            char c = raw[i];
+            if (c == '\\' && i + 1 < raw.size())
+            {
+                char esc = raw[++i];
+                if (esc == 'n')
+                    content.push_back('\n');
+                else if (esc == 't')
+                    content.push_back('\t');
+                else if (esc == 'r')
+                    content.push_back('\r');
+                else if (esc == '\\')
+                    content.push_back('\\');
+                else if (esc == '\'')
+                    content.push_back('\'');
+                else if (esc == '\"')
+                    content.push_back('\"');
+                else if (esc == '0')
+                    content.push_back('\0');
+                else if (esc == 'x') // hex escape: \xhh...
+                {
+                    int val = 0;
+                    int cnt = 0;
+                    while (i + 1 < raw.size() &&
+                           std::isxdigit(static_cast<unsigned char>(raw[i + 1])) && cnt < 2)
+                    {
+                        ++i;
+                        char hx = raw[i];
+                        val = val * 16 +
+                              (std::isdigit(static_cast<unsigned char>(hx))
+                                   ? hx - '0'
+                                   : (std::toupper(static_cast<unsigned char>(hx)) - 'A' + 10));
+                        ++cnt;
+                    }
+                    content.push_back(static_cast<char>(val));
+                }
+                else if (esc >= '0' && esc <= '7') // octal \nnn
+                {
+                    int val = esc - '0';
+                    int cnt = 1;
+                    while (i + 1 < raw.size() && raw[i + 1] >= '0' && raw[i + 1] <= '7' && cnt < 3)
+                    {
+                        ++i;
+                        val = val * 8 + (raw[i] - '0');
+                        ++cnt;
+                    }
+                    content.push_back(static_cast<char>(val));
+                }
+                else
+                {
+                    // unknown escape, keep the character itself
+                    content.push_back(esc);
+                }
+            }
+            else
+            {
+                content.push_back(c);
+            }
+        }
+    }
+    else
+    {
+        // Fallback: no surrounding quotes found, use the raw token
+        content = text;
+    }
+    funcnow->asms.push_back(content);
+    return {};
 }
 std::any astVisitor::visitByTypeIndex(antlr4::ParserRuleContext* ctx)
 {

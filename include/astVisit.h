@@ -23,6 +23,7 @@ struct astVisitor : public ComplierBaseVisitor
   public:
     astVisitor(std::string name, OBJ& obj);
     OBJ& obj;
+    std::any visitAsmADDer(ComplierParser::AsmADDerContext *ctx) override;
     std::any visitByTypeIndex(antlr4::ParserRuleContext* ctx);
     std::any visitCompilationUnit(ComplierParser::CompilationUnitContext* ctx) override;
     std::any visitTranslationUnit(ComplierParser::TranslationUnitContext* ctx) override;
