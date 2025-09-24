@@ -17,14 +17,24 @@ void print_str(char* str)
     }
     return;
 }
+
+
+
+
+
+
+
+
+
+
+
+
 int main()
 {
-    char arr[5] = {'a', 'b', 'c', '\n', '\0'};
-    char* ptr = arr;
-    while (*ptr != '\0')
-    {
-        write(*ptr);
-        ptr = ptr + 1;
-    }
+    
+    int arr[3] = {'a','b','c'};
+    int* p = arr;
+    write(*p);
+    write(*(p+1));
     return 0;
 }

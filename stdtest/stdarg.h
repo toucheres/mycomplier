@@ -16,9 +16,3 @@ int sum(int count, ...)
     va_end(args); // 清理可变参数列表
     return total;
 }
-
-int main()
-{
-    printf("Sum: %d\n", sum(4, 1, 2, 3, 4)); // 输出：Sum: 10
-    return 0;
-}
