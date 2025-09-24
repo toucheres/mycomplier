@@ -1,22 +1,14 @@
 #include <stdio.h>
-// long* load_arg_ptr(long* ptr, int n)
-// {
-//     return ptr - n;
-// }
-// long fun(int arg, ...)
-// {
-//     _asm_("IMM 24");
-//     _asm_("LEA");
-//     _asm_("LW");
-//     write();
-//     return 0;
-// }
+long fun(int arg, ...)
+{
+    char a;
+    a = 97;
+    // write(a);
+    return 97;
+}
 int main()
 {
-    // return fun(3, '6', '\n');
-    int arr[3] = {'a','b','c'};
-    int* p = arr;
-    write(*p);
-    write(*(p+1));
-    return 0;
+    long a;
+    a = fun(3, 6, 97, 8);
+    return 1;
 }

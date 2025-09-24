@@ -386,7 +386,7 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
         state = VCPU::CpuState::OVER;
         return;
     }
-    else if (ins == "SYSTEMCALL") // systemcall由调用者(系统)清理参数
+    else if (ins == "SYSTEMCALL") // systemcall由调用者(用户)清理参数
     {
         std::string arg;
         str >> arg;

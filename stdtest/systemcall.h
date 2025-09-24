@@ -4,5 +4,6 @@ void write(char in)
     _asm_("LEA");
     _asm_("LW");
     _asm_("SYSTEMCALL 0");
+    _asm_("POP");
     return;
 }

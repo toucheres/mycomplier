@@ -151,12 +151,20 @@ std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionC
     funcnow = funnowptr;
     funcnow->asms.push_back("HOLD");
     visitCompoundStatement(ctx->compoundStatement());
-    auto align_up = [](int num, int align) -> int {
-        if (num % align == 0) { return num; } else { return num + (align - num % align); }
+    auto align_up = [](int num, int align) -> int
+    {
+        if (num % align == 0)
+        {
+            return num;
+        }
+        else
+        {
+            return num + (align - num % align);
+        }
     };
-    funcnow->asms[0] = ASM{ASM::basic_asm::NVAR,
-                           align_up(funcnow->max_stack_size, VCPU<>::size_word) /
-                               VCPU<>::size_word};
+    funcnow->asms[0] =
+        ASM{ASM::basic_asm::NVAR,
+            align_up(funcnow->max_stack_size, VCPU<>::size_word) / VCPU<>::size_word};
     funcnow = gfunptr;
     return true;
 }
@@ -513,8 +521,8 @@ std::any astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarat
     }
     else if (ctx->declarationSpecifiers2()) // 与declarationSpecifiers一致
     {
-        auto declarationSpecifiers = ac<std::vector<Type>>(
-            visitDeclarationSpecifiers2(ctx->declarationSpecifiers2()));
+        auto declarationSpecifiers =
+            ac<std::vector<Type>>(visitDeclarationSpecifiers2(ctx->declarationSpecifiers2()));
         bool flag = false;
 
         if (declarationSpecifiers.back().id != "") // 可能是typedef或变量名
@@ -666,14 +674,12 @@ std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpress
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SC});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
             }
-            else if (uret.getsize() ==
-                     Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
             }
-            else if (uret.getsize() ==
-                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SW});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
@@ -688,8 +694,7 @@ std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpress
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
             }
-            else if (uret.getsize() ==
-                     Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
             }
@@ -734,14 +739,12 @@ std::any astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpress
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SC});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
             }
-            else if (uret.getsize() ==
-                     Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SI});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
             }
-            else if (uret.getsize() ==
-                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SW});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
@@ -930,8 +933,7 @@ std::any astVisitor::visitRelationalExpression(ComplierParser::RelationalExpress
 {
     // 注意处理多个< > <= >=
     std::function<Type(std::span<ComplierParser::ShiftExpressionContext*>, int)> func =
-        [&func, this, ctx](std::span<ComplierParser::ShiftExpressionContext*> in,
-                           int index) -> Type
+        [&func, this, ctx](std::span<ComplierParser::ShiftExpressionContext*> in, int index) -> Type
 
     {
         if (in.size() == 1)
@@ -1005,10 +1007,7 @@ std::any astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionC
         auto posnow = funcnow->asms.size();
         auto lret = ac<Type>(visitMultiplicativeExpression(in[0]));
         auto rret = func(in.subspan(1, in.size() - 1), index + 1);
-        for (int i = 0; i < funcnow->asms.size() - posnow; i++) // 之前只是为了拿到类型
-        {
-            funcnow->asms.pop_back();
-        }
+        funcnow->asms.resize(posnow); // 之前只是为了拿到类型
         if (lret.kind == Type::Kind::Pointer && rret.kind == Type::Kind::Basic &&
             (rret.basic_type == Type::BasicType::Int || rret.basic_type == Type::BasicType::Char ||
              rret.basic_type == Type::BasicType::Long))
@@ -1016,7 +1015,7 @@ std::any astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionC
             // 左指针右整形
             auto lret = ac<Type>(visitMultiplicativeExpression(in[0]));
             auto rret = func(in.subspan(1, in.size() - 1), index + 1);
-            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 8});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, lret.subType->getsize()});
             funcnow->asms.push_back(ASM{ASM::basic_asm::MUL});
         }
         else if (rret.kind == Type::Kind::Pointer && lret.kind == Type::Kind::Basic &&
@@ -1026,7 +1025,7 @@ std::any astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionC
         {
             // 左整形右指针
             auto lret = ac<Type>(visitMultiplicativeExpression(in[0]));
-            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 8});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, rret.subType->getsize()});
             funcnow->asms.push_back(ASM{ASM::basic_asm::MUL});
             auto rret = func(in.subspan(1, in.size() - 1), index + 1);
         }
@@ -1054,8 +1053,7 @@ std::any astVisitor::visitMultiplicativeExpression(
 {
     // 注意处理多个* / %
     std::function<Type(std::span<ComplierParser::CastExpressionContext*>, int)> func =
-        [&func, this, ctx](std::span<ComplierParser::CastExpressionContext*> in,
-                           int index) -> Type
+        [&func, this, ctx](std::span<ComplierParser::CastExpressionContext*> in, int index) -> Type
     {
         if (in.size() == 1)
         {
@@ -1267,8 +1265,7 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
 std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext* ctx)
 {
     // 注意处理多个后缀
-    std::function<Type(int, int)> func =
-        [&func, this, ctx](int start, int end) -> Type
+    std::function<Type(int, int)> func = [&func, this, ctx](int start, int end) -> Type
     {
         if (end == 0)
         {
@@ -1576,12 +1573,12 @@ std::any astVisitor::visitJumpStatement(ComplierParser::JumpStatementContext* ct
     if (ctx->children[0]->getText() == "continue")
     {
         funcnow->asms.push_back("lable@continue");
-    return true;
+        return true;
     }
     else if (ctx->children[0]->getText() == "break")
     {
         funcnow->asms.push_back("lable@break");
-    return true;
+        return true;
     }
     else if (ctx->children[0]->getText() == "return")
     {
@@ -1594,7 +1591,7 @@ std::any astVisitor::visitJumpStatement(ComplierParser::JumpStatementContext* ct
             funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 0});
         }
         funcnow->asms.push_back(ASM{ASM::basic_asm::RET});
-    return true;
+        return true;
     }
 }
 
@@ -1632,12 +1629,15 @@ std::any astVisitor::visitDirectAbstractDeclarator(
         // parseConstexpr 返回 long long, 这里数组维度内部使用 int, 显式窄化避免警告
         basetype.pushTop(
             Type(Type::Kind::Array, static_cast<int>(parseConstexpr(ctx->assignmentExpression()))));
-    return basetype;
+        return basetype;
     }
     else if (ctx->LeftParen()) // func
     {
         std::vector<Type> args;
-        if (ctx->parameterTypeList()) { args = ac<std::vector<Type>>(visitParameterTypeList(ctx->parameterTypeList())); }
+        if (ctx->parameterTypeList())
+        {
+            args = ac<std::vector<Type>>(visitParameterTypeList(ctx->parameterTypeList()));
+        }
         basetype.pushTop(Type{Type::Kind::Function, args});
         return basetype;
     }

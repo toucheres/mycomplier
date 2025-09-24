@@ -18,7 +18,7 @@ int main(int argc, const char* argv[])
         }
     }
     VM vm{ret.value()};
-    vm.enable_debug = false;
+    // vm.enable_debug = false;
     auto retval = vm.run();
     if (retval)
     {

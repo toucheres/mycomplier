@@ -7,7 +7,6 @@ VM::VM(const std::vector<std::string>& asms)
     {
         char tp = *thiscpu.sp;
         std::cout << tp;
-        thiscpu.sp++;
     };
 }
 
@@ -48,6 +47,7 @@ void VM::debug()
 {
     std::cout << "next ins: " << vcpu.asms[vcpu.ip] << '\n';
     std::cout << "ip: " << vcpu.ip << '\n';
+    std::cout << "bp: " << vcpu.bp << '\n';
     std::cout << "ax: " << *vcpu.ax << '\n';
     std::cout << "stack:\n";
     for (int i = &vcpu.mem.back() - vcpu.sp - 1; i >= 0; i--)

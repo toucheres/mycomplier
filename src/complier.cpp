@@ -446,7 +446,7 @@ size_t varDef::get_addr_in_stack(size_t posnow)
         // x 必须是 2 的幂
         return (n + x - 1) & ~(x - 1);
     };
-    if (type.getsize() > 1)
+    if (type.getsize() >= 1)
     {
         return ceiling(posnow + this->type.getsize(), VCPU<>::size_word); // 姑且对齐到size_word
     }
