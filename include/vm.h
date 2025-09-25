@@ -43,11 +43,13 @@ struct VM
     enum systemcall
     {
         WRITE,
+        MALLOC,
+        FREE
     };
     VM(const std::vector<std::string>& asms);
     bool enable_debug = true;
     VCPU<> vcpu;
-    std::optional<int> run();
+    std::optional<int64_t> run();
     void debug();
 };
 

@@ -8,9 +8,19 @@ VM::VM(const std::vector<std::string>& asms)
         char tp = *thiscpu.sp;
         std::cout << tp;
     };
+    vcpu.systemcall_table[VM::systemcall::MALLOC] = [](VCPU<>& thiscpu)
+    {
+        long tp = *thiscpu.sp;
+        *thiscpu.ax = (long)malloc(tp);
+    };
+    vcpu.systemcall_table[VM::systemcall::FREE] = [](VCPU<>& thiscpu)
+    {
+        long tp = *thiscpu.sp;
+        free((void*)tp);
+    };
 }
 
-std::optional<int> VM::run()
+std::optional<int64_t> VM::run()
 {
     if (enable_debug)
     {
@@ -48,7 +58,7 @@ void VM::debug()
     std::cout << "next ins: " << vcpu.asms[vcpu.ip] << '\n';
     std::cout << "ip: " << vcpu.ip << '\n';
     std::cout << "bp: " << vcpu.bp << '\n';
-    std::cout << "ax: " << *vcpu.ax << '\n';
+    std::cout << "ax: " << std::hex << *vcpu.ax << '\n';
     std::cout << "stack:\n";
     for (int i = &vcpu.mem.back() - vcpu.sp - 1; i >= 0; i--)
     {

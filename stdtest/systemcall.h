@@ -1,4 +1,27 @@
-void write(char in)
+char* __malloc(char in)
+{
+    char* ptr;
+    _asm_("IMM -8");
+    _asm_("LEA");
+    _asm_("IMM 16");
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("SYSTEMCALL 1");
+    _asm_("DARG 1");
+    _asm_("PUSH");
+    _asm_("SW");
+    return ptr;
+}
+void __free(char* ptr)
+{
+    _asm_("IMM 16");
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("SYSTEMCALL 2");
+    _asm_("POP");
+    return;
+}
+void __write(char in)
 {
     _asm_("IMM 16");
     _asm_("LEA");

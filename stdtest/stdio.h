@@ -3,7 +3,7 @@ void print_str(char* str)
 {
     while (*str != '\0')
     {
-        write(*str);
+        __write(*str);
         str = str + 1;
     }
     return;

@@ -1029,6 +1029,11 @@ std::any astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionC
             funcnow->asms.push_back(ASM{ASM::basic_asm::MUL});
             auto rret = func(in.subspan(1, in.size() - 1), index + 1);
         }
+        else // 其他类型不做特殊处理
+        {
+            auto lret = ac<Type>(visitMultiplicativeExpression(in[0]));
+            auto rret = func(in.subspan(1, in.size() - 1), index + 1);
+        }
         std::string op_token = ctx->children[index * 2 + 1]->getText();
         if (op_token == "+")
         {

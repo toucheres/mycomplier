@@ -1,0 +1,4 @@
+char* malloc(long memsize)
+{
+    
+}
