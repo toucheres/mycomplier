@@ -1,7 +1,7 @@
 #include "complier.hpp"
 #include "vm.h"
 #include <iostream>
-// [TODO] 函数调用与变量地址处理
+// [TODO] ptr的自增
 int main(int argc, const char* argv[])
 {
     std::vector<std::string> args(argv + 1, argv + argc);
@@ -18,7 +18,7 @@ int main(int argc, const char* argv[])
         }
     }
     VM vm{ret.value()};
-    // vm.enable_debug = false;
+    vm.enable_debug = false;
     auto retval = vm.run();
     if (retval)
     {

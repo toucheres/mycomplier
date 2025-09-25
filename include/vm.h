@@ -14,7 +14,7 @@
 #include <functional>
 #include <vector>
 class VM;
-template <size_t StackSize = 1024, class Word = int64_t> struct VCPU
+template <size_t StackSize = 10240, class Word = int64_t> struct VCPU
 {
     inline static const size_t size_word = sizeof(Word);
     std::map<int, std::function<void(VCPU<>&)>> systemcall_table;
@@ -44,7 +44,8 @@ struct VM
     {
         WRITE,
         MALLOC,
-        FREE
+        FREE,
+        BREAKPOINT
     };
     VM(const std::vector<std::string>& asms);
     bool enable_debug = true;

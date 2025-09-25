@@ -145,7 +145,9 @@ std::any astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionC
     auto funnowptr = obj.symbol_table.add_global_func_def(basetype);
     if (!funnowptr)
     {
-        THROW_ERR(error::double_defined, ctx->declarator());
+        // THROW_ERR(error::double_defined, ctx->declarator());
+        // 先忽略func_double define error 防止头文件多次包含
+        funnowptr = obj.symbol_table.lookup_func_def(basetype.id);
     }
     auto gfunptr = funcnow;
     funcnow = funnowptr;
