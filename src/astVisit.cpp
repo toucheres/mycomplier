@@ -7,6 +7,7 @@
 #include "type_utils.hpp"
 #include "vm.h"
 #include <functional>
+#include <utility>
 #include <tree/TerminalNode.h>
 template <class CAST> CAST ac(auto&& in)
 {
@@ -1203,7 +1204,16 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
                 THROW_ERR(error::expected_lvalue, ctx);
             }
             funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
-            if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            if (type.kind == Type::Kind::Pointer)
+            {
+                const auto step = static_cast<long>(
+                    type.subType ? type.subType->getsize() : VCPU<>::size_word);
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, step});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SW});
+            }
+            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
@@ -1237,7 +1247,16 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
                 THROW_ERR(error::expected_lvalue, ctx);
             }
             funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
-            if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            if (type.kind == Type::Kind::Pointer)
+            {
+                const auto step = static_cast<long>(
+                    type.subType ? type.subType->getsize() : VCPU<>::size_word);
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, step});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SUB});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::SW});
+            }
+            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 1});
@@ -1349,6 +1368,52 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
             }
             return eleType;
+        }
+        else if (todo->getText() == "++" || todo->getText() == "--")
+        {
+            auto valType = func(0, end - 1);
+            auto& lastAsm = funcnow->asms.back();
+            if (lastAsm != "LC" && lastAsm != "LI" && lastAsm != "LW")
+            {
+                THROW_ERR(error::expected_lvalue, ctx);
+            }
+            funcnow->asms.pop_back();
+
+            auto pickLoadStore = [](const Type& ty)
+            {
+                auto charSize = Type{Type::Kind::Basic, Type::BasicType::Char}.getsize();
+                auto intSize = Type{Type::Kind::Basic, Type::BasicType::Int}.getsize();
+                if (ty.getsize() == charSize)
+                {
+                    return std::pair{ASM::basic_asm::LC, ASM::basic_asm::SC};
+                }
+                if (ty.getsize() == intSize)
+                {
+                    return std::pair{ASM::basic_asm::LI, ASM::basic_asm::SI};
+                }
+                return std::pair{ASM::basic_asm::LW, ASM::basic_asm::SW};
+            };
+
+            auto [loadOp, storeOp] = pickLoadStore(valType);
+
+            funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
+            funcnow->asms.push_back(ASM{loadOp});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::POP});
+
+            long step = 1;
+            if (valType.kind == Type::Kind::Pointer)
+            {
+                auto pointed = valType.subType ? valType.subType->getsize() : VCPU<>::size_word;
+                step = static_cast<long>(pointed);
+            }
+
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, step});
+            funcnow->asms.push_back(ASM{todo->getText() == "++" ? ASM::basic_asm::ADD
+                                                                  : ASM::basic_asm::SUB});
+            funcnow->asms.push_back(ASM{storeOp});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
+            return valType;
         }
         else
         {
