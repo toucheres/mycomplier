@@ -37,14 +37,16 @@ void __write(char in)
     _asm_("POP");
     return;
 }
-void print_str(char* str)
+long print_str(char* str)
 {
+    long num = 0;
     while (*str != '\0')
     {
         __write(*str);
-        str = str + 1;
+        str++;
+        num++;
     }
-    return;
+    return num;
 }
 long num_to_str(char* src, long num)
 {
@@ -215,48 +217,98 @@ long fprintf(char* src, char* fmt, ...)
     return charsnum;
 }
 
-
-long printf(char* fmt, ...)
+long fprintf(char* src, char* fmt, ...)
 {
-    long argindex = 1;
-    long chars = 0;
-
-    while (*fmt != '\0')
+    long arg_index = 1;
+    long charsnum = 0;
+    while (*fmt != 0)
     {
         if (*fmt == '%')
         {
-            fmt++;
-            if (*fmt == '\0')
-                break;
-
-            
-            if (*fmt == '%')
-            {
-                __write('%');
-                chars++;
-                fmt = fmt + 1;
-                continue;
-            }
-
+            fmt = fmt + 1;
             if (*fmt == 'c')
             {
-                long c = *load_arg_ptr(&fmt, argindex);
-                argindex = argindex + 1;
-                __write(c);
-                chars++;
+                *src = *load_arg_ptr(&fmt, arg_index);
+                arg_index = arg_index + 1;
+                charsnum = charsnum + 1;
+                fmt = fmt + 1;
+                src = src + 1;
+            }
+            else if (*fmt == 'd')
+            {
+                long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                arg_index = arg_index + 1;
+                charsnum = charsnum + size;
+                fmt = fmt + 1;
+                src = src + size;
+            }
+            else if (*fmt == 'l')
+            {
+                fmt = fmt + 1;
+                if (*fmt == 'd')
+                {
+                    long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                    arg_index = arg_index + 1;
+                    charsnum = charsnum + size;
+                    fmt = fmt + 1;
+                    src = src + size;
+                }
+                else
+                {
+                    *src = *fmt;
+                    charsnum = charsnum + 1;
+                    fmt = fmt + 1;
+                    src = src + 1;
+                }
+            }
+            else
+            {
+                
+                *src++ = '%';
+                charsnum++;
+                if (*fmt != '\0')
+                {
+                    *src++ = *fmt;
+                    charsnum++;
+                    fmt++;
+                }
+            }
+        }
+        else
+        {
+            *src = *fmt;
+            charsnum = charsnum + 1;
+            fmt = fmt + 1;
+            src = src + 1;
+        }
+    }
+    *src = '\0';
+    return charsnum;
+}
+
+long printf(char* fmt, ...)
+{
+    long arg_index = 1;
+    long charsnum = 0;
+    while (*fmt != 0)
+    {
+        if (*fmt == '%')
+        {
+            fmt = fmt + 1;
+            if (*fmt == 'c')
+            {
+                __write(*load_arg_ptr(&fmt, arg_index));
+                arg_index = arg_index + 1;
+                charsnum = charsnum + 1;
                 fmt = fmt + 1;
             }
             else if (*fmt == 'd')
             {
-                long v = *load_arg_ptr(&fmt, argindex); 
-                argindex = argindex + 1;
-                char buf[32];
-                long n = num_to_str(buf, v);
-                for (long i = 0; i < n; ++i)
-                {
-                    __write(buf[i]);
-                }
-                chars += n;
+                char src[12];
+                long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                print_str(src);
+                arg_index = arg_index + 1;
+                charsnum = charsnum + size;
                 fmt = fmt + 1;
             }
             else if (*fmt == 'l')
@@ -264,72 +316,46 @@ long printf(char* fmt, ...)
                 fmt = fmt + 1;
                 if (*fmt == 'd')
                 {
-                    long v = *load_arg_ptr(&fmt, argindex);
-                    argindex = argindex + 1;
-                    char buf[32];
-                    long n = num_to_str(buf, v);
-                    for (long i = 0; i < n; ++i)
-                    {
-                        __write(buf[i]);
-                    }
-                    chars += n;
+                    char src[12];
+                    long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                    print_str(src);
+                    arg_index = arg_index + 1;
+                    charsnum = charsnum + size;
                     fmt = fmt + 1;
                 }
                 else
                 {
-                    
-                    __write('%');
-                    chars++;
-                    __write('l');
-                    chars++;
-                    if (*fmt != '\0')
-                    {
-                        __write(*fmt);
-                        chars++;
-                        fmt = fmt + 1;
-                    }
+                    __write(*fmt);
+                    charsnum = charsnum + 1;
+                    fmt = fmt + 1;
                 }
-            }
-            else if (*fmt == 's')
-            {
-                char* s = *load_arg_ptr(&fmt, argindex);
-                argindex = argindex + 1;
-                while (s && *s)
-                {
-                    __write(*s);
-                    chars++;
-                    s++;
-                }
-                fmt = fmt + 1;
             }
             else
             {
                 
                 __write('%');
-                chars++;
+                charsnum++;
                 if (*fmt != '\0')
                 {
                     __write(*fmt);
-                    chars++;
-                    fmt = fmt + 1;
+                    charsnum++;
+                    fmt++;
                 }
             }
         }
         else
         {
             __write(*fmt);
-            chars++;
+            charsnum = charsnum + 1;
             fmt = fmt + 1;
         }
-        fmt = fmt + 1;
     }
-    return chars;
+    return charsnum;
 }
 
 int main()
 {
-    int arr[3] = {122,13,45};
-    int* ptr = arr;
-    ptr++;
-    return ptr[1];
+    char src[100];
+    char fmt[12] = {'a', '%', 'd', 'c', 0};
+    return printf(fmt, 123);
 }

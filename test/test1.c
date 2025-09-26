@@ -1,8 +1,7 @@
 #include <stdio.h>
 int main()
 {
-    int arr[3] = {122,13,45};
-    int* ptr = arr;
-    ptr++;
-    return ptr[1];
+    char src[100];
+    char fmt[12] = {'a', '%', 'd', 'c', 0};
+    return printf(fmt, 123);
 }

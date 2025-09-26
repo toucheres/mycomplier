@@ -1,13 +1,15 @@
 #include <stdarg.h>
 #include <systemcall.h>
-void print_str(char* str)
+long print_str(char* str)
 {
+    long num = 0;
     while (*str != '\0')
     {
         __write(*str);
-        str = str + 1;
+        str++;
+        num++;
     }
-    return;
+    return num;
 }
 long num_to_str(char* src, long num)
 {
@@ -177,49 +179,99 @@ long fprintf(char* src, char* fmt, ...)
     *src = '\0';
     return charsnum;
 }
-
-// 新增：printf，直接用 __write 输出字符
-long printf(char* fmt, ...)
+// 仅支持%s %d %c %ld
+long fprintf(char* src, char* fmt, ...)
 {
-    long argindex = 1;
-    long chars = 0;
-
-    while (*fmt != '\0')
+    long arg_index = 1;
+    long charsnum = 0;
+    while (*fmt != 0)
     {
         if (*fmt == '%')
         {
-            fmt++;
-            if (*fmt == '\0')
-                break;
-
-            // 处理 "%%" -> 输出单个 '%'
-            if (*fmt == '%')
-            {
-                __write('%');
-                chars++;
-                fmt = fmt + 1;
-                continue;
-            }
-
+            fmt = fmt + 1;
             if (*fmt == 'c')
             {
-                long c = *load_arg_ptr(&fmt, argindex);
-                argindex = argindex + 1;
-                __write(c);
-                chars++;
+                *src = *load_arg_ptr(&fmt, arg_index);
+                arg_index = arg_index + 1;
+                charsnum = charsnum + 1;
+                fmt = fmt + 1;
+                src = src + 1;
+            }
+            else if (*fmt == 'd')
+            {
+                long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                arg_index = arg_index + 1;
+                charsnum = charsnum + size;
+                fmt = fmt + 1;
+                src = src + size;
+            }
+            else if (*fmt == 'l')
+            {
+                fmt = fmt + 1;
+                if (*fmt == 'd')
+                {
+                    long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                    arg_index = arg_index + 1;
+                    charsnum = charsnum + size;
+                    fmt = fmt + 1;
+                    src = src + size;
+                }
+                else
+                {
+                    *src = *fmt;
+                    charsnum = charsnum + 1;
+                    fmt = fmt + 1;
+                    src = src + 1;
+                }
+            }
+            else
+            {
+                // 未知格式：把 '%' 和随后字符都按字面输出（若后面是 '\0' 则只输出 '%'）
+                *src++ = '%';
+                charsnum++;
+                if (*fmt != '\0')
+                {
+                    *src++ = *fmt;
+                    charsnum++;
+                    fmt++;
+                }
+            }
+        }
+        else
+        {
+            *src = *fmt;
+            charsnum = charsnum + 1;
+            fmt = fmt + 1;
+            src = src + 1;
+        }
+    }
+    *src = '\0';
+    return charsnum;
+}
+// ...existing code...
+long printf(char* fmt, ...)
+{
+    long arg_index = 1;
+    long charsnum = 0;
+    while (*fmt != 0)
+    {
+        if (*fmt == '%')
+        {
+            fmt = fmt + 1;
+            if (*fmt == 'c')
+            {
+                __write(*load_arg_ptr(&fmt, arg_index));
+                arg_index = arg_index + 1;
+                charsnum = charsnum + 1;
                 fmt = fmt + 1;
             }
             else if (*fmt == 'd')
             {
-                long v = *load_arg_ptr(&fmt, argindex); // 按 long 处理
-                argindex = argindex + 1;
-                char buf[32];
-                long n = num_to_str(buf, v);
-                for (long i = 0; i < n; ++i)
-                {
-                    __write(buf[i]);
-                }
-                chars += n;
+                char src[12];
+                long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                print_str(src);
+                arg_index = arg_index + 1;
+                charsnum = charsnum + size;
                 fmt = fmt + 1;
             }
             else if (*fmt == 'l')
@@ -227,65 +279,39 @@ long printf(char* fmt, ...)
                 fmt = fmt + 1;
                 if (*fmt == 'd')
                 {
-                    long v = *load_arg_ptr(&fmt, argindex);
-                    argindex = argindex + 1;
-                    char buf[32];
-                    long n = num_to_str(buf, v);
-                    for (long i = 0; i < n; ++i)
-                    {
-                        __write(buf[i]);
-                    }
-                    chars += n;
+                    char src[12];
+                    long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                    print_str(src);
+                    arg_index = arg_index + 1;
+                    charsnum = charsnum + size;
                     fmt = fmt + 1;
                 }
                 else
                 {
-                    // 未知 'l' 后缀，按字面输出 "%lX"
-                    __write('%');
-                    chars++;
-                    __write('l');
-                    chars++;
-                    if (*fmt != '\0')
-                    {
-                        __write(*fmt);
-                        chars++;
-                        fmt = fmt + 1;
-                    }
+                    __write(*fmt);
+                    charsnum = charsnum + 1;
+                    fmt = fmt + 1;
                 }
-            }
-            else if (*fmt == 's')
-            {
-                char* s = *load_arg_ptr(&fmt, argindex);
-                argindex = argindex + 1;
-                while (s && *s)
-                {
-                    __write(*s);
-                    chars++;
-                    s++;
-                }
-                fmt = fmt + 1;
             }
             else
             {
-                // 未知格式，按字面输出 "%x"
+                // 未知格式：把 '%' 和随后字符都按字面输出（若后面是 '\0' 则只输出 '%'）
                 __write('%');
-                chars++;
+                charsnum++;
                 if (*fmt != '\0')
                 {
                     __write(*fmt);
-                    chars++;
-                    fmt = fmt + 1;
+                    charsnum++;
+                    fmt++;
                 }
             }
         }
         else
         {
             __write(*fmt);
-            chars++;
+            charsnum = charsnum + 1;
             fmt = fmt + 1;
         }
-        fmt = fmt + 1;
     }
-    return chars;
+    return charsnum;
 }
-// ...existing code...
