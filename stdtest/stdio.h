@@ -1,11 +1,15 @@
 #include <stdarg.h>
 #include <systemcall.h>
+void write(long arg)
+{
+    return __write(arg);
+}
 long print_str(char* str)
 {
     long num = 0;
     while (*str != '\0')
     {
-        __write(*str);
+        write(*str);
         str++;
         num++;
     }
@@ -260,9 +264,16 @@ long printf(char* fmt, ...)
             fmt = fmt + 1;
             if (*fmt == 'c')
             {
-                __write(*load_arg_ptr(&fmt, arg_index));
+                write(*load_arg_ptr(&fmt, arg_index));
                 arg_index = arg_index + 1;
                 charsnum = charsnum + 1;
+                fmt = fmt + 1;
+            }
+            else if (*fmt == 's')
+            {
+                long size = print_str(*load_arg_ptr(&fmt, arg_index));
+                arg_index = arg_index + 1;
+                charsnum = charsnum + size;
                 fmt = fmt + 1;
             }
             else if (*fmt == 'd')
@@ -288,7 +299,7 @@ long printf(char* fmt, ...)
                 }
                 else
                 {
-                    __write(*fmt);
+                    write(*fmt);
                     charsnum = charsnum + 1;
                     fmt = fmt + 1;
                 }
@@ -296,11 +307,11 @@ long printf(char* fmt, ...)
             else
             {
                 // 未知格式：把 '%' 和随后字符都按字面输出（若后面是 '\0' 则只输出 '%'）
-                __write('%');
+                write('%');
                 charsnum++;
                 if (*fmt != '\0')
                 {
-                    __write(*fmt);
+                    write(*fmt);
                     charsnum++;
                     fmt++;
                 }
@@ -308,7 +319,7 @@ long printf(char* fmt, ...)
         }
         else
         {
-            __write(*fmt);
+            write(*fmt);
             charsnum = charsnum + 1;
             fmt = fmt + 1;
         }

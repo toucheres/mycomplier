@@ -1,4 +1,26 @@
 
+long strlen(char* str)
+{
+    long lenth = 0;
+    while (*str != 0)
+    {
+        lenth = lenth + 1;
+        str = str + 1;
+    }
+    return lenth;
+}
+char* strcpy(char* to, char* from)
+{
+    char* tmp = to;
+    while (*from != 0)
+    {
+        *to = *from;
+        from++;
+        to++;
+    }
+    return tmp;
+}
+
 
 long* load_arg_ptr(long* first_arg_ptr, int n)
 {
@@ -37,12 +59,16 @@ void __write(char in)
     _asm_("POP");
     return;
 }
+void write(long arg)
+{
+    return __write(arg);
+}
 long print_str(char* str)
 {
     long num = 0;
     while (*str != '\0')
     {
-        __write(*str);
+        write(*str);
         str++;
         num++;
     }
@@ -297,9 +323,16 @@ long printf(char* fmt, ...)
             fmt = fmt + 1;
             if (*fmt == 'c')
             {
-                __write(*load_arg_ptr(&fmt, arg_index));
+                write(*load_arg_ptr(&fmt, arg_index));
                 arg_index = arg_index + 1;
                 charsnum = charsnum + 1;
+                fmt = fmt + 1;
+            }
+            else if (*fmt == 's')
+            {
+                long size = print_str(*load_arg_ptr(&fmt, arg_index));
+                arg_index = arg_index + 1;
+                charsnum = charsnum + size;
                 fmt = fmt + 1;
             }
             else if (*fmt == 'd')
@@ -325,7 +358,7 @@ long printf(char* fmt, ...)
                 }
                 else
                 {
-                    __write(*fmt);
+                    write(*fmt);
                     charsnum = charsnum + 1;
                     fmt = fmt + 1;
                 }
@@ -333,11 +366,11 @@ long printf(char* fmt, ...)
             else
             {
                 
-                __write('%');
+                write('%');
                 charsnum++;
                 if (*fmt != '\0')
                 {
-                    __write(*fmt);
+                    write(*fmt);
                     charsnum++;
                     fmt++;
                 }
@@ -345,7 +378,7 @@ long printf(char* fmt, ...)
         }
         else
         {
-            __write(*fmt);
+            write(*fmt);
             charsnum = charsnum + 1;
             fmt = fmt + 1;
         }
@@ -355,8 +388,8 @@ long printf(char* fmt, ...)
 
 int main()
 {
-    char src[100];
-    
-    char fmt[12] = "a%db";
-    return printf(fmt, 123);
+    char src[12];
+    char from[12] = "hello!\n";
+    strcpy(src, from);
+    return printf(src);
 }
