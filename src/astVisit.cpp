@@ -7,8 +7,8 @@
 #include "type_utils.hpp"
 #include "vm.h"
 #include <functional>
-#include <utility>
 #include <tree/TerminalNode.h>
+#include <utility>
 template <class CAST> CAST ac(auto&& in)
 {
     return std::any_cast<CAST>(in);
@@ -317,8 +317,149 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
     {
         obj.symbol_table.add_global_var_def(ret);
     }
+    auto decodeStringLiteral =
+        [this](ComplierParser::AssignmentExpressionContext* expr) -> std::optional<std::vector<int>>
+    {
+        if (!expr)
+        {
+            return std::nullopt;
+        }
+        std::string text;
+        try
+        {
+            text = expr->getText();
+        }
+        catch (...)
+        {
+            return std::nullopt;
+        }
+        if (text.empty())
+        {
+            return std::nullopt;
+        }
+        auto hexValue = [](char ch) -> int
+        {
+            if (ch >= '0' && ch <= '9')
+            {
+                return ch - '0';
+            }
+            if (ch >= 'a' && ch <= 'f')
+            {
+                return ch - 'a' + 10;
+            }
+            if (ch >= 'A' && ch <= 'F')
+            {
+                return ch - 'A' + 10;
+            }
+            return -1;
+        };
+        size_t pos = 0;
+        std::vector<int> result;
+        while (pos < text.size())
+        {
+            if (text.compare(pos, 2, "u8") == 0 && pos + 2 < text.size() && text[pos + 2] == '"')
+            {
+                pos += 2;
+            }
+            else if ((text[pos] == 'u' || text[pos] == 'U' || text[pos] == 'L') &&
+                     pos + 1 < text.size() && text[pos + 1] == '"')
+            {
+                pos += 1;
+            }
+            if (pos >= text.size() || text[pos] != '"')
+            {
+                return std::nullopt;
+            }
+            pos++;
+            while (pos < text.size() && text[pos] != '"')
+            {
+                if (text[pos] == '\\')
+                {
+                    pos++;
+                    if (pos >= text.size())
+                    {
+                        return std::nullopt;
+                    }
+                    char esc = text[pos];
+                    switch (esc)
+                    {
+                    case 'n': result.push_back('\n'); pos++; break;
+                    case 't': result.push_back('\t'); pos++; break;
+                    case 'r': result.push_back('\r'); pos++; break;
+                    case 'a': result.push_back('\a'); pos++; break;
+                    case 'b': result.push_back('\b'); pos++; break;
+                    case 'f': result.push_back('\f'); pos++; break;
+                    case 'v': result.push_back('\v'); pos++; break;
+                    case '\\': result.push_back('\\'); pos++; break;
+                    case '\'': result.push_back('\''); pos++; break;
+                    case '"': result.push_back('"'); pos++; break;
+                    case 'x':
+                    {
+                        pos++;
+                        int value = 0;
+                        bool hasDigit = false;
+                        while (pos < text.size())
+                        {
+                            int hv = hexValue(text[pos]);
+                            if (hv < 0)
+                            {
+                                break;
+                            }
+                            hasDigit = true;
+                            value = (value << 4) + hv;
+                            pos++;
+                        }
+                        if (!hasDigit)
+                        {
+                            return std::nullopt;
+                        }
+                        result.push_back(value & 0xFF);
+                        break;
+                    }
+                    case '0':
+                    case '1':
+                    case '2':
+                    case '3':
+                    case '4':
+                    case '5':
+                    case '6':
+                    case '7':
+                    {
+                        int value = esc - '0';
+                        pos++;
+                        int count = 1;
+                        while (count < 3 && pos < text.size() && text[pos] >= '0' && text[pos] <= '7')
+                        {
+                            value = value * 8 + (text[pos] - '0');
+                            pos++;
+                            count++;
+                        }
+                        result.push_back(value & 0xFF);
+                        break;
+                    }
+                    default:
+                        result.push_back(static_cast<unsigned char>(esc));
+                        pos++;
+                        break;
+                    }
+                }
+                else
+                {
+                    result.push_back(static_cast<unsigned char>(text[pos]));
+                    pos++;
+                }
+            }
+            if (pos >= text.size())
+            {
+                return std::nullopt;
+            }
+            pos++;
+        }
+        result.push_back(0);
+        return result;
+    };
     std::function<bool(Type, ComplierParser::InitializerContext*)> func =
-        [&func, this](Type arg, ComplierParser::InitializerContext* init) -> bool
+        [&func, this, &decodeStringLiteral](Type arg, ComplierParser::InitializerContext* init) -> bool
     {
         // addr通过运行时栈传递
         auto asmholder = funcnow;
@@ -358,28 +499,102 @@ std::any astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* 
         }
         else if (arg.kind == Type::Kind::Array)
         {
-            size_t initListSize = 0;
             if (init->initializerList())
             {
-                initListSize = init->initializerList()->initializer().size();
-            }
-            for (size_t i = 0;
-                 i < std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize) - 1; i++)
-            {
-                asmholder->asms.push_back(ASM{ASM::basic_asm::COPY});
-            }
-            for (size_t i = 0; i < std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize);
-                 i++)
-            {
-                if (i != 0)
+                size_t initListSize = init->initializerList()->initializer().size();
+                size_t limit =
+                    std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize);
+                if (limit == 0)
                 {
-                    asmholder->asms.push_back(ASM{ASM::basic_asm::IMM, arg.subType->getsize() * i});
-                    asmholder->asms.push_back(ASM{ASM::basic_asm::ADD});
+                    return true;
                 }
-                if (init->initializerList()->initializer(i))
+                for (size_t i = 0; i + 1 < limit; i++)
                 {
-                    func(*arg.subType, init->initializerList()->initializer(i));
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::COPY});
                 }
+                for (size_t i = 0; i < limit; i++)
+                {
+                    if (i != 0)
+                    {
+                        asmholder->asms.push_back(
+                            ASM{ASM::basic_asm::IMM, arg.subType->getsize() * i});
+                        asmholder->asms.push_back(ASM{ASM::basic_asm::ADD});
+                    }
+                    if (init->initializerList()->initializer(i))
+                    {
+                        func(*arg.subType, init->initializerList()->initializer(i));
+                    }
+                }
+            }
+            else if (auto assign = init->assignmentExpression())
+            {
+                auto literal = decodeStringLiteral(assign);
+                if (!literal)
+                {
+                    THROW_ERR(error::expected_arr_initor, assign);
+                }
+                if (!arg.subType || arg.subType->kind != Type::Kind::Basic ||
+                    arg.subType->basic_type != Type::BasicType::Char)
+                {
+                    THROW_ERR(error::expected_arr_initor, assign);
+                }
+                if (arg.arr_or_ptr_num < 0)
+                {
+                    THROW_ERR(error::expected_arr_initor, assign);
+                }
+                auto data = *literal;
+                size_t arrLen = static_cast<size_t>(arg.arr_or_ptr_num);
+                if (data.size() > arrLen)
+                {
+                    THROW_ERR(error::expected_arr_initor, assign);
+                }
+                data.resize(arrLen, 0);
+                if (arrLen == 0)
+                {
+                    return true;
+                }
+                for (size_t i = 0; i + 1 < arrLen; ++i)
+                {
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::COPY});
+                }
+                size_t elemSize = arg.subType->getsize();
+                Type charType{Type::Kind::Basic, Type::BasicType::Char};
+                size_t charSize = charType.getsize();
+                size_t intSize = Type{Type::Kind::Basic, Type::BasicType::Int}.getsize();
+                size_t longSize = Type{Type::Kind::Basic, Type::BasicType::Long}.getsize();
+                for (size_t i = 0; i < arrLen; ++i)
+                {
+                    if (i != 0)
+                    {
+                        asmholder->asms.push_back(
+                            ASM{ASM::basic_asm::IMM, static_cast<int>(elemSize * i)});
+                        asmholder->asms.push_back(ASM{ASM::basic_asm::ADD});
+                    }
+                    asmholder->asms.push_back(
+                        ASM{ASM::basic_asm::IMM,
+                            static_cast<int>(static_cast<unsigned char>(data[i]))});
+                    if (elemSize == charSize)
+                    {
+                        asmholder->asms.push_back(ASM{ASM::basic_asm::SC});
+                    }
+                    else if (elemSize == intSize)
+                    {
+                        asmholder->asms.push_back(ASM{ASM::basic_asm::SI});
+                    }
+                    else if (elemSize == longSize)
+                    {
+                        asmholder->asms.push_back(ASM{ASM::basic_asm::SW});
+                    }
+                    else
+                    {
+                        THROW_ERR(error::expected_arr_initor, assign);
+                    }
+                }
+                return true;
+            }
+            else
+            {
+                THROW_ERR(error::expected_arr_initor, init);
             }
         }
         return true;
@@ -1206,8 +1421,8 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
             funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
             if (type.kind == Type::Kind::Pointer)
             {
-                const auto step = static_cast<long>(
-                    type.subType ? type.subType->getsize() : VCPU<>::size_word);
+                const auto step =
+                    static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, step});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
@@ -1249,8 +1464,8 @@ std::any astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext
             funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
             if (type.kind == Type::Kind::Pointer)
             {
-                const auto step = static_cast<long>(
-                    type.subType ? type.subType->getsize() : VCPU<>::size_word);
+                const auto step =
+                    static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, step});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::SUB});
@@ -1409,8 +1624,8 @@ std::any astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionCon
             }
 
             funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, step});
-            funcnow->asms.push_back(ASM{todo->getText() == "++" ? ASM::basic_asm::ADD
-                                                                  : ASM::basic_asm::SUB});
+            funcnow->asms.push_back(
+                ASM{todo->getText() == "++" ? ASM::basic_asm::ADD : ASM::basic_asm::SUB});
             funcnow->asms.push_back(ASM{storeOp});
             funcnow->asms.push_back(ASM{ASM::basic_asm::PUSH});
             return valType;

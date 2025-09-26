@@ -1,7 +1,7 @@
 #include "complier.hpp"
 #include "vm.h"
 #include <iostream>
-// [TODO] ptr的自增
+// [TODO] "xxx" 初始化char*和char[n]
 int main(int argc, const char* argv[])
 {
     std::vector<std::string> args(argv + 1, argv + argc);

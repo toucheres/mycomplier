@@ -1,7 +1,6 @@
 #include <stdio.h>
 int main()
 {
-    char src[100];
-    char fmt[12] = {'a', '%', 'd', 'c', 0};
+    char fmt[12] = "a%db";
     return printf(fmt, 123);
 }
