@@ -6,7 +6,7 @@
 #include "obj.h"
 #include <antlr4-runtime/antlr4-runtime.h>
 #include <tree/ParseTree.h>
-struct astVisitor : public ComplierBaseVisitor
+struct astVisitor
 {
   private:
     funcDef* funcnow = nullptr;
@@ -23,57 +23,56 @@ struct astVisitor : public ComplierBaseVisitor
   public:
     astVisitor(std::string name, OBJ& obj);
     OBJ& obj;
-    std::any visitAsmADDer(ComplierParser::AsmADDerContext *ctx) override;
-    std::any visitByTypeIndex(antlr4::ParserRuleContext* ctx);
-    std::any visitCompilationUnit(ComplierParser::CompilationUnitContext* ctx) override;
-    std::any visitTranslationUnit(ComplierParser::TranslationUnitContext* ctx) override;
-    std::any visitDeclaration(ComplierParser::DeclarationContext* ctx) override;
-    std::any visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx) override;
-    std::any visitExternalDeclaration(ComplierParser::ExternalDeclarationContext* ctx) override;
-    std::any visitDeclarationSpecifiers(ComplierParser::DeclarationSpecifiersContext* ctx) override;
-    std::any visitDeclarationSpecifier(ComplierParser::DeclarationSpecifierContext* ctx) override;
-    std::any visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx) override;
-    std::any visitInitDeclaratorList(ComplierParser::InitDeclaratorListContext* ctx) override;
-    std::any visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx) override;
-    std::any visitDeclarator(ComplierParser::DeclaratorContext* ctx) override;
-    std::any visitDirectDeclarator(ComplierParser::DirectDeclaratorContext* ctx) override;
-    std::any visitParameterList(ComplierParser::ParameterListContext* ctx) override;
-    std::any visitParameterDeclaration(ComplierParser::ParameterDeclarationContext* ctx) override;
-    std::any visitBlockItemList(ComplierParser::BlockItemListContext* ctx) override;
-    std::any visitStatement(ComplierParser::StatementContext* ctx) override;
-    std::any visitExpressionStatement(ComplierParser::ExpressionStatementContext* ctx) override;
-    std::any visitExpression(ComplierParser::ExpressionContext* ctx) override;
-    std::any visitAssignmentExpression(ComplierParser::AssignmentExpressionContext* ctx) override;
-    std::any visitConditionalExpression(ComplierParser::ConditionalExpressionContext* ctx) override;
-    std::any visitLogicalOrExpression(ComplierParser::LogicalOrExpressionContext* ctx) override;
-    std::any visitLogicalAndExpression(ComplierParser::LogicalAndExpressionContext* ctx) override;
-    std::any visitInclusiveOrExpression(ComplierParser::InclusiveOrExpressionContext* ctx) override;
-    std::any visitExclusiveOrExpression(ComplierParser::ExclusiveOrExpressionContext* ctx) override;
-    std::any visitAndExpression(ComplierParser::AndExpressionContext* ctx) override;
-    std::any visitEqualityExpression(ComplierParser::EqualityExpressionContext* ctx) override;
-    std::any visitRelationalExpression(ComplierParser::RelationalExpressionContext* ctx) override;
-    std::any visitShiftExpression(ComplierParser::ShiftExpressionContext* ctx) override;
-    std::any visitAdditiveExpression(ComplierParser::AdditiveExpressionContext* ctx) override;
-    std::any visitMultiplicativeExpression(
-        ComplierParser::MultiplicativeExpressionContext* ctx) override;
-    std::any visitCastExpression(ComplierParser::CastExpressionContext* ctx) override;
-    std::any visitUnaryExpression(ComplierParser::UnaryExpressionContext* ctx) override;
-    std::any visitPostfixExpression(ComplierParser::PostfixExpressionContext* ctx) override;
-    std::any visitPrimaryExpression(ComplierParser::PrimaryExpressionContext* ctx) override;
-    std::any visitDeclarationSpecifiers2(
-        ComplierParser::DeclarationSpecifiers2Context* ctx) override;
-    std::any visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx) override;
-    std::any visitDirectAbstractDeclarator(
-        ComplierParser::DirectAbstractDeclaratorContext* ctx) override;
-    std::any visitTypeName(ComplierParser::TypeNameContext* ctx) override;
-    std::any visitBlockItem(ComplierParser::BlockItemContext* ctx) override;
-    std::any visitParameterTypeList(ComplierParser::ParameterTypeListContext* ctx) override;
-    std::any visitCompoundStatement(ComplierParser::CompoundStatementContext* ctx) override;
-    std::any visitSpecifierQualifierList(
-        ComplierParser::SpecifierQualifierListContext* ctx) override;
-    std::any visitSelectionStatement(ComplierParser::SelectionStatementContext* ctx) override;
-    std::any visitArgumentExpressionList(
-        ComplierParser::ArgumentExpressionListContext* ctx) override;
-    std::any visitIterationStatement(ComplierParser::IterationStatementContext* ctx) override;
-    std::any visitJumpStatement(ComplierParser::JumpStatementContext* ctx) override;
+    void visitAsmADDer(ComplierParser::AsmADDerContext *ctx);
+    // void visitByTypeIndex(antlr4::ParserRuleContext* ctx);
+    void visitCompilationUnit(ComplierParser::CompilationUnitContext* ctx);
+    void visitTranslationUnit(ComplierParser::TranslationUnitContext* ctx);
+    std::vector<Type> visitDeclaration(ComplierParser::DeclarationContext* ctx);
+    void visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx);
+    void visitExternalDeclaration(ComplierParser::ExternalDeclarationContext* ctx);
+    std::vector<Type> visitDeclarationSpecifiers(ComplierParser::DeclarationSpecifiersContext* ctx);
+    Type visitDeclarationSpecifier(ComplierParser::DeclarationSpecifierContext* ctx);
+    Type visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx);
+    std::vector<Type> visitInitDeclaratorList(ComplierParser::InitDeclaratorListContext* ctx);
+    Type visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx);
+    Type visitDeclarator(ComplierParser::DeclaratorContext* ctx);
+    Type visitDirectDeclarator(ComplierParser::DirectDeclaratorContext* ctx);
+    std::vector<Type> visitParameterList(ComplierParser::ParameterListContext* ctx);
+    Type visitParameterDeclaration(ComplierParser::ParameterDeclarationContext* ctx);
+    void visitBlockItemList(ComplierParser::BlockItemListContext* ctx);
+    void visitStatement(ComplierParser::StatementContext* ctx);
+    void visitExpressionStatement(ComplierParser::ExpressionStatementContext* ctx);
+    Type visitExpression(ComplierParser::ExpressionContext* ctx);
+    Type visitAssignmentExpression(ComplierParser::AssignmentExpressionContext* ctx);
+    Type visitConditionalExpression(ComplierParser::ConditionalExpressionContext* ctx);
+    Type visitLogicalOrExpression(ComplierParser::LogicalOrExpressionContext* ctx);
+    Type visitLogicalAndExpression(ComplierParser::LogicalAndExpressionContext* ctx);
+    Type visitInclusiveOrExpression(ComplierParser::InclusiveOrExpressionContext* ctx);
+    Type visitExclusiveOrExpression(ComplierParser::ExclusiveOrExpressionContext* ctx);
+    Type visitAndExpression(ComplierParser::AndExpressionContext* ctx);
+    Type visitEqualityExpression(ComplierParser::EqualityExpressionContext* ctx);
+    Type visitRelationalExpression(ComplierParser::RelationalExpressionContext* ctx);
+    Type visitShiftExpression(ComplierParser::ShiftExpressionContext* ctx);
+    Type visitAdditiveExpression(ComplierParser::AdditiveExpressionContext* ctx);
+    Type visitMultiplicativeExpression(
+        ComplierParser::MultiplicativeExpressionContext* ctx);
+    Type visitCastExpression(ComplierParser::CastExpressionContext* ctx);
+    Type visitUnaryExpression(ComplierParser::UnaryExpressionContext* ctx);
+    Type visitPostfixExpression(ComplierParser::PostfixExpressionContext* ctx);
+    Type visitPrimaryExpression(ComplierParser::PrimaryExpressionContext* ctx);
+    std::vector<Type> visitDeclarationSpecifiers2(
+        ComplierParser::DeclarationSpecifiers2Context* ctx);
+    Type visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx);
+    Type visitDirectAbstractDeclarator(
+        ComplierParser::DirectAbstractDeclaratorContext* ctx);
+    Type visitTypeName(ComplierParser::TypeNameContext* ctx);
+    void visitBlockItem(ComplierParser::BlockItemContext* ctx);
+    std::vector<Type> visitParameterTypeList(ComplierParser::ParameterTypeListContext* ctx);
+    void visitCompoundStatement(ComplierParser::CompoundStatementContext* ctx);
+    void visitSpecifierQualifierList(
+        ComplierParser::SpecifierQualifierListContext* ctx);
+    void visitSelectionStatement(ComplierParser::SelectionStatementContext* ctx);
+    void visitArgumentExpressionList(ComplierParser::ArgumentExpressionListContext* ctx);
+    void visitIterationStatement(ComplierParser::IterationStatementContext* ctx);
+    void visitJumpStatement(ComplierParser::JumpStatementContext* ctx);
 };

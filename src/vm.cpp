@@ -1,5 +1,4 @@
 #include "vm.h"
-
 VM::VM(const std::vector<std::string>& asms)
 {
     vcpu.asms = asms;

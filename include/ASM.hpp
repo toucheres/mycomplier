@@ -102,9 +102,18 @@ struct ASM
     {
         static auto tostr = [](auto&& in)
         {
+            using T = std::decay_t<decltype(in)>;
             if constexpr (requires { std::to_string(in); })
             {
                 return std::to_string(in);
+            }
+            else if constexpr (std::is_pointer_v<T> && std::is_same_v<T, const char*>)
+            {
+                if (in == nullptr)
+                {
+                    return std::string("NULL");
+                }
+                return std::string(in);
             }
             else if constexpr (requires { std::string{in}; })
             {

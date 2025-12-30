@@ -1,6 +1,17 @@
 grammar Complier;
- 
- 
+// @parser::members {
+//    fun debugCtx(ctx: org.antlr.v4.runtime.ParserRuleContext) {
+//    // 这里的代码会直接加入生成的 Parser 类（Kotlin）
+//        println("DEBUG: " + ctx.text)
+//    }
+//    val TypedefedId = mutableListOf<String>()
+//    fun hasTypeDef(name: String?): Boolean {
+//       return TypedefedId.find { it == name } != null
+//    }
+//    fun addTypeDef(name: String): Boolean {
+//        return TypedefedId.add(name)
+//    }
+//}
 primaryExpression
     :   Identifier
     |   Constant

@@ -3,15 +3,15 @@
 #include <array>
 #include <expected>
 #include <fstream>
+#include <functional>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <optional>
 #include <sstream>
 #include <stack>
 #include <string>
 #include <unordered_map>
-#include <map>
-#include <functional>
 #include <vector>
 class VM;
 template <size_t StackSize = 1024000, class Word = int64_t> struct VCPU
