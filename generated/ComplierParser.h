@@ -87,6 +87,29 @@ public:
   antlr4::atn::SerializedATNView getSerializedATN() const override;
 
 
+      std::vector<std::string> TypedefedId{};
+      bool hasTypeDef(std::string name)
+      {
+          for (const auto& each : TypedefedId)
+          {
+              if (each == name)
+              {
+                  return true;
+              }
+          }
+          return false;
+      }
+      bool addTypeDef(std::string name)
+      {
+          if (hasTypeDef(name))
+          {
+              return false;
+          }
+          TypedefedId.push_back(name);
+          return true;
+      }
+
+
   class PrimaryExpressionContext;
   class GenericSelectionContext;
   class GenericAssocListContext;
@@ -1721,6 +1744,7 @@ public:
 
   bool directDeclaratorSempred(DirectDeclaratorContext *_localctx, size_t predicateIndex);
   bool directAbstractDeclaratorSempred(DirectAbstractDeclaratorContext *_localctx, size_t predicateIndex);
+  bool typedefNameSempred(TypedefNameContext *_localctx, size_t predicateIndex);
 
   // By default the static state used to implement the parser is lazily initialized during the first
   // call to the constructor. You can call this function if you wish to initialize the static state
