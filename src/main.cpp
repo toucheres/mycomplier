@@ -5,7 +5,7 @@
 int main(int argc, const char* argv[])
 {
     std::vector<std::string> args(argv + 1, argv + argc);
-    auto ret = complier::process(args);
+    auto ret = complier::process(args, true, 4);
     if (!ret)
     {
         std::cout << "error\n";

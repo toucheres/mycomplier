@@ -43,10 +43,13 @@
 // funvar:bp+偏移   LEA + 数 LI 访问
 // funvar初始stack大小为8,为 obp opc+1预留位置
 #pragma once
+#include "ComplierParser.h"
 #include "error.hpp"
+#include "obj.h"
 #include <expected>
 #include <map>
 #include <memory>
+#include <climits>
 #include <optional>
 #include <peglib.h>
 #include <stack>
@@ -54,8 +57,6 @@
 #include <variant>
 #include <vector>
 #include <vm.h>
-#include "obj.h"
-#include "ComplierParser.h"
 // AST 节点基类
 
 struct exefile
@@ -76,5 +77,11 @@ struct linker
 };
 struct complier
 {
-    static std::expected<std::vector<std::string>, error> process(std::vector<std::string> paths);
+    static std::expected<std::vector<std::string>, error> process(std::vector<std::string> paths,
+                                                                  bool showASt = false,
+                                                                  int tolerate = INT_MAX,
+                                                                  bool showFoldedNames = false);
+
+  private:
+    static void printAST(antlr4::tree::ParseTree* tree, int tolerate = INT_MAX, bool showFoldedNames = false);
 };

@@ -11,6 +11,10 @@
 #include <format>
 #include <iostream>
 #include <regex>
+#if defined(__unix__) || defined(__APPLE__)
+#include <unistd.h>
+#endif
+#include <cstdio>
 size_t Type::getsize() const
 {
     if (this->kind == Kind::Pointer)
@@ -452,7 +456,9 @@ size_t varDef::get_addr_in_stack(size_t posnow)
     }
     return posnow;
 }
-std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths)
+std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths,
+                                                                 bool showASt, int tolerate,
+                                                                 bool showFoldedNames)
 {
     std::vector<OBJ> objs;
     for (auto each : paths)
@@ -470,7 +476,14 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
         // 创建自定义语法分析器
         ComplierParser parser(&tokens);
         // 使用正确的入口规则
-        auto tree = parser.compilationUnit();
+        ComplierParser::CompilationUnitContext* tree = parser.compilationUnit();
+        // fordebug
+        if (showASt)
+        {
+            std::cout << each << ": \n";
+            printAST(tree, tolerate, showFoldedNames);
+            std::cout << "\n";
+        }
         // 创建和使用自定义访问器
         astVisitor visitor{each, obj};
         visitor.visitCompilationUnit(tree);
@@ -479,3 +492,312 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
     linker linker{objs};
     return linker.process();
 }
+
+void complier::printAST(antlr4::tree::ParseTree* tree, int tolerate, bool showFoldedNames)
+{
+    // 使用递归打印 ASCII 树，在支持的终端上为终端文本加高亮
+    bool use_color = false;
+#if defined(__unix__) || defined(__APPLE__)
+    use_color = isatty(fileno(stdout));
+#endif
+    const std::string col_start = "\x1b[1;33m"; // 粗体黄色
+    const std::string col_end = "\x1b[0m";
+
+    // 辅助：只打印单行节点（不递归）
+    auto printSingleLine =
+        [&](antlr4::tree::ParseTree* node, const std::string& prefix, bool isLast)
+    {
+        std::string name;
+        bool term = dynamic_cast<antlr4::tree::TerminalNode*>(node) != nullptr;
+        if (term)
+        {
+            name = "Terminal";
+        }
+        else if (auto ctx = dynamic_cast<antlr4::ParserRuleContext*>(node))
+        {
+            size_t idx = ctx->getRuleIndex();
+            try
+            {
+                ComplierParser::initialize();
+                ComplierParser parser(nullptr);
+                const auto& names = parser.getRuleNames();
+                if (idx < names.size())
+                    name = names[idx];
+                else
+                    name = std::to_string(idx);
+            }
+            catch (...)
+            {
+                name = std::to_string(idx);
+            }
+        }
+        else
+        {
+            name = "Unknown";
+        }
+
+        if (prefix.empty())
+            std::cout << name;
+        else
+            std::cout << prefix << (isLast ? "└─ " : "├─ ") << name;
+        if (term)
+        {
+            std::cout << " : ";
+            if (use_color)
+                std::cout << col_start << node->getText() << col_end;
+            else
+                std::cout << node->getText();
+        }
+        std::cout << std::endl;
+    };
+
+    auto inner = [&](auto&& self, antlr4::tree::ParseTree* node, const std::string& prefix,
+                     bool isLast, int parentChildCount, int curDepth,
+                     bool suppressDescend = false) -> void
+    {
+        std::string nodename;
+        bool isTerminal = dynamic_cast<antlr4::tree::TerminalNode*>(node) != nullptr;
+        if (isTerminal)
+        {
+            nodename = "Terminal";
+        }
+        else if (auto ctx = dynamic_cast<antlr4::ParserRuleContext*>(node))
+        {
+            size_t idx = ctx->getRuleIndex();
+            try
+            {
+                ComplierParser::initialize();
+                ComplierParser parser(nullptr);
+                const auto& names = parser.getRuleNames();
+                if (idx < names.size())
+                {
+                    nodename = names[idx];
+                }
+                else
+                {
+                    nodename = std::to_string(idx);
+                }
+            }
+            catch (...)
+            {
+                nodename = std::to_string(idx);
+            }
+        }
+        else
+        {
+            nodename = "Unknown";
+        }
+
+        // std::cout << "// ";
+        if (prefix.empty())
+        {
+            std::cout << nodename;
+        }
+        else
+        {
+            std::cout << prefix << (isLast ? "└─ " : "├─ ") << nodename;
+        }
+        if (isTerminal)
+        {
+            std::cout << " : ";
+            if (use_color)
+            {
+                std::cout << col_start << node->getText() << col_end;
+            }
+            else
+            {
+                std::cout << node->getText();
+            }
+        }
+        std::cout << std::endl;
+
+        if (node->children.empty() || suppressDescend)
+            return;
+
+        for (size_t i = 0; i < node->children.size(); ++i)
+        {
+            bool last = (i + 1 == node->children.size());
+            std::string childPrefix = prefix + (isLast ? "    " : "│   ");
+
+            // 折叠逻辑: 当达到阈值且当前节点无兄弟节点(parentChildCount==1)
+            // 并且子节点形成单链（每个节点只有一个子节点），且不穿过 Terminal 节点时，合并为 ...(m)
+            // 折叠判断：若父节点仅有该子节点且折叠链长度超过容忍值，则合并
+            if (tolerate != INT_MAX && parentChildCount == 1)
+            {
+                // 收集从 child 开始的单链节点
+                std::vector<antlr4::tree::ParseTree*> chain_nodes;
+                antlr4::tree::ParseTree* p = node->children[i];
+                if (!dynamic_cast<antlr4::tree::TerminalNode*>(p))
+                {
+                    while (true)
+                    {
+                        chain_nodes.push_back(p);
+                        if (p->children.size() == 1 &&
+                            !dynamic_cast<antlr4::tree::TerminalNode*>(p->children[0]))
+                        {
+                            p = p->children[0];
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                int chain_len = (int)chain_nodes.size();
+                if (chain_len > 0 && chain_len > tolerate)
+                {
+                    int keep = tolerate / 2; // 保留头尾各 keep 个节点
+                    int head = keep;
+                    int tail = keep;
+                    int collapsed = chain_len - head - tail;
+
+                    // 打印 head 部分（只打印行，不递归），正确传递 isLast 以保持竖线
+                    std::string pfx = childPrefix;
+                    for (int j = 0; j < head; ++j)
+                    {
+                        bool localIsLast;
+                        if (j == 0)
+                            localIsLast = last; // 第一个 head 节点使用上层的 last
+                        else
+                            localIsLast = true; // 链中其余节点均为其父的唯一子节点，视为 last
+
+                        self(self, chain_nodes[j], pfx, localIsLast, 1, curDepth + 1 + j, true);
+                        pfx += (localIsLast ? "    " : "│   ");
+                    }
+
+                    // 打印折叠占位
+                    if (showFoldedNames)
+                    {
+                        // 收集被折叠节点的名字
+                        std::string foldedPath;
+                        for (int j = head; j < chain_len - tail; ++j)
+                        {
+                            if (!foldedPath.empty())
+                                foldedPath += "/";
+                            if (auto ctx = dynamic_cast<antlr4::ParserRuleContext*>(chain_nodes[j]))
+                            {
+                                size_t idx = ctx->getRuleIndex();
+                                ComplierParser::initialize();
+                                ComplierParser parser(nullptr);
+                                const auto& names = parser.getRuleNames();
+                                if (idx < names.size())
+                                    foldedPath += names[idx];
+                                else
+                                    foldedPath += std::to_string(idx);
+                            }
+                        }
+                        std::cout << pfx << "└─ " << foldedPath << "(" << collapsed << ")"
+                                  << std::endl;
+                    }
+                    else
+                    {
+                        std::cout << pfx << "└─ " << "...(" << collapsed << ")" << std::endl;
+                    }
+
+                    // 打印 tail 部分（只打印行，不递归），然后对子节点展开递归
+                    if (tail > 0)
+                    {
+                        int tail_start = chain_len - tail;
+                        // 为 tail 部分构造初始前缀，折叠占位后缩进
+                        std::string tailpfx = pfx + "    ";
+                        for (int j = tail_start; j < chain_len; ++j)
+                        {
+                            // 单链中每个节点都是唯一子节点，始终用 └─
+                            bool isLastForThis = true;
+                            self(self, chain_nodes[j], tailpfx, isLastForThis, 1, curDepth + 1 + j,
+                                 true);
+                            tailpfx += "    ";
+                        }
+                        // 递归 chain_nodes.back() 的子节点
+                        auto nodeToRecurse = chain_nodes.back();
+                        for (size_t ci = 0; ci < nodeToRecurse->children.size(); ++ci)
+                        {
+                            bool childLast = (ci + 1 == nodeToRecurse->children.size());
+                            self(self, nodeToRecurse->children[ci], tailpfx, childLast,
+                                 nodeToRecurse->children.size(), curDepth + chain_len + 1, false);
+                        }
+                    }
+                    else
+                    {
+                        // tail==0, 直接对 p 的子节点递归
+                        std::string pfx2 = pfx;
+                        for (size_t ci = 0; ci < p->children.size(); ++ci)
+                        {
+                            bool childLast = (ci + 1 == p->children.size());
+                            self(self, p->children[ci], pfx2, childLast, p->children.size(),
+                                 curDepth + chain_len + 1, false);
+                        }
+                    }
+                    continue;
+                }
+            }
+
+            self(self, node->children[i], childPrefix, last, node->children.size(), curDepth + 1,
+                 false);
+        }
+    };
+
+    inner(inner, tree, "", true, 1, 0, false);
+}
+// functionDefinition // 非叶子节点不打印text
+//            ├─   declarationSpecifiers
+//            |            └─  typeSpecifier
+//            |                     └─ Terminal : int  // 最底层打印
+//            └─   declarator
+
+// 节点类型: 规则(Rule)(compilationUnit) 文本: intmain(){return42;}<EOF>
+//   节点类型: 规则(Rule)(translationUnit) 文本: intmain(){return42;}
+//     节点类型: 规则(Rule)(externalDeclaration) 文本: intmain(){return42;}
+//       节点类型: 规则(Rule)(functionDefinition) 文本: intmain(){return42;}
+//         节点类型: 规则(Rule)(declarationSpecifiers) 文本: int
+//           节点类型: 规则(Rule)(declarationSpecifier) 文本: int
+//             节点类型: 规则(Rule)(typeSpecifier) 文本: int
+//               节点类型: 终端(Terminal) 文本: int
+//         节点类型: 规则(Rule)(declarator) 文本: main()
+//           节点类型: 规则(Rule)(directDeclarator) 文本: main()
+//             节点类型: 规则(Rule)(directDeclarator) 文本: main
+//               节点类型: 终端(Terminal) 文本: main
+//             节点类型: 终端(Terminal) 文本: (
+//             节点类型: 终端(Terminal) 文本: )
+//         节点类型: 规则(Rule)(compoundStatement) 文本: {return42;}
+//           节点类型: 终端(Terminal) 文本: {
+//           节点类型: 规则(Rule)(blockItemList) 文本: return42;
+//             节点类型: 规则(Rule)(blockItem) 文本: return42;
+//               节点类型: 规则(Rule)(statement) 文本: return42;
+//                 节点类型: 规则(Rule)(jumpStatement) 文本: return42;
+//                   节点类型: 终端(Terminal) 文本: return
+//                   节点类型: 规则(Rule)(expression) 文本: 42
+//                     节点类型: 规则(Rule)(assignmentExpression) 文本: 42
+//                       节点类型: 规则(Rule)(conditionalExpression) 文本: 42
+//                         节点类型: 规则(Rule)(logicalOrExpression) 文本: 42
+//                           节点类型: 规则(Rule)(logicalAndExpression) 文本: 42
+//                             节点类型: 规则(Rule)(inclusiveOrExpression) 文本: 42
+//                               节点类型: 规则(Rule)(exclusiveOrExpression) 文本: 42
+//                                 节点类型: 规则(Rule)(andExpression) 文本: 42
+//                                   节点类型: 规则(Rule)(equalityExpression) 文本: 42
+//                                     节点类型: 规则(Rule)(relationalExpression) 文本: 42
+//                                       节点类型: 规则(Rule)(shiftExpression) 文本: 42
+//                                         节点类型: 规则(Rule)(additiveExpression) 文本: 42
+//                                           节点类型: 规则(Rule)(multiplicativeExpression) 文本: 42
+//                                             节点类型: 规则(Rule)(castExpression) 文本: 42
+//                                               节点类型: 规则(Rule)(unaryExpression) 文本: 42
+//                                                 节点类型: 规则(Rule)(postfixExpression) 文本: 42
+//                                                   节点类型: 规则(Rule)(primaryExpression) 文本:
+//                                                   42
+//                                                     节点类型: 终端(Terminal) 文本: 42
+//                   节点类型: 终端(Terminal) 文本: ;
+//           节点类型: 终端(Terminal) 文本: }
+//   节点类型: 终端(Terminal) 文本: <EOF>
+
+// 容忍为m时, 保留头尾m/2的节点
+// │               │           └─ jumpStatement
+// │               │               ├─ Terminal : return
+// │               │               ├─ expression
+// │               │               │   └─ assignmentExpression
+// │               │               │       └─ conditionalExpression
+// │               │               │           └─ logicalOrExpression
+// |               |               |                    └─...(m)
+// │               │               │                      └─ postfixExpression
+// │               │               │                            └─ primaryExpression
+// │               │               │                                      └─ Terminal : 42
