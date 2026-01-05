@@ -10,6 +10,7 @@ struct astVisitor
 {
   private:
     funcDef* funcnow = nullptr;
+    funcDef* gfuncptr = nullptr;
     // funcDef* globalinitfun = nullptr;
     // "__global_init" + name
     // 辅助函数

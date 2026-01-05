@@ -45,24 +45,25 @@ std::vector<Type> astVisitor::visitDeclaration(ComplierParser::DeclarationContex
         auto declarationSpecifiers = visitDeclarationSpecifiers(ctx->declarationSpecifiers());
         bool flag = false;
 
-        if (declarationSpecifiers.back().id != "") // 可能是typedef或变量名
-        {
-            auto id = declarationSpecifiers.back().id;
-            if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id
-            {
-                declarationSpecifiers.pop_back();
-                ctx->declarationSpecifiers()->children.pop_back();
-                Type var;
-                var.id = id;
-                var.kind = Type::Kind::ID;
-                vars.push_back(var);
-            }
-            else // 是type
-            {
-                basetype = obj.typedefs.find(id)->second;
-                flag = true;
-            }
-        }
+        // [TODO] 将typedefname与id在语法分析阶段区分，理论上该if可废弃, 未测试
+        // if (declarationSpecifiers.back().id != "") // 可能是typedef或变量名
+        // {
+        //     auto id = declarationSpecifiers.back().id;
+        //     if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id
+        //     {
+        //         declarationSpecifiers.pop_back();
+        //         ctx->declarationSpecifiers()->children.pop_back();
+        //         Type var;
+        //         var.id = id;
+        //         var.kind = Type::Kind::ID;
+        //         vars.push_back(var);
+        //     }
+        //     else // 是type
+        //     {
+        //         basetype = obj.typedefs.find(id)->second;
+        //         flag = true;
+        //     }
+        // }
 
         for (auto each : ctx->declarationSpecifiers()->declarationSpecifier())
         {
@@ -1678,18 +1679,30 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
         {
             funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
             funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
-            if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            if (var->type.kind == Type::Kind::Array)
             {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+                Type ret = var->type;
+                ret.kind = Type::Kind::Pointer;
+                ret.arr_or_ptr_num = 1;
+                return ret;
             }
-            else if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            else
             {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
-            }
-            else if (var->type.getsize() ==
-                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-            {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+                // 整形类型
+                if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+                }
+                else if (var->type.getsize() ==
+                         Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+                }
+                else if (var->type.getsize() ==
+                         Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+                }
             }
             return var->type;
         }
@@ -1699,19 +1712,30 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
             funcnow->asms.push_back(
                 ASM{ASM::basic_asm::IMM, "globalvar@" + ctx->Identifier()->getText()});
             funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
-            if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            if (varg->kind == Type::Kind::Array)
             {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+                Type ret = *varg;
+                ret.kind = Type::Kind::Pointer;
+                ret.arr_or_ptr_num = 1;
+                return ret;
             }
-            else if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            else
             {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+                if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+                }
+                else if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+                }
+                else if (varg->getsize() ==
+                         Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+                }
+                return *varg;
             }
-            else if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-            {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
-            }
-            return *varg;
         }
         auto str = ctx->Identifier()->getText();
         auto funcret = obj.symbol_table.lookup_func_decl(ctx->Identifier()->getText());
@@ -1755,8 +1779,7 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
                 THROW_ERR(error::invalid_constant, ctx->Constant());
             }
         }
-        // [TODO] 其他类型的常量（如浮点数）
-        else
+        else // [TODO] 浮点数
         {
             THROW_ERR(error::unsurpported_num, ctx->Constant());
         }
@@ -1767,10 +1790,192 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
     }
     else if (ctx->StringLiteral().size())
     {
-        // 返回指向字符的指针类型（占位实现）
-        Type t{Type::Kind::Pointer, 1};
-        t.pushTop(Type{Type::Kind::Basic, Type::BasicType::Char});
-        // [TODO] 生成字符串常量存储
+
+        std::string chars_after_transed;
+
+        auto hexval = [](char c) -> int
+        {
+            if (c >= '0' && c <= '9')
+                return c - '0';
+            if (c >= 'a' && c <= 'f')
+                return 10 + (c - 'a');
+            if (c >= 'A' && c <= 'F')
+                return 10 + (c - 'A');
+            return 0;
+        };
+
+        for (auto tok : ctx->StringLiteral())
+        {
+            std::string s = tok->getText();
+            // skip prefix like u8, U, L, u
+            size_t p = 0;
+            while (p < s.size() && (std::isalpha((unsigned char)s[p]) || s[p] == '8'))
+                p++;
+
+            // raw string literal: R"delim(... )delim"
+            if (p + 1 < s.size() && s[p] == 'R' && s[p + 1] == '"')
+            {
+                size_t q = p + 2; // start of delimiter
+                size_t delim_end = s.find('(', q);
+                if (delim_end != std::string::npos)
+                {
+                    std::string delim = s.substr(q, delim_end - q);
+                    size_t content_start = delim_end + 1;
+                    std::string close = std::string(")") + delim + '"';
+                    size_t close_pos = s.find(close, content_start);
+                    if (close_pos != std::string::npos)
+                    {
+                        chars_after_transed.append(s, content_start, close_pos - content_start);
+                    }
+                }
+                continue;
+            }
+
+            // normal string literal: "..."
+            if (p < s.size() && s[p] == '"')
+            {
+                size_t k = p + 1;
+                while (k < s.size())
+                {
+                    char c = s[k];
+                    if (c == '"')
+                        break;
+                    if (c == '\\' && k + 1 < s.size())
+                    {
+                        char esc = s[k + 1];
+                        switch (esc)
+                        {
+                        case 'n':
+                            chars_after_transed.push_back('\n');
+                            k += 2;
+                            break;
+                        case 't':
+                            chars_after_transed.push_back('\t');
+                            k += 2;
+                            break;
+                        case 'r':
+                            chars_after_transed.push_back('\r');
+                            k += 2;
+                            break;
+                        case '\\':
+                            chars_after_transed.push_back('\\');
+                            k += 2;
+                            break;
+                        case '\'':
+                            chars_after_transed.push_back('\'');
+                            k += 2;
+                            break;
+                        case '"':
+                            chars_after_transed.push_back('"');
+                            k += 2;
+                            break;
+                        case 'a':
+                            chars_after_transed.push_back('\a');
+                            k += 2;
+                            break;
+                        case 'b':
+                            chars_after_transed.push_back('\b');
+                            k += 2;
+                            break;
+                        case 'f':
+                            chars_after_transed.push_back('\f');
+                            k += 2;
+                            break;
+                        case 'v':
+                            chars_after_transed.push_back('\v');
+                            k += 2;
+                            break;
+                        case '?':
+                            chars_after_transed.push_back('?');
+                            k += 2;
+                            break;
+                        case 'x':
+                        {
+                            // hex escape: \xhh...
+                            k += 2;
+                            int val = 0;
+                            bool any = false;
+                            while (k < s.size() && std::isxdigit((unsigned char)s[k]))
+                            {
+                                val = val * 16 + hexval(s[k]);
+                                k++;
+                                any = true;
+                            }
+                            if (any)
+                                chars_after_transed.push_back(static_cast<char>(val));
+                            break;
+                        }
+                        default:
+                            if (esc >= '0' && esc <= '7')
+                            {
+                                // octal escape: up to 3 digits
+                                int val = esc - '0';
+                                k += 2;
+                                int cnt = 1;
+                                while (cnt < 3 && k < s.size() && s[k] >= '0' && s[k] <= '7')
+                                {
+                                    val = val * 8 + (s[k] - '0');
+                                    k++;
+                                    cnt++;
+                                }
+                                chars_after_transed.push_back(static_cast<char>(val));
+                            }
+                            else
+                            {
+                                // unknown escape, keep raw following char
+                                chars_after_transed.push_back(esc);
+                                k += 2;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        chars_after_transed.push_back(c);
+                        k++;
+                    }
+                }
+            }
+        }
+
+        // ensure terminating NUL for C string
+        chars_after_transed.push_back('\0');
+        // std::cout << "--------\n";
+        // std::cout << chars << '\n';
+        // std::cout << "--------\n";
+        Type global_chars_arr_type;
+        global_chars_arr_type.pushTop(Type{Type::Kind::Basic, Type::BasicType::Char});
+        global_chars_arr_type.kind = Type::Kind::Array;
+        global_chars_arr_type.arr_or_ptr_num = chars_after_transed.size();
+        Type arrdef;
+        arrdef.kind = Type::Kind::ID;
+        static size_t index = 1;
+        // 切勿将包含终止 NUL 或不可见字符的字符串内容直接拼入标识符，
+        // 这会导致在符号表查找时匹配失败（字符串内的 '\0' 会使实际键与文本显示不一致）。
+        // 使用索引与内容哈希来保证唯一性且只包含可打印字符。
+        arrdef.id = "stringliteral_" + std::to_string(index++) + "_" +
+                    std::to_string(std::hash<std::string>{}(chars_after_transed));
+        arrdef.pushTop(global_chars_arr_type);
+        // [TODO] addvardef有问题
+        auto arrptr = obj.symbol_table.add_global_var_def(arrdef);
+
+        gfuncptr->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + arrdef.id});
+        gfuncptr->asms.push_back(ASM{ASM::basic_asm::LEAD});
+        for (int i = 0; i < chars_after_transed.size() - 1; i++) // 复制n-1次
+        {
+            gfuncptr->asms.push_back(ASM{ASM::basic_asm::COPY});
+        }
+        for (int i = 0; i < chars_after_transed.size(); i++)
+        {
+            gfuncptr->asms.push_back(ASM{ASM::basic_asm::IMM, i});
+            gfuncptr->asms.push_back(ASM{ASM::basic_asm::ADD});
+            gfuncptr->asms.push_back(ASM{ASM::basic_asm::IMM, chars_after_transed[i]});
+            gfuncptr->asms.push_back(ASM{ASM::basic_asm::SC});
+        }
+        funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + arrdef.id});
+        funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
+        // 返回指向字符的指针类型
+        Type t{Type::Kind::Basic, Type::BasicType::Char};
+        t.pushTop(Type{Type::Kind::Pointer, 1});
         return t;
     }
     else
@@ -1783,6 +1988,8 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
 Type astVisitor::visitTypeName(ComplierParser::TypeNameContext* ctx)
 {
     // typeName由specifierQualifierList和可选的abstractDeclarator组成
+    // [TODO] 没有标识符, 修饰符的申明
+    return Type{};
 }
 
 void astVisitor::visitBlockItem(ComplierParser::BlockItemContext* ctx)
@@ -2316,7 +2523,7 @@ astVisitor::astVisitor(std::string name, OBJ& ob) : obj(ob)
     global_init_fun.pushTop(Type{Type::Kind::Function, std::vector<Type>()});
     global_init_fun.pushTop(Type{Type::Kind::Basic, Type::BasicType::Void});
     obj.symbol_table.add_global_func_def(global_init_fun);
-    funcnow = obj.symbol_table.lookup_func_def("__global_init" + name);
+    gfuncptr = funcnow = obj.symbol_table.lookup_func_def("__global_init" + name);
 }
 void astVisitor::visitAsmADDer(ComplierParser::AsmADDerContext* ctx)
 {

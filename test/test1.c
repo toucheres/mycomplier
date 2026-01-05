@@ -1,6 +1,6 @@
-// #include <string.h>
-// #include <stdio.h>
+#include <stdio.h>
 int main()
 {
-    return 42;
+    printf("hello world!\n");
+    return 0;
 }

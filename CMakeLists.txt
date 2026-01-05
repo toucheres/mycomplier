@@ -5,6 +5,16 @@ project(mycomplier)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 在使用 GNU 编译器且为 Debug 构建时启用 gprof 支持（-pg）
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -pg")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -pg")
+    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -pg")
+    set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -pg")
+  endif()
+endif()
+
 # 首先查找 ANTLR4 运行时头文件
 find_path(ANTLR4_INCLUDE_DIR
   NAMES antlr4-runtime.h

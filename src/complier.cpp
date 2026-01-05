@@ -138,7 +138,7 @@ Type& Type::getTop()
 bool Type::pushTop(const Type& what)
 {
     auto& top = getTop();
-    top.subType = copyed_ptr<Type>::make_copyed_ptr(what);
+    top.subType = value_ptr<Type>::make_copyed_ptr(what);
     return true;
 }
 
@@ -277,7 +277,14 @@ std::expected<std::vector<std::string>, error> linker::process()
     {
         for (auto& [name, eachgvar] : eachobj.symbol_table.globalvardef)
         {
-            eachgvar.addr = eachgvar.get_addr_in_stack(exe.global_size);
+            if (eachgvar.type.kind == Type::Kind::Array)
+            {
+                eachgvar.addr = exe.global_size; // 数组值在内存底端, 指针指向整形低地址
+            }
+            else
+            {
+                eachgvar.addr = eachgvar.get_addr_in_stack(exe.global_size);
+            }
             exe.global_size = eachgvar.addr + eachgvar.type.getsize();
             auto labal = "globalvar@" + eachgvar.name;
             if (addrmap.find(labal) != addrmap.end())
@@ -740,64 +747,3 @@ void complier::printAST(antlr4::tree::ParseTree* tree, int tolerate, bool showFo
 
     inner(inner, tree, "", true, 1, 0, false);
 }
-// functionDefinition // 非叶子节点不打印text
-//            ├─   declarationSpecifiers
-//            |            └─  typeSpecifier
-//            |                     └─ Terminal : int  // 最底层打印
-//            └─   declarator
-
-// 节点类型: 规则(Rule)(compilationUnit) 文本: intmain(){return42;}<EOF>
-//   节点类型: 规则(Rule)(translationUnit) 文本: intmain(){return42;}
-//     节点类型: 规则(Rule)(externalDeclaration) 文本: intmain(){return42;}
-//       节点类型: 规则(Rule)(functionDefinition) 文本: intmain(){return42;}
-//         节点类型: 规则(Rule)(declarationSpecifiers) 文本: int
-//           节点类型: 规则(Rule)(declarationSpecifier) 文本: int
-//             节点类型: 规则(Rule)(typeSpecifier) 文本: int
-//               节点类型: 终端(Terminal) 文本: int
-//         节点类型: 规则(Rule)(declarator) 文本: main()
-//           节点类型: 规则(Rule)(directDeclarator) 文本: main()
-//             节点类型: 规则(Rule)(directDeclarator) 文本: main
-//               节点类型: 终端(Terminal) 文本: main
-//             节点类型: 终端(Terminal) 文本: (
-//             节点类型: 终端(Terminal) 文本: )
-//         节点类型: 规则(Rule)(compoundStatement) 文本: {return42;}
-//           节点类型: 终端(Terminal) 文本: {
-//           节点类型: 规则(Rule)(blockItemList) 文本: return42;
-//             节点类型: 规则(Rule)(blockItem) 文本: return42;
-//               节点类型: 规则(Rule)(statement) 文本: return42;
-//                 节点类型: 规则(Rule)(jumpStatement) 文本: return42;
-//                   节点类型: 终端(Terminal) 文本: return
-//                   节点类型: 规则(Rule)(expression) 文本: 42
-//                     节点类型: 规则(Rule)(assignmentExpression) 文本: 42
-//                       节点类型: 规则(Rule)(conditionalExpression) 文本: 42
-//                         节点类型: 规则(Rule)(logicalOrExpression) 文本: 42
-//                           节点类型: 规则(Rule)(logicalAndExpression) 文本: 42
-//                             节点类型: 规则(Rule)(inclusiveOrExpression) 文本: 42
-//                               节点类型: 规则(Rule)(exclusiveOrExpression) 文本: 42
-//                                 节点类型: 规则(Rule)(andExpression) 文本: 42
-//                                   节点类型: 规则(Rule)(equalityExpression) 文本: 42
-//                                     节点类型: 规则(Rule)(relationalExpression) 文本: 42
-//                                       节点类型: 规则(Rule)(shiftExpression) 文本: 42
-//                                         节点类型: 规则(Rule)(additiveExpression) 文本: 42
-//                                           节点类型: 规则(Rule)(multiplicativeExpression) 文本: 42
-//                                             节点类型: 规则(Rule)(castExpression) 文本: 42
-//                                               节点类型: 规则(Rule)(unaryExpression) 文本: 42
-//                                                 节点类型: 规则(Rule)(postfixExpression) 文本: 42
-//                                                   节点类型: 规则(Rule)(primaryExpression) 文本:
-//                                                   42
-//                                                     节点类型: 终端(Terminal) 文本: 42
-//                   节点类型: 终端(Terminal) 文本: ;
-//           节点类型: 终端(Terminal) 文本: }
-//   节点类型: 终端(Terminal) 文本: <EOF>
-
-// 容忍为m时, 保留头尾m/2的节点
-// │               │           └─ jumpStatement
-// │               │               ├─ Terminal : return
-// │               │               ├─ expression
-// │               │               │   └─ assignmentExpression
-// │               │               │       └─ conditionalExpression
-// │               │               │           └─ logicalOrExpression
-// |               |               |                    └─...(m)
-// │               │               │                      └─ postfixExpression
-// │               │               │                            └─ primaryExpression
-// │               │               │                                      └─ Terminal : 42

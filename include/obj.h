@@ -50,7 +50,7 @@ struct Type
     std::string id;
     // 基础类型
     BasicType basic_type; // avilable when kind == Basic
-    copyed_ptr<Type> subType;
+    value_ptr<Type> subType;
     std::vector<Type> args;
     int arr_or_ptr_num = -1;
     Type& getTop();

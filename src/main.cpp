@@ -22,7 +22,7 @@ int main(int argc, const char* argv[])
     auto retval = vm.run();
     if (retval)
     {
-        std::cout << "ret: " << retval.value() << '\n';
+        std::cout << "ret: " << retval.value() << " = " << std::hex << retval.value() << '\n';
     }
     else
     {
