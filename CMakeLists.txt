@@ -114,3 +114,5 @@ else()
   
   target_link_libraries(mycomplier PRIVATE peglib ${ANTLR4_RUNTIME_LIB})
 endif()
+find_package(Boost REQUIRED COMPONENTS program_options)
+target_link_libraries(mycomplier PRIVATE Boost::program_options)

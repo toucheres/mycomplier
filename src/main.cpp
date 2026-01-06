@@ -1,32 +1,50 @@
-#include "complier.hpp"
-#include "vm.h"
 #include <iostream>
-// [OK][TODO][BUG] "+=" 不可用
+
+#include <boost/program_options.hpp>
+
+#include "complier.hpp"
+#include "settings.h"
+#include "vm.h"
+namespace po = boost::program_options;
+
 int main(int argc, const char* argv[])
 {
-    std::vector<std::string> args(argv + 1, argv + argc);
-    auto ret = complier::process(args, true, 4);
-    if (!ret)
+    auto opcli = getsetting(argc, argv);
+    if (!opcli)
     {
-        std::cout << "error\n";
+        return -1;
     }
-    else
+    auto [cli, des] = *opcli;
+    if (cli.count("help"))
     {
-        for (int i = 0; i < ret.value().size(); i++)
+        std::cout << des << '\n';
+    }
+    if (cli.count("input-files"))
+    {
+        // std::vector<std::string> args(argv + 1, argv + argc);
+        auto ret = complier::process(cli["input-files"].as<std::vector<std::string>>(), true, 4);
+        if (!ret)
         {
-            std::cout << "[" << i << "]:" << ret.value()[i] << '\n';
+            std::cout << "error\n";
         }
-    }
-    VM vm{ret.value()};
-    vm.enable_debug = false;
-    auto retval = vm.run();
-    if (retval)
-    {
-        std::cout << "ret: " << retval.value() << " = " << std::hex << retval.value() << '\n';
-    }
-    else
-    {
-        std::cout << "error\n";
+        else
+        {
+            for (int i = 0; i < ret.value().size(); i++)
+            {
+                std::cout << "[" << i << "]:" << ret.value()[i] << '\n';
+            }
+        }
+        VM vm{ret.value()};
+        vm.enable_debug = false;
+        auto retval = vm.run();
+        if (retval)
+        {
+            std::cout << "ret: " << retval.value() << " = " << std::hex << retval.value() << '\n';
+        }
+        else
+        {
+            std::cout << "error\n";
+        }
     }
     return 0;
 }
