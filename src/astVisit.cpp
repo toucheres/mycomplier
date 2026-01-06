@@ -928,6 +928,7 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
         {
             THROW_ERR(error::expected_lvalue, ctx->unaryExpression());
         }
+        funcnow->asms.back();
         funcnow->asms.pop_back();
         if (ctx->assignmentOperator()->getText() == "=")
         {
@@ -951,9 +952,12 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
         }
         else
         {
-            funcnow->asms.push_back(ASM{ASM::basic_asm::COPY});
             funcnow->asms.push_back(
-                ASM{ASM::basic_asm::PUSH}); // 拷贝两份左值地址实现取值运算，存值，返回值
+                ASM{ASM::basic_asm::COPY}); // 拷贝一份左值地址实现返回值
+
+            (void)(visitUnaryExpression(ctx->unaryExpression()));
+            funcnow->asms.pop_back(); // 取一份左值用于运算
+
             if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
@@ -962,6 +966,7 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
             {
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
             }
+
             (void)(visitAssignmentExpression(ctx->assignmentExpression()));
 
             if (ctx->assignmentOperator()->getText() == "+=")
@@ -997,6 +1002,7 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
                 funcnow->asms.push_back(ASM{ASM::basic_asm::XOR});
             }
             // [TODO] bit operator asm
+
 
             if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {

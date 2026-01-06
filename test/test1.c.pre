@@ -3,7 +3,7 @@ int main()
     int c = 0;
     for (long i = 0; i < 100; i++)
     {
-        c = c + 1;
+        c += 1;
     }
     return c;
 }
