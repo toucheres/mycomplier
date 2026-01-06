@@ -45,144 +45,144 @@ long num_to_str(char* src, long num)
         return len + 1;
     }
 }
-// 仅支持%s %d %c %ld
-long fprintf(char* src, char* fmt, ...)
-{
-    long arg_index = 1;
-    long charsnum = 0;
-    while (*fmt != 0)
-    {
-        if (*fmt == '%')
-        {
-            fmt = fmt + 1;
-            if (*fmt == 'c')
-            {
-                *src = *load_arg_ptr(&fmt, arg_index);
-                arg_index = arg_index + 1;
-                charsnum = charsnum + 1;
-                fmt = fmt + 1;
-                src = src + 1;
-            }
-            else if (*fmt == 'd')
-            {
-                long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
-                arg_index = arg_index + 1;
-                charsnum = charsnum + size;
-                fmt = fmt + 1;
-                src = src + size;
-            }
-            else if (*fmt == 'l')
-            {
-                fmt = fmt + 1;
-                if (*fmt == 'd')
-                {
-                    long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
-                    arg_index = arg_index + 1;
-                    charsnum = charsnum + size;
-                    fmt = fmt + 1;
-                    src = src + size;
-                }
-                else
-                {
-                    *src = *fmt;
-                    charsnum = charsnum + 1;
-                    fmt = fmt + 1;
-                    src = src + 1;
-                }
-            }
-            else
-            {
-                // 未知格式：把 '%' 和随后字符都按字面输出（若后面是 '\0' 则只输出 '%'）
-                *src++ = '%';
-                charsnum++;
-                if (*fmt != '\0')
-                {
-                    *src++ = *fmt;
-                    charsnum++;
-                    fmt++;
-                }
-            }
-        }
-        else
-        {
-            *src = *fmt;
-            charsnum = charsnum + 1;
-            fmt = fmt + 1;
-            src = src + 1;
-        }
-    }
-    *src = '\0';
-    return charsnum;
-}
-// ...existing code...
-long fprintf(char* src, char* fmt, ...)
-{
-    long arg_index = 1;
-    long charsnum = 0;
-    while (*fmt != 0)
-    {
-        if (*fmt == '%')
-        {
-            fmt = fmt + 1;
-            if (*fmt == 'c')
-            {
-                *src = *load_arg_ptr(&fmt, arg_index);
-                arg_index = arg_index + 1;
-                charsnum = charsnum + 1;
-                fmt = fmt + 1;
-                src = src + 1;
-            }
-            else if (*fmt == 'd')
-            {
-                long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
-                arg_index = arg_index + 1;
-                charsnum = charsnum + size;
-                fmt = fmt + 1;
-                src = src + size;
-            }
-            else if (*fmt == 'l')
-            {
-                fmt = fmt + 1;
-                if (*fmt == 'd')
-                {
-                    long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
-                    arg_index = arg_index + 1;
-                    charsnum = charsnum + size;
-                    fmt = fmt + 1;
-                    src = src + size;
-                }
-                else
-                {
-                    *src = *fmt;
-                    charsnum = charsnum + 1;
-                    fmt = fmt + 1;
-                    src = src + 1;
-                }
-            }
-            else
-            {
-                // 未知格式：把 '%' 和随后字符都按字面输出（若后面是 '\0' 则只输出 '%'）
-                *src++ = '%';
-                charsnum++;
-                if (*fmt != '\0')
-                {
-                    *src++ = *fmt;
-                    charsnum++;
-                    fmt++;
-                }
-            }
-        }
-        else
-        {
-            *src = *fmt;
-            charsnum = charsnum + 1;
-            fmt = fmt + 1;
-            src = src + 1;
-        }
-    }
-    *src = '\0';
-    return charsnum;
-}
+// // 仅支持%s %d %c %ld
+// long fprintf(char* src, char* fmt, ...)
+// {
+//     long arg_index = 1;
+//     long charsnum = 0;
+//     while (*fmt != 0)
+//     {
+//         if (*fmt == '%')
+//         {
+//             fmt = fmt + 1;
+//             if (*fmt == 'c')
+//             {
+//                 *src = *load_arg_ptr(&fmt, arg_index);
+//                 arg_index = arg_index + 1;
+//                 charsnum = charsnum + 1;
+//                 fmt = fmt + 1;
+//                 src = src + 1;
+//             }
+//             else if (*fmt == 'd')
+//             {
+//                 long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+//                 arg_index = arg_index + 1;
+//                 charsnum = charsnum + size;
+//                 fmt = fmt + 1;
+//                 src = src + size;
+//             }
+//             else if (*fmt == 'l')
+//             {
+//                 fmt = fmt + 1;
+//                 if (*fmt == 'd')
+//                 {
+//                     long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+//                     arg_index = arg_index + 1;
+//                     charsnum = charsnum + size;
+//                     fmt = fmt + 1;
+//                     src = src + size;
+//                 }
+//                 else
+//                 {
+//                     *src = *fmt;
+//                     charsnum = charsnum + 1;
+//                     fmt = fmt + 1;
+//                     src = src + 1;
+//                 }
+//             }
+//             else
+//             {
+//                 // 未知格式：把 '%' 和随后字符都按字面输出（若后面是 '\0' 则只输出 '%'）
+//                 *src++ = '%';
+//                 charsnum++;
+//                 if (*fmt != '\0')
+//                 {
+//                     *src++ = *fmt;
+//                     charsnum++;
+//                     fmt++;
+//                 }
+//             }
+//         }
+//         else
+//         {
+//             *src = *fmt;
+//             charsnum = charsnum + 1;
+//             fmt = fmt + 1;
+//             src = src + 1;
+//         }
+//     }
+//     *src = '\0';
+//     return charsnum;
+// }
+// // ...existing code...
+// long fprintf(char* src, char* fmt, ...)
+// {
+//     long arg_index = 1;
+//     long charsnum = 0;
+//     while (*fmt != 0)
+//     {
+//         if (*fmt == '%')
+//         {
+//             fmt = fmt + 1;
+//             if (*fmt == 'c')
+//             {
+//                 *src = *load_arg_ptr(&fmt, arg_index);
+//                 arg_index = arg_index + 1;
+//                 charsnum = charsnum + 1;
+//                 fmt = fmt + 1;
+//                 src = src + 1;
+//             }
+//             else if (*fmt == 'd')
+//             {
+//                 long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+//                 arg_index = arg_index + 1;
+//                 charsnum = charsnum + size;
+//                 fmt = fmt + 1;
+//                 src = src + size;
+//             }
+//             else if (*fmt == 'l')
+//             {
+//                 fmt = fmt + 1;
+//                 if (*fmt == 'd')
+//                 {
+//                     long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+//                     arg_index = arg_index + 1;
+//                     charsnum = charsnum + size;
+//                     fmt = fmt + 1;
+//                     src = src + size;
+//                 }
+//                 else
+//                 {
+//                     *src = *fmt;
+//                     charsnum = charsnum + 1;
+//                     fmt = fmt + 1;
+//                     src = src + 1;
+//                 }
+//             }
+//             else
+//             {
+//                 // 未知格式：把 '%' 和随后字符都按字面输出（若后面是 '\0' 则只输出 '%'）
+//                 *src++ = '%';
+//                 charsnum++;
+//                 if (*fmt != '\0')
+//                 {
+//                     *src++ = *fmt;
+//                     charsnum++;
+//                     fmt++;
+//                 }
+//             }
+//         }
+//         else
+//         {
+//             *src = *fmt;
+//             charsnum = charsnum + 1;
+//             fmt = fmt + 1;
+//             src = src + 1;
+//         }
+//     }
+//     *src = '\0';
+//     return charsnum;
+// }
 // 仅支持%s %d %c %ld
 long fprintf(char* src, char* fmt, ...)
 {

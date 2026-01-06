@@ -1,7 +1,8 @@
 #include "complier.hpp"
 #include "vm.h"
 #include <iostream>
-// [TODO] "xxx" 初始化char*和char[n]
+//[OK] [TODO] "xxx" 初始化char*和char[n]
+// [TODO][BUG] "+=" 不可用
 int main(int argc, const char* argv[])
 {
     std::vector<std::string> args(argv + 1, argv + argc);

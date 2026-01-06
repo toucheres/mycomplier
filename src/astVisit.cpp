@@ -36,13 +36,16 @@ void astVisitor::visitTranslationUnit(ComplierParser::TranslationUnitContext* ct
         visitExternalDeclaration(each);
     }
 }
-std::vector<Type> astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
+std::vector<Type> astVisitor::lowerDeclaration(
+    ComplierParser::DeclarationSpecifiersContext* specs,
+    ComplierParser::InitDeclaratorListContext* initList)
 {
     Type basetype;
     std::vector<Type> vars;
-    if (ctx->declarationSpecifiers()) // 前类型
+    if (specs) // 前类型
     {
-        auto declarationSpecifiers = visitDeclarationSpecifiers(ctx->declarationSpecifiers());
+        auto declarationSpecifiers = visitDeclarationSpecifiers(specs);
+        (void)declarationSpecifiers;
         bool flag = false;
 
         // [TODO] 将typedefname与id在语法分析阶段区分，理论上该if可废弃, 未测试
@@ -52,7 +55,7 @@ std::vector<Type> astVisitor::visitDeclaration(ComplierParser::DeclarationContex
         //     if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id
         //     {
         //         declarationSpecifiers.pop_back();
-        //         ctx->declarationSpecifiers()->children.pop_back();
+        //         specs->children.pop_back();
         //         Type var;
         //         var.id = id;
         //         var.kind = Type::Kind::ID;
@@ -65,7 +68,7 @@ std::vector<Type> astVisitor::visitDeclaration(ComplierParser::DeclarationContex
         //     }
         // }
 
-        for (auto each : ctx->declarationSpecifiers()->declarationSpecifier())
+        for (auto each : specs->declarationSpecifier())
         {
             if (each->typeSpecifier())
             {
@@ -96,18 +99,21 @@ std::vector<Type> astVisitor::visitDeclaration(ComplierParser::DeclarationContex
             } // [TODO] 考虑修饰符
         }
     }
-    if (ctx->initDeclaratorList()) // 带初始化的参数
+    if (initList) // 带初始化的参数
     {
         baseType = basetype;
-        visitInitDeclaratorList(ctx->initDeclaratorList());
+        visitInitDeclaratorList(initList);
     }
     for (auto& each : vars)
     {
         each.pushTop(basetype);
     }
     return vars;
-    // [TODO] 处理初始化器
-    // 如果有初始化器，需要处理 ctx->initDeclaratorList()
+}
+
+std::vector<Type> astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
+{
+    return lowerDeclaration(ctx->declarationSpecifiers(), ctx->initDeclaratorList());
 }
 void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx)
 {
@@ -159,6 +165,15 @@ void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionConte
     funcnow = funnowptr;
     funcnow->asms.push_back("HOLD");
     visitCompoundStatement(ctx->compoundStatement());
+    if (funcnow->rettype.kind == Type::Kind::Basic &&
+        funcnow->rettype.basic_type == Type::BasicType::Void)
+    {
+        // 为void func添加自动return
+        if (funcnow->asms.back() != (std::string)ASM{ASM::basic_asm::RET})
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::RET});
+        }
+    }
     auto align_up = [](int num, int align) -> int
     {
         if (num % align == 0)
@@ -2085,6 +2100,98 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
                 funcnow->asms[i] = ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(startppos)};
             }
         }
+    }
+    else if (ctx->children[0]->getText() == "for")
+    {
+        funcnow->enter_scope();
+        auto* forCond = ctx->forCondition();
+        if (!forCond)
+        {
+            THROW_ERR(error::unsurpported_op, ctx);
+        }
+
+        auto visitforExpression = [this](ComplierParser::ForExpressionContext* exprCtx) -> Type
+        {
+            if (!exprCtx)
+            {
+                throw error::invalid_constant;
+            }
+            Type ret;
+            for (int i = 0; i < exprCtx->assignmentExpression().size(); i++)
+            {
+                ret = (visitAssignmentExpression(exprCtx->assignmentExpression()[i]));
+                if (i != exprCtx->assignmentExpression().size() - 1)
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::POP});
+                }
+            }
+            return ret;
+        };
+
+        if (auto* decl = forCond->forDeclaration())
+        {
+            lowerDeclaration(decl->declarationSpecifiers(), decl->initDeclaratorList());
+        }
+        else if (auto* initExpr = forCond->expression())
+        {
+            (void)(visitExpression(initExpr));
+            funcnow->asms.push_back(ASM{ASM::basic_asm::POP});
+        }
+
+        auto condExprs = forCond->forExpression();
+        ComplierParser::ForExpressionContext* condExpr = nullptr;
+        ComplierParser::ForExpressionContext* postExpr = nullptr;
+        if (!condExprs.empty())
+        {
+            condExpr = condExprs[0];
+            if (condExprs.size() > 1)
+            {
+                postExpr = condExprs[1];
+            }
+        }
+
+        int loop_condition_pos = funcnow->asms.size();
+        int after_condition = -1;
+        if (condExpr)
+        {
+            (void)(visitforExpression(condExpr));
+            after_condition = funcnow->asms.size();
+            funcnow->asms.push_back("HOLD"); // for jz end
+        }
+
+        visitStatement(ctx->statement());
+
+        int update_pos = funcnow->asms.size();
+        if (postExpr)
+        {
+            (void)(visitforExpression(postExpr));
+            funcnow->asms.push_back(ASM{ASM::basic_asm::POP});
+        }
+
+        funcnow->asms.push_back(
+            ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(loop_condition_pos)});
+
+        if (after_condition != -1)
+        {
+            funcnow->asms[after_condition] =
+                ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(funcnow->asms.size())};
+        }
+
+        int continue_target = postExpr ? update_pos : loop_condition_pos;
+        for (int i = loop_condition_pos; i < funcnow->asms.size(); i++)
+        {
+            if (funcnow->asms[i] == "lable@break")
+            {
+                funcnow->asms[i] =
+                    ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(funcnow->asms.size())};
+            }
+            else if (funcnow->asms[i] == "lable@continue")
+            {
+                funcnow->asms[i] =
+                    ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(continue_target)};
+            }
+        }
+        funcnow->exit_scope();
     }
     // [TODO] 'for' statement
 }

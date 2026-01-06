@@ -20,6 +20,9 @@ struct astVisitor
     int parseCharacterConstant(const std::string& text);
     bool isIntegerConstant(const std::string& text);
     bool isCharacterConstant(const std::string& text);
+    std::vector<Type> lowerDeclaration(
+        ComplierParser::DeclarationSpecifiersContext* specs,
+        ComplierParser::InitDeclaratorListContext* initList);
 
   public:
     astVisitor(std::string name, OBJ& obj);
