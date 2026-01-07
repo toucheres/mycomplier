@@ -55,7 +55,8 @@ std::optional<int64_t> VM::run()
 
 void VM::debug()
 {
-    std::cout << "next ins: " << vcpu.asms[vcpu.ip] << '\n';
+    if (print_asm)
+        std::cout << "next ins: " << vcpu.asms[vcpu.ip] << '\n';
     std::cout << "ip: " << vcpu.ip << '\n';
     std::cout << "bp: " << vcpu.bp << '\n';
     std::cout << "ax: " << std::hex << *vcpu.ax << '\n';

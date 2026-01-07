@@ -40,6 +40,9 @@ include_directories(
   ${ANTLR4_INCLUDE_DIR}
 )
 
+# 启用 CTest 测试框架
+enable_testing()
+
 # 查找 ANTLR4 工具
 find_program(ANTLR_EXECUTABLE antlr4 HINTS /usr/local/bin)
 if(NOT ANTLR_EXECUTABLE)
@@ -116,3 +119,6 @@ else()
 endif()
 find_package(Boost REQUIRED COMPONENTS program_options)
 target_link_libraries(mycomplier PRIVATE Boost::program_options)
+
+# 添加 test 子目录以构建并注册测试
+add_subdirectory(${CMAKE_SOURCE_DIR}/test)

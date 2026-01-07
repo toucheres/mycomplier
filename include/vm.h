@@ -49,6 +49,8 @@ struct VM
     };
     VM(const std::vector<std::string>& asms);
     bool enable_debug = true;
+    bool print_asm = false;
+    bool print_ret_value = false;
     VCPU<> vcpu;
     std::optional<int64_t> run();
     void debug();

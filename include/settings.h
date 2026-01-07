@@ -14,8 +14,17 @@ getsetting(int argc, const char* argv[])
         po::variables_map cli;
 
         po::options_description visible("Allowed options");
-        visible.add_options()("help", "produce help message")("compression", po::value<double>(),
-                                                              "set compression level");
+        visible.add_options()
+            ("help", "produce help message")
+            ("compression", po::value<double>(), "set compression level")
+            ("showASt,show-ast", po::value<bool>()->default_value(false)->implicit_value(true), "show AST")
+            ("tolerate", po::value<int>()->default_value(4), "tolerance for AST printing")
+            ("showFoldedNames,show-folded-names", po::value<bool>()->default_value(false)->implicit_value(true), "show folded names in AST")
+            ("enable_debug,enable-debug,enable_debug", po::value<bool>()->default_value(false)->implicit_value(true), "enable VM debug");
+            
+            visible.add_options()
+            ("printasm,print-asm", po::value<bool>()->default_value(false)->implicit_value(true), "print asm during debug/run")
+            ("printretvalue,print-ret-value", po::value<bool>()->default_value(false)->implicit_value(true), "print return value after run");
 
         po::options_description hidden("Hidden options");
         hidden.add_options()("input-files", po::value<std::vector<std::string>>(),

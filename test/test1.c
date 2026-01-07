@@ -1,9 +1,8 @@
+#include <stdio.h>
+
 int main()
 {
-    int c = 0;
-    for (long i = 0; i < 100; i++)
-    {
-        c += 1;
-    }
-    return c;
+
+    printf("%s\n","hello world");
+    return 0;
 }
