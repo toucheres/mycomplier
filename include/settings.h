@@ -4,6 +4,69 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "typed_options.hpp"
+
+// 业务相关的选项定义（完整信息：名称、描述、默认值、隐式值）
+namespace app_options {
+    using namespace typed_options;
+    
+    inline constexpr Option<bool> help{
+        "help",
+        "produce help message"
+    };
+
+    inline constexpr Option<double> compression{
+        "compression",
+        "set compression level"
+    };
+
+    inline constexpr Option<bool> show_ast{
+        "showASt,show-ast",
+        "show AST",
+        false,  // default_value
+        true    // implicit_value
+    };
+
+    inline constexpr Option<int> tolerate{
+        "tolerate",
+        "tolerance for AST printing",
+        4       // default_value
+    };
+
+    inline constexpr Option<bool> show_folded_names{
+        "showFoldedNames,show-folded-names",
+        "show folded names in AST",
+        false,
+        true
+    };
+
+    inline constexpr Option<bool> enable_debug{
+        "enable_debug,enable-debug",
+        "enable VM debug",
+        false,
+        true
+    };
+
+    inline constexpr Option<bool> print_asm{
+        "printasm,print-asm",
+        "print asm during debug/run",
+        false,
+        true
+    };
+
+    inline constexpr Option<bool> print_ret_value{
+        "printretvalue,print-ret-value",
+        "print return value after run",
+        false,
+        true
+    };
+
+    inline constexpr Option<std::vector<std::string>> input_files{
+        "input-files",
+        "input files"
+    };
+}
+
 std::optional<
     std::pair<boost::program_options::variables_map, boost::program_options::options_description>>
 getsetting(int argc, const char* argv[])
@@ -14,21 +77,20 @@ getsetting(int argc, const char* argv[])
         po::variables_map cli;
 
         po::options_description visible("Allowed options");
-        visible.add_options()
-            ("help", "produce help message")
-            ("compression", po::value<double>(), "set compression level")
-            ("showASt,show-ast", po::value<bool>()->default_value(false)->implicit_value(true), "show AST")
-            ("tolerate", po::value<int>()->default_value(4), "tolerance for AST printing")
-            ("showFoldedNames,show-folded-names", po::value<bool>()->default_value(false)->implicit_value(true), "show folded names in AST")
-            ("enable_debug,enable-debug,enable_debug", po::value<bool>()->default_value(false)->implicit_value(true), "enable VM debug");
-            
-            visible.add_options()
-            ("printasm,print-asm", po::value<bool>()->default_value(false)->implicit_value(true), "print asm during debug/run")
-            ("printretvalue,print-ret-value", po::value<bool>()->default_value(false)->implicit_value(true), "print return value after run");
+        
+        // 使用 app_options 中的定义来构建选项（自动应用所有配置）
+        using namespace app_options;
+        typed_options::add_option(visible, help);
+        typed_options::add_option(visible, compression);
+        typed_options::add_option(visible, show_ast);
+        typed_options::add_option(visible, tolerate);
+        typed_options::add_option(visible, show_folded_names);
+        typed_options::add_option(visible, enable_debug);
+        typed_options::add_option(visible, print_asm);
+        typed_options::add_option(visible, print_ret_value);
 
         po::options_description hidden("Hidden options");
-        hidden.add_options()("input-files", po::value<std::vector<std::string>>(),
-                             "input files");
+        typed_options::add_option(hidden, input_files);
 
         po::options_description all;
         all.add(visible).add(hidden);

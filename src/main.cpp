@@ -5,7 +5,9 @@
 #include "complier.hpp"
 #include "settings.h"
 #include "vm.h"
+
 namespace po = boost::program_options;
+using namespace typed_options;
 
 int main(int argc, const char* argv[])
 {
@@ -21,49 +23,19 @@ int main(int argc, const char* argv[])
     }
     if (cli.count("input-files"))
     {
-        // 从命令行读取新的选项
-        bool showASt = false;
-        int tolerate = 4;
-        bool showFoldedNames = false;
-        bool enable_debug = false;
-        bool printasm = false;
-        bool printretvalue = false;
+        // 创建类型安全的包装器
+        TypedVariablesMap tvm(cli);
+        using namespace app_options;
 
-        if (cli.count("showASt"))
-            showASt = cli["showASt"].as<bool>();
-        else if (cli.count("show-ast"))
-            showASt = cli["show-ast"].as<bool>();
+        // 使用链式调用 get().or_try().or_()，编译期类型检查
+        bool showASt = tvm.get(show_ast).or_(false);
+        int tolerate = tvm.get(app_options::tolerate).or_(4);
+        bool showFoldedNames = tvm.get(show_folded_names).or_(false);
+        bool enable_debug = tvm.get(app_options::enable_debug).or_(false);
+        bool printasm = tvm.get(print_asm).or_(false);
+        bool printretvalue = tvm.get(print_ret_value).or_(false);
 
-        if (cli.count("tolerate"))
-            tolerate = cli["tolerate"].as<int>();
-
-        if (cli.count("showFoldedNames"))
-            showFoldedNames = cli["showFoldedNames"].as<bool>();
-        else if (cli.count("show-folded-names"))
-            showFoldedNames = cli["show-folded-names"].as<bool>();
-
-        if (cli.count("enable_debug"))
-            enable_debug = cli["enable_debug"].as<bool>();
-        else if (cli.count("enable-debug"))
-            enable_debug = cli["enable-debug"].as<bool>();
-
-        if (cli.count("printasm") || cli.count("print-asm"))
-        {
-            if (cli.count("printasm"))
-                printasm = cli["printasm"].as<bool>();
-            else
-                printasm = cli["print-asm"].as<bool>();
-        }
-
-        if (cli.count("printretvalue") || cli.count("print-ret-value"))
-        {
-            if (cli.count("printretvalue"))
-                printretvalue = cli["printretvalue"].as<bool>();
-            else
-                printretvalue = cli["print-ret-value"].as<bool>();
-        }
-
-        auto ret = complier::process(cli["input-files"].as<std::vector<std::string>>(), showASt, tolerate, showFoldedNames);
+        auto ret = complier::process(tvm.get_direct(input_files), showASt, tolerate, showFoldedNames);
         if (!ret)
         {
             std::cout << "error\n";
