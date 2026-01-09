@@ -36,73 +36,39 @@ void astVisitor::visitTranslationUnit(ComplierParser::TranslationUnitContext* ct
         visitExternalDeclaration(each);
     }
 }
-std::vector<Type> astVisitor::lowerDeclaration(
-    ComplierParser::DeclarationSpecifiersContext* specs,
-    ComplierParser::InitDeclaratorListContext* initList)
+std::vector<Type> astVisitor::lowerDeclaration(ComplierParser::DeclarationSpecifiersContext* specs,
+                                               ComplierParser::InitDeclaratorListContext* initList)
 {
     Type basetype;
     std::vector<Type> vars;
     if (specs) // 前类型
     {
         auto declarationSpecifiers = visitDeclarationSpecifiers(specs);
-        (void)declarationSpecifiers;
-        bool flag = false;
-
-        // [TODO] 将typedefname与id在语法分析阶段区分，理论上该if可废弃, 未测试
-        // if (declarationSpecifiers.back().id != "") // 可能是typedef或变量名
-        // {
-        //     auto id = declarationSpecifiers.back().id;
-        //     if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id
-        //     {
-        //         declarationSpecifiers.pop_back();
-        //         specs->children.pop_back();
-        //         Type var;
-        //         var.id = id;
-        //         var.kind = Type::Kind::ID;
-        //         vars.push_back(var);
-        //     }
-        //     else // 是type
-        //     {
-        //         basetype = obj.typedefs.find(id)->second;
-        //         flag = true;
-        //     }
-        // }
-
-        for (auto each : specs->declarationSpecifier())
+        std::optional<Type> storageClassType = std::nullopt;
+        Type baredBasictype;
+        for (auto& each : declarationSpecifiers)
         {
-            if (each->typeSpecifier())
+            if (each.kind == Type::Kind::StorageClass)
             {
-                if (each->typeSpecifier()->typedefName())
+                if (storageClassType.has_value())
                 {
-                    auto id = each->typeSpecifier()->typedefName()->toString();
-                    if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id,忽略
-                    {
-                        continue;
-                    }
-                    else
-                    {
-                        if (flag)
-                        {
-                            THROW_ERR(error::double_type, each->typeSpecifier());
-                        }
-                        basetype = obj.typedefs.find(id)->second;
-                        flag = true;
-                    }
+                    THROW_ERR(error::double_StorageClassSpecifier, specs);
                 }
-                if (flag)
-                {
-                    THROW_ERR(error::double_type, each->typeSpecifier());
-                }
-                basetype = (visitTypeSpecifier(each->typeSpecifier()));
-                flag = true;
-
-            } // [TODO] 考虑修饰符
+                storageClassType = each;
+            }
+            else
+            {
+                baredBasictype.pushTop(each);
+            }
+        }
+        if (storageClassType)
+        {
+            baredBasictype.pushTop(storageClassType.value());
         }
     }
     if (initList) // 带初始化的参数
     {
-        baseType = basetype;
-        visitInitDeclaratorList(initList);
+        vars = visitInitDeclaratorList(initList);
     }
     for (auto& each : vars)
     {
@@ -228,10 +194,15 @@ std::vector<Type> astVisitor::visitDeclarationSpecifiers(
 {
     std::vector<Type> Types;
     // 遍历所有声明说明符
+    bool flag = 0;
     for (auto& each : ctx->declarationSpecifier())
     {
         // 解析每个声明说明符
         Type result = visitDeclarationSpecifier(each);
+        if (result.kind == Type::Kind::StorageClass && flag)
+        {
+            THROW_ERR(error::double_StorageClassSpecifier, ctx);
+        }
         Types.push_back((result));
     }
     return Types;
@@ -244,27 +215,47 @@ Type astVisitor::visitDeclarationSpecifier(ComplierParser::DeclarationSpecifierC
         // 直接返回typeSpecifier的结果
         return visitTypeSpecifier(ctx->typeSpecifier());
     }
-    THROW_ERR(error::unsurpport_basictype, ctx);
+    else if (ctx->storageClassSpecifier()) // typedef / extern
+    {
+        Type tp{};
+        tp.kind = Type::Kind::StorageClass;
+        if (ctx->getText() == "typedef")
+        {
+            tp.storageClassSpecifier = Type::StorageClassSpecifier::Typedef;
+        }
+        else if (ctx->getText() == "static")
+        {
+            tp.storageClassSpecifier = Type::StorageClassSpecifier::Static;
+        }
+        else if (ctx->getText() == "extern")
+        {
+            tp.storageClassSpecifier = Type::StorageClassSpecifier::Extern;
+        }
+        else
+        {
+            THROW_ERR(error::unsurpport_StorageClassSpecifier, ctx);
+        }
+        return tp;
+    }
+    THROW_ERR(error::unsurpport_DeclarationSpecifier, ctx);
 }
 Type astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
 {
     Type rettype;
     // varDef rettpe;
-    if (ctx->typedefName()) // 语法阶段无法判断是类型别名还是id, 均以typedefName表示
+    if (ctx->typedefName()) // 是类型别名
     {
-        if (obj.typedefs.find(ctx->typedefName()->getText()) != obj.typedefs.end()) // 是类型别名
+        if (obj.typedefs.find(ctx->typedefName()->getText()) != obj.typedefs.end())
         {
             rettype = obj.typedefs.find(ctx->typedefName()->getText())->second;
             return rettype;
         }
-        else // 是id
+        else
         {
-            rettype.id = ctx->typedefName()->getText();
-            rettype.kind = Type::Kind::ID;
-            return rettype;
+            THROW_ERR(error::undifined_type, ctx);
         }
     }
-    // 判断基本类型
+    // 是基本类型
     rettype.kind = Type::Kind::Basic;
     if (ctx->getText() == "int")
     {
@@ -952,8 +943,7 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
         }
         else
         {
-            funcnow->asms.push_back(
-                ASM{ASM::basic_asm::COPY}); // 拷贝一份左值地址实现返回值
+            funcnow->asms.push_back(ASM{ASM::basic_asm::COPY}); // 拷贝一份左值地址实现返回值
 
             (void)(visitUnaryExpression(ctx->unaryExpression()));
             funcnow->asms.pop_back(); // 取一份左值用于运算
@@ -1002,7 +992,6 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
                 funcnow->asms.push_back(ASM{ASM::basic_asm::XOR});
             }
             // [TODO] bit operator asm
-
 
             if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {

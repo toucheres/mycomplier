@@ -326,3 +326,7 @@ long printf(char* fmt, ...)
     }
     return charsnum;
 }
+//  FILE* fopen(const char* __restrict __filename, const char* __restrict __modes)
+// {
+
+// }

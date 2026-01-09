@@ -33,12 +33,20 @@ struct Type
     };
     enum class Kind
     {
-        Undefined, // 初始
-        ID,        // id
-        Basic,     // 基本类型
-        Pointer,   // 指针类型
-        Array,     // 数组类型
-        Function   // 函数类型
+        Undefined,   // 初始
+        ID,          // id
+        Basic,       // 基本类型
+        Pointer,     // 指针类型
+        Array,       // 数组类型
+        Function,    // 函数类型
+        StorageClass // 存储类
+    };
+    enum class StorageClassSpecifier
+    {
+        None,
+        Typedef,
+        Extern,
+        Static
     };
     Type() = default;
     Type(const Type&) = default;
@@ -47,6 +55,7 @@ struct Type
     Type(Kind kind, std::string arg);        // for id
     Type(Kind kind, std::vector<Type> args); // for function
     Kind kind = Kind::Undefined;
+    StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::None;
     std::string id;
     // 基础类型
     BasicType basic_type; // avilable when kind == Basic
@@ -77,7 +86,7 @@ struct funcDef : Identifi
     std::vector<varDef> args;
     Type rettype;
     std::vector<std::vector<varDef>> funcvar_stack;
-    inline static  size_t parpera_for_stack_frame = VCPU<>::size_word;
+    inline static size_t parpera_for_stack_frame = VCPU<>::size_word;
     size_t max_stack_size = 0;
     size_t stack_size_now = 0;
     void enter_scope();
