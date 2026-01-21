@@ -25,6 +25,7 @@ struct astVisitor
         ComplierParser::InitDeclaratorListContext* initList);
 
   public:
+    std::vector<Type> addvars(std::vector<Type> vars);
     astVisitor(std::string name, OBJ& obj);
     OBJ& obj;
     void visitAsmADDer(ComplierParser::AsmADDerContext *ctx);

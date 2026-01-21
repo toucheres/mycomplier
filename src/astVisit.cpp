@@ -65,6 +65,7 @@ std::vector<Type> astVisitor::lowerDeclaration(ComplierParser::DeclarationSpecif
         {
             baredBasictype.pushTop(storageClassType.value());
         }
+        basetype = baredBasictype;
     }
     if (initList) // 带初始化的参数
     {
@@ -79,7 +80,7 @@ std::vector<Type> astVisitor::lowerDeclaration(ComplierParser::DeclarationSpecif
 
 std::vector<Type> astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
 {
-    return lowerDeclaration(ctx->declarationSpecifiers(), ctx->initDeclaratorList());
+    return addvars(lowerDeclaration(ctx->declarationSpecifiers(), ctx->initDeclaratorList()));
 }
 void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx)
 {
@@ -314,21 +315,22 @@ std::vector<Type> astVisitor::visitInitDeclaratorList(
     }
     return vars;
 }
+// [adddef由上级完成]
 Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx)
 {
     auto ret = (visitDeclarator(ctx->declarator()));
     ret.pushTop(baseType);
-    if (funcnow->name != "__global_init" + obj.name) // 局部
-    {
-        varDef var;
-        var.type = *ret.subType;
-        var.name = ret.id;
-        funcnow->add_var(var);
-    }
-    else
-    {
-        obj.symbol_table.add_global_var_def(ret);
-    }
+    // if (funcnow != gfuncptr) // 局部
+    // {
+    //     varDef var;
+    //     var.type = *ret.subType;
+    //     var.name = ret.id;
+    //     funcnow->add_var(var);
+    // }
+    // else
+    // {
+    //     obj.symbol_table.add_global_var_def(ret);
+    // }
     auto decodeStringLiteral =
         [this](ComplierParser::AssignmentExpressionContext* expr) -> std::optional<std::vector<int>>
     {
@@ -644,7 +646,6 @@ Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx)
         func(ret, ctx->initializer());
     }
     return ret;
-    throw;
 }
 // 后序递归生成
 Type astVisitor::visitDeclarator(ComplierParser::DeclaratorContext* ctx)
@@ -2125,7 +2126,7 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
 
         if (auto* decl = forCond->forDeclaration())
         {
-            lowerDeclaration(decl->declarationSpecifiers(), decl->initDeclaratorList());
+            addvars(lowerDeclaration(decl->declarationSpecifiers(), decl->initDeclaratorList()));
         }
         else if (auto* initExpr = forCond->expression())
         {
@@ -2617,6 +2618,24 @@ long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext
 
     return evalAssign(expr);
 };
+std::vector<Type> astVisitor::addvars(std::vector<Type> vars)
+{
+    for (auto& each : vars)
+    {
+        if (funcnow != gfuncptr) // 局部
+        {
+            varDef var;
+            var.type = *each.subType;
+            var.name = each.id;
+            funcnow->add_var(var);
+        }
+        else
+        {
+            obj.symbol_table.add_global_var_def(each);
+        }
+    }
+    return vars;
+}
 astVisitor::astVisitor(std::string name, OBJ& ob) : obj(ob)
 {
     Type global_init_fun;

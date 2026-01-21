@@ -48,6 +48,11 @@ size_t Type::getsize() const
     {
         return VCPU<>::size_word;
     }
+    else if (this->kind == Kind::StorageClass)
+    {
+        return this->subType->getsize();
+    }
+    throw;
 }
 
 bool Type::operator==(const Type& other_) const
@@ -138,7 +143,14 @@ Type& Type::getTop()
 bool Type::pushTop(const Type& what)
 {
     auto& top = getTop();
-    top.subType = value_ptr<Type>::make_copyed_ptr(what);
+    if (top.kind == Type::Kind::Undefined)
+    {
+        top = what;
+    }
+    else
+    {
+        top.subType = value_ptr<Type>::make_copyed_ptr(what);
+    }
     return true;
 }
 
