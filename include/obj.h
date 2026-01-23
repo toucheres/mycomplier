@@ -13,6 +13,7 @@
 #include <variant>
 #include <vector>
 #include <vm.h>
+#include <scoped_map.hpp>
 // 前向声明
 struct Type;
 struct varDef;
@@ -64,6 +65,7 @@ struct Type
     int arr_or_ptr_num = -1;
     Type& getTop();
     bool pushTop(const Type& what);
+    Type popTop();
     std::string to_string() const;
     size_t getsize() const;
     bool operator==(const Type& other) const;
@@ -85,7 +87,9 @@ struct funcDef : Identifi
     std::vector<std::string> asms;
     std::vector<varDef> args;
     Type rettype;
-    std::vector<std::vector<varDef>> funcvar_stack;
+    scoped_map<std::string, varDef> funcvar_stack;
+    scoped_map<std::string, Type> typedefs;
+    std::vector<size_t> scope_stack_marks; // stack_size_now snapshots per scope
     inline static size_t parpera_for_stack_frame = VCPU<>::size_word;
     size_t max_stack_size = 0;
     size_t stack_size_now = 0;
@@ -98,7 +102,7 @@ struct funcDef : Identifi
     funcDef& operator=(const funcDef&) = default;
     funcDef()
     {
-        funcvar_stack.push_back(std::vector<varDef>());
+        scope_stack_marks.push_back(0); // root scope baseline
     };
 };
 
@@ -138,7 +142,7 @@ struct OBJ
     ComplierParser::CompilationUnitContext* program;
     // 符号表
     SymbolTable symbol_table;
-    // typedef表
+    // typedef表 [TODO] scpoe化
     std::unordered_map<std::string, Type> typedefs;
     // 代码生成接口
 };

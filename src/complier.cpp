@@ -154,6 +154,20 @@ bool Type::pushTop(const Type& what)
     return true;
 }
 
+Type Type::popTop()
+{
+    Type* p = nullptr;
+    Type* now = this;
+    while (now->kind != Type::Kind::Basic && now->kind != Type::Kind::Undefined && now->subType)
+    {
+        p = now;
+        now = now->subType.get();
+    }
+    auto tp = *p->subType;
+    p->subType.reset();
+    return tp;
+}
+
 //[REWRITE] 修改 to_string() 方法
 std::string Type::to_string() const
 {
@@ -389,63 +403,51 @@ std::expected<std::vector<std::string>, error> linker::process()
 
 void funcDef::enter_scope()
 {
-    funcvar_stack.push_back(std::vector<varDef>{});
+    funcvar_stack.in_scope();
+    typedefs.in_scope();
+    scope_stack_marks.push_back(stack_size_now);
 }
 
 void funcDef::exit_scope()
 {
-    funcvar_stack.pop_back();
-    // 使用反向迭代器
-    for (auto it = funcvar_stack.rbegin(); it != funcvar_stack.rend(); ++it)
+    if (scope_stack_marks.size() > 1)
     {
-        if ((*it).empty())
-        {
-            continue;
-        }
-        else
-        {
-            stack_size_now = -it->back().addr;
-        }
+        funcvar_stack.out_scope();
+        typedefs.out_scope();
+        scope_stack_marks.pop_back();
+        stack_size_now = scope_stack_marks.back();
     }
 }
 
 const varDef* funcDef::lookup_var(const std::string& inname) const
 {
-    const varDef* ptr = nullptr;
-    for (int i = 0; i < funcvar_stack.size(); i++)
+    if (auto ptr = funcvar_stack.find(inname))
     {
-        auto& block = funcvar_stack[funcvar_stack.size() - i - 1];
-        for (int j = 0; j < block.size(); j++)
+        return ptr;
+    }
+    for (auto& each : args)
+    {
+        if (each.name == inname)
         {
-            if (block[block.size() - j - 1].name == inname)
-            {
-                ptr = &(block[block.size() - j - 1]);
-                break;
-            }
+            return &each;
         }
     }
-    if (!ptr)
-    {
-        for (auto& each : args)
-        {
-            if (each.name == inname)
-            {
-                ptr = &each;
-                break;
-            }
-        }
-    }
-    return ptr;
+    return nullptr;
 }
 const varDef* funcDef::add_var(const varDef& vardef)
 {
     varDef var = vardef;
-    var.addr = -var.get_addr_in_stack(stack_size_now);
+    int new_addr = -static_cast<int>(var.get_addr_in_stack(stack_size_now));
+    size_t new_stack_size = static_cast<size_t>(-new_addr);
+    var.addr = new_addr;
     var.is_defined = true;
-    stack_size_now = -var.addr;
+    if (!funcvar_stack.add(var.name, var))
+    {
+        return nullptr; // duplicate in the same scope
+    }
+    stack_size_now = new_stack_size;
     max_stack_size = std::max(stack_size_now, max_stack_size);
-    funcvar_stack.back().push_back(var);
-    return &funcvar_stack.back().back();
+    return funcvar_stack.find(var.name);
 }
 
 bool funcDef::add_arg(std::vector<varDef>& vardef)

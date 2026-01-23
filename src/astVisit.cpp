@@ -61,7 +61,7 @@ std::vector<Type> astVisitor::lowerDeclaration(ComplierParser::DeclarationSpecif
                 baredBasictype.pushTop(each);
             }
         }
-        if (storageClassType)
+        if (storageClassType.has_value())
         {
             baredBasictype.pushTop(storageClassType.value());
         }
@@ -80,7 +80,7 @@ std::vector<Type> astVisitor::lowerDeclaration(ComplierParser::DeclarationSpecif
 
 std::vector<Type> astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
 {
-    return addvars(lowerDeclaration(ctx->declarationSpecifiers(), ctx->initDeclaratorList()));
+    return lowerDeclaration(ctx->declarationSpecifiers(), ctx->initDeclaratorList());
 }
 void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx)
 {
@@ -2011,18 +2011,7 @@ void astVisitor::visitBlockItem(ComplierParser::BlockItemContext* ctx)
     }
     else if (ctx->declaration())
     {
-        auto vars = visitDeclaration(ctx->declaration());
-        for (auto& each : vars)
-        {
-            varDef var;
-            var.name = each.id;
-            var.type = *each.subType;
-            auto varptr = funcnow->add_var(var);
-            if (!varptr)
-            {
-                THROW_ERR(error::double_defined, ctx->declaration());
-            }
-        }
+        addDeclarations(visitDeclaration(ctx->declaration()));
     }
     else if (ctx->asmADDer())
     {
@@ -2126,7 +2115,8 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
 
         if (auto* decl = forCond->forDeclaration())
         {
-            addvars(lowerDeclaration(decl->declarationSpecifiers(), decl->initDeclaratorList()));
+            addDeclarations(
+                lowerDeclaration(decl->declarationSpecifiers(), decl->initDeclaratorList()));
         }
         else if (auto* initExpr = forCond->expression())
         {
@@ -2189,7 +2179,7 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
         }
         funcnow->exit_scope();
     }
-    // [TODO] 'for' statement
+    // [TODO] 'do-while' statement
 }
 
 void astVisitor::visitJumpStatement(ComplierParser::JumpStatementContext* ctx)
@@ -2211,6 +2201,7 @@ void astVisitor::visitJumpStatement(ComplierParser::JumpStatementContext* ctx)
         }
         else
         {
+            // 空返回按0返回
             funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, 0});
         }
         funcnow->asms.push_back(ASM{ASM::basic_asm::RET});
@@ -2618,10 +2609,22 @@ long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext
 
     return evalAssign(expr);
 };
-std::vector<Type> astVisitor::addvars(std::vector<Type> vars)
+std::vector<Type> astVisitor::addDeclarations(std::vector<Type> vars)
 {
     for (auto& each : vars)
     {
+        if (each.getTop().kind == Type::Kind::StorageClass)
+        {
+            if (each.getTop().storageClassSpecifier == Type::StorageClassSpecifier::Typedef)
+            {
+                if (funcnow->typedefs.find(each.id))
+                {
+                    THROW_ERR_NOCTX(error::double_type);
+                }
+                auto tp = each;
+                funcnow->typedefs[each.id] = tp.popTop();
+            }
+        }
         if (funcnow != gfuncptr) // 局部
         {
             varDef var;
