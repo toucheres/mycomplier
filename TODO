@@ -1,2 +1,5 @@
-[TODO] 声明时初始化 int a = 12
-[DOING][TODO] 优化变量存储与查找的结构
+[OK][TODO] 声明时初始化 int a = 12
+[OK][DOING][TODO] 优化变量存储与查找的结构
+[OK] static extern 的全局变量的链接
+[OK][BUG] 字符串类型丢失
+[TODO] arr初始化时的长度自动推导char arr[] = {'a','0'};

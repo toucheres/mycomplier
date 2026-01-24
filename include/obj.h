@@ -95,6 +95,7 @@ struct varDef : Identifi
         Global
     };
     Kind kind = Kind::Local;
+    std::string link_label;
     size_t get_addr_in_stack(size_t posnow);
     varDef() = default;
 };
@@ -130,6 +131,8 @@ struct DeclRepository
     tree_scoped_map<std::string, varDef, Label, ScopeMeta> static_decls;
     tree_scoped_map<std::string, Type, Label, ScopeMeta> func_decls;
     tree_scoped_map<std::string, Type, Label, ScopeMeta> typedef_decls;
+
+    size_t static_label_counter = 0;
 
     void enter_scope(const Label& label = {});
     void exit_scope();
@@ -193,6 +196,11 @@ struct OBJ
     void exit_decl_scope();
 
     void flush_global_decls();
+
+    std::string global_label(const varDef& v) const;
+    std::string global_label(const std::string& name,
+                             Type::StorageClassSpecifier storage =
+                                 Type::StorageClassSpecifier::None) const;
 
     varDef* record_var_decl(const Type& t,
                             Type::StorageClassSpecifier storage =

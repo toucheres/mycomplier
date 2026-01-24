@@ -1,11 +1,17 @@
-int a;
+#include <stdio.h>
+extern int a;
+
+int func(int in)
+{
+    int tp = in;
+    if (tp > 0)
+    {
+        return tp * func(tp - 1);
+    }
+    return 1;
+}
 
 int main()
 {
-    int c;
-    int b;
-    a = 10;
-    c = 12;
-    b = 14;
-    return a + b + c;
+    return printf("4! == %d\n", func(a));
 }

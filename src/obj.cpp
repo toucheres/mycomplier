@@ -80,6 +80,10 @@ bool DeclRepository::add_var(varDef v, Type::StorageClassSpecifier storage, func
     auto depth = map->scope_depth() - 1; // zero-based: 0 root, 1 params, else locals
     v.type.storageClassSpecifier = storage;
     v.kind = kind_from_depth(depth);
+    if (storage == Type::StorageClassSpecifier::Static && v.link_label.empty())
+    {
+        v.link_label = v.name + "#" + std::to_string(static_label_counter++);
+    }
     auto& scope_info = map->current_scope_info();
 
     if (v.kind == varDef::Kind::Arg && arg_index)
@@ -374,42 +378,47 @@ void OBJ::flush_global_decls()
                                        }
                                        for (auto& [name, v] : entries)
                                        {
-                                           Type t = v.type;
+                                           Type t;
+                                           t.kind = Type::Kind::ID;
                                            t.id = name;
+                                           t.subType = v.type;
                                            symbol_table.add_global_var_def(t);
                                        }
                                    });
 
-    // static variables treated as global definitions for now.
+    // static variables: always emit, scoped to object to avoid cross-object collisions.
     decls.static_decls.for_each_scope(
-        [this](std::size_t depth, auto& entries, auto&, const auto&)
+        [this](std::size_t /*depth*/, auto& entries, auto&, const auto&)
         {
-            if (depth != 0)
-            {
-                return;
-            }
             for (auto& [name, v] : entries)
             {
-                Type t = v.type;
-                t.id = name;
+                // Type t = v.type;
+                // t.id = v.link_label.empty() ? name : v.link_label;
+                Type t;
+                t.kind = Type::Kind::ID;
+                t.id = v.link_label.empty() ? name : v.link_label;
+                t.subType = v.type;
                 symbol_table.add_global_var_def(t);
             }
         });
 
     // extern declarations become decl entries
-    decls.extern_decls.for_each_scope([this](std::size_t depth, auto& entries, auto&, const auto&)
-                                      {
-                                          if (depth != 0)
-                                          {
-                                              return;
-                                          }
-                                          for (auto& [name, v] : entries)
-                                          {
-                                              Type t = v.type;
-                                              t.id = name;
-                                              symbol_table.add_global_var_decl(t);
-                                          }
-                                      });
+    decls.extern_decls.for_each_scope(
+        [this](std::size_t /*depth*/, auto& entries, auto&, const auto&)
+        {
+            for (auto& [name, v] : entries)
+            {
+                // Type t = v.type;
+                // t.id = name;
+
+                Type t;
+                t.kind = Type::Kind::ID;
+                t.id = name;
+                t.subType = v.type;
+
+                symbol_table.add_global_var_decl(t);
+            }
+        });
 
     // function prototypes/defs recorded as declarations
     decls.func_decls.for_each_scope([this](std::size_t depth, auto& entries, auto&, const auto&)
@@ -420,7 +429,27 @@ void OBJ::flush_global_decls()
                                         }
                                         for (auto& [name, t] : entries)
                                         {
+                                            Type tp;
+                                            tp.kind = Type::Kind::ID;
+                                            tp.id = name;
+                                            tp.subType = t;
                                             (void)symbol_table.add_global_func_decl(t);
                                         }
                                     });
+}
+
+std::string OBJ::global_label(const varDef& v) const
+{
+    return global_label(v.link_label.empty() ? v.name : v.link_label,
+                       v.type.storageClassSpecifier);
+}
+
+std::string OBJ::global_label(const std::string& var_name,
+                              Type::StorageClassSpecifier storage) const
+{
+    if (storage == Type::StorageClassSpecifier::Static)
+    {
+        return "globalvar@" + name + "@" + var_name;
+    }
+    return "globalvar@" + var_name;
 }

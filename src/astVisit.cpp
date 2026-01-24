@@ -631,7 +631,8 @@ Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx,
                     def->type.storageClassSpecifier == Type::StorageClassSpecifier::Static;
                 if (is_global)
                 {
-                    funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + arg.id});
+                    const auto label = obj.global_label(*def);
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, label});
                     funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
                 }
                 else
@@ -1815,7 +1816,8 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
 
             if (is_global)
             {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + str});
+                const auto label = obj.global_label(*var);
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, label});
                 funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
             }
             else
@@ -2053,9 +2055,9 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
         // std::cout << chars << '\n';
         // std::cout << "--------\n";
         Type global_chars_arr_type;
-        global_chars_arr_type.pushTop(Type{Type::Kind::Basic, Type::BasicType::Char});
         global_chars_arr_type.kind = Type::Kind::Array;
         global_chars_arr_type.arr_or_ptr_num = chars_after_transed.size();
+        global_chars_arr_type.pushTop(Type{Type::Kind::Basic, Type::BasicType::Char});
         Type arrdef;
         arrdef.kind = Type::Kind::ID;
         static size_t index = 1;

@@ -149,7 +149,7 @@ bool Type::pushTop(const Type& what)
     }
     else
     {
-        top.subType = value_ptr<Type>::make_copyed_ptr(what);
+        top.subType = value_ptr<Type>::make_value_ptr(what);
     }
     return true;
 }
@@ -257,7 +257,7 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                     }
                     for (int i = thisfuncstart; i < this->exe.asms.size(); i++)
                     {
-                        std::regex pattern("globalvar@([a-zA-Z_][a-zA-Z0-9_]*)");
+                        std::regex pattern("globalvar@([a-zA-Z_][a-zA-Z0-9_@#]*)");
                         std::smatch match;
                         if (std::regex_search(this->exe.asms[i], match, pattern) &&
                             match.size() > 1)
@@ -312,7 +312,10 @@ std::expected<std::vector<std::string>, error> linker::process()
                 eachgvar.addr = eachgvar.get_addr_in_stack(exe.global_size);
             }
             exe.global_size = eachgvar.addr + eachgvar.type.getsize();
-            auto labal = "globalvar@" + eachgvar.name;
+            const bool is_static =
+                eachgvar.type.storageClassSpecifier == Type::StorageClassSpecifier::Static;
+            auto labal =
+                std::string{"globalvar@"} + (is_static ? eachobj.name + "@" : "") + eachgvar.name;
             if (addrmap.find(labal) != addrmap.end())
             {
                 return std::unexpected(error::double_defined);

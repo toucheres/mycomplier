@@ -8,7 +8,7 @@ template <class T> class value_ptr
 
   public:
     // 静态创建方法
-    template <typename... Args> static value_ptr<T> make_copyed_ptr(Args&&... args)
+    template <typename... Args> static value_ptr<T> make_value_ptr(Args&&... args)
     {
         value_ptr<T> tp;
         tp.ptr = std::make_unique<T>(std::forward<Args>(args)...);
@@ -29,6 +29,19 @@ template <class T> class value_ptr
             ptr = other.ptr ? std::make_unique<T>(*other.ptr) : nullptr;
         }
         return *this;
+    }
+    value_ptr& operator=(const T& other)
+    {
+        if (this->ptr.get() != &other)
+        {
+            ptr = std::make_unique<T>(other);
+        }
+        return *this;
+    }
+    // 隐式转换为value
+    operator T()
+    {
+        return *this->ptr;
     }
 
     // 移动构造函数
