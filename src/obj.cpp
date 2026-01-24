@@ -15,13 +15,14 @@ Type strip_id_preserve(const Type& t)
 
 template <class MapT> void enter_scope_all(MapT& map, const std::string& label)
 {
+    auto info = map.current_scope_info();
     if (label.empty())
     {
-        map.enter_scope();
+        map.enter_scope_with_info(info);
     }
     else
     {
-        map.enter_scope(label);
+        map.enter_scope(label, info);
     }
 }
 
@@ -71,16 +72,39 @@ pick_storage_map(DeclRepository& repo, Type::StorageClassSpecifier storage)
     }
 }
 
-bool DeclRepository::add_var(varDef v, Type::StorageClassSpecifier storage)
+bool DeclRepository::add_var(varDef v, Type::StorageClassSpecifier storage, funcDef* func_ctx,
+                             std::optional<std::size_t> arg_index)
 {
     v.type = strip_id_preserve(v.type);
     auto* map = pick_storage_map(*this, storage);
     auto depth = map->scope_depth() - 1; // zero-based: 0 root, 1 params, else locals
     v.type.storageClassSpecifier = storage;
     v.kind = kind_from_depth(depth);
-    if (storage != Type::StorageClassSpecifier::Extern)
+    auto& scope_info = map->current_scope_info();
+
+    if (v.kind == varDef::Kind::Arg && arg_index)
     {
-        map->current_scope_info().stack_size += v.type.getsize();
+        v.addr = static_cast<int>(VCPU<>::size_word * (static_cast<int>(*arg_index) + 2));
+    }
+    else if (v.kind == varDef::Kind::Local &&
+             storage != Type::StorageClassSpecifier::Extern &&
+             storage != Type::StorageClassSpecifier::Static)
+    {
+        const auto new_pos = v.get_addr_in_stack(func_ctx ? func_ctx->stack_size_now
+                                                          : scope_info.stack_size);
+        v.addr = -static_cast<int>(new_pos);
+
+        if (func_ctx)
+        {
+            func_ctx->stack_size_now = static_cast<std::size_t>(-v.addr);
+            func_ctx->max_stack_size =
+                std::max(func_ctx->max_stack_size, func_ctx->stack_size_now);
+        }
+        scope_info.stack_size = static_cast<std::size_t>(-v.addr);
+    }
+    else if (storage != Type::StorageClassSpecifier::Extern)
+    {
+        scope_info.stack_size += v.type.getsize();
     }
     return map->add(v.name, v);
 }
@@ -190,22 +214,6 @@ funcDef* SymbolTable::add_global_func_def(const Type& vardef)
     newFunc.type = *vardef.subType;
     newFunc.is_defined = true;
     newFunc.rettype = *vardef.subType->subType;
-    std::vector<varDef> args;
-    for(auto&each:vardef.subType->args)
-    {
-        varDef tp;
-        tp.name = each.id;
-        tp.type = *each.subType;
-        tp.is_defined = true;
-        args.push_back(tp);
-    }
-    newFunc.args = args;
-    // [TODO] 参数大小不一定恒定2字
-    for (std::size_t i = 0; i < newFunc.args.size(); ++i)
-    {
-        newFunc.args[i].addr = VCPU<>::size_word * (static_cast<int>(i) + 2);
-        newFunc.args[i].kind = varDef::Kind::Arg;
-    }
     // 添加到全局函数定义/声明表
     globalfuncdef[vardef.id] = newFunc;
     globalfuncdecl[vardef.id] = *vardef.subType;
@@ -308,7 +316,7 @@ varDef* OBJ::record_var_decl(const Type& t, Type::StorageClassSpecifier storage,
     v.type = t;
     v.is_defined = true;
 
-    if (!decls.add_var(v, storage))
+    if (!decls.add_var(v, storage, func_ctx, arg_index))
     {
         return nullptr;
     }
@@ -317,34 +325,6 @@ varDef* OBJ::record_var_decl(const Type& t, Type::StorageClassSpecifier storage,
     if (!slot)
     {
         return nullptr;
-    }
-
-    // Assign addresses for locals/args when inside a function.
-    if (func_ctx)
-    {
-        if (slot->kind == varDef::Kind::Arg && arg_index)
-        {
-            slot->addr = static_cast<int>(VCPU<>::size_word * (static_cast<int>(*arg_index) + 2));
-        }
-        else if (slot->kind == varDef::Kind::Local &&
-                 storage != Type::StorageClassSpecifier::Extern)
-        {
-            const auto new_addr =
-                -static_cast<int>(slot->get_addr_in_stack(func_ctx->stack_size_now));
-            slot->addr = new_addr;
-            func_ctx->stack_size_now = static_cast<size_t>(-new_addr);
-            func_ctx->max_stack_size = std::max(func_ctx->max_stack_size, func_ctx->stack_size_now);
-        }
-
-        // Keep func_ctx->args in sync when applicable.
-        for (auto& arg : func_ctx->args)
-        {
-            if (arg.name == slot->name)
-            {
-                arg.addr = slot->addr;
-                arg.kind = slot->kind;
-            }
-        }
     }
 
     return slot;

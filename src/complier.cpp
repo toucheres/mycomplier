@@ -401,22 +401,6 @@ std::expected<std::vector<std::string>, error> linker::process()
 //     name = node.nodes[1]->token_to_string();
 // }
 
-void funcDef::enter_scope()
-{
-    typedefs.in_scope();
-    scope_stack_marks.push_back(stack_size_now);
-}
-
-void funcDef::exit_scope()
-{
-    if (scope_stack_marks.size() > 1)
-    {
-        typedefs.out_scope();
-        scope_stack_marks.pop_back();
-        stack_size_now = scope_stack_marks.back();
-    }
-}
-
 size_t varDef::get_addr_in_stack(size_t posnow)
 {
     // [TODO] char的考虑

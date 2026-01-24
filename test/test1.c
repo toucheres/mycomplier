@@ -1,7 +1,11 @@
+int a;
 
 int main()
 {
-    int a;
-    a = 12;
-    return a;
+    int c;
+    int b;
+    a = 10;
+    c = 12;
+    b = 14;
+    return a + b + c;
 }

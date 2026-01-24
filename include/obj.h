@@ -7,7 +7,6 @@
 #include <memory>
 #include <optional>
 #include <peglib.h>
-#include <scoped_map.hpp>
 #include <stack>
 #include <string>
 #include <tree_scoped_map.hpp>
@@ -102,21 +101,13 @@ struct varDef : Identifi
 struct funcDef : Identifi
 {
     std::vector<std::string> asms;
-    std::vector<varDef> args;
     Type rettype;
-    scoped_map<std::string, Type> typedefs;
-    std::vector<size_t> scope_stack_marks; // stack_size_now snapshots per scope
     inline static size_t parpera_for_stack_frame = VCPU<>::size_word;
     size_t max_stack_size = 0;
     size_t stack_size_now = 0;
-    void enter_scope();
-    void exit_scope();
+    funcDef() = default;
     funcDef(const funcDef&) = default;
     funcDef& operator=(const funcDef&) = default;
-    funcDef()
-    {
-        scope_stack_marks.push_back(0); // root scope baseline
-    };
 };
 
 struct DeclRepository
@@ -143,7 +134,8 @@ struct DeclRepository
     void enter_scope(const Label& label = {});
     void exit_scope();
 
-    bool add_var(varDef v, Type::StorageClassSpecifier storage);
+    bool add_var(varDef v, Type::StorageClassSpecifier storage, funcDef* func_ctx = nullptr,
+                 std::optional<std::size_t> arg_index = std::nullopt);
     bool add_func(const Type& t);
     bool add_typedef(const Type& t);
 

@@ -135,12 +135,9 @@ void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionConte
     funcnow = funnowptr;
     obj.enter_decl_scope(basetype.id);
     std::size_t arg_index = 0;
-    for (const auto& arg : funcnow->args)
+    for (const auto& arg : funcnow->type.args)
     {
-        Type argType;
-        argType.kind = Type::Kind::ID;
-        argType.id = arg.name;
-        argType.pushTop(arg.type);
+        Type argType = arg;
         obj.record_var_decl(argType, Type::StorageClassSpecifier::None, funcnow, arg_index);
         ++arg_index;
     }
@@ -425,13 +422,16 @@ std::vector<Type> astVisitor::visitInitDeclaratorList(
 //     }
 //     return std::expected<Type, error>(ret);
 // }
-// [adddef由上级完成]
+
 Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx, Type basetype,
                                      Type::StorageClassSpecifier storageClassSpecifier)
 {
     auto ret = (visitDeclarator(ctx->declarator()));
     ret.pushTop(basetype);
-    obj.record_var_decl(ret, storageClassSpecifier);
+    funcDef* func_ctx = (funcnow != gfuncptr) ? funcnow : nullptr;
+    obj.record_var_decl(ret, storageClassSpecifier, func_ctx);
+    // 不再区分局部与
+
     // if (funcnow != gfuncptr) // 局部
     // {
     //     varDef var;
@@ -826,11 +826,9 @@ void astVisitor::visitCompoundStatement(ComplierParser::CompoundStatementContext
 {
     if (auto ptr = ctx->blockItemList())
     {
-        funcnow->enter_scope();
         obj.enter_decl_scope("compound");
         visitBlockItemList(ctx->blockItemList());
         obj.exit_decl_scope();
-        funcnow->exit_scope();
     }
 }
 std::vector<Type> astVisitor::visitParameterList(ComplierParser::ParameterListContext* ctx)
@@ -2190,7 +2188,6 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
     }
     else if (ctx->children[0]->getText() == "for")
     {
-        funcnow->enter_scope();
         obj.enter_decl_scope("for");
         auto* forCond = ctx->forCondition();
         if (!forCond)
@@ -2282,7 +2279,6 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
             }
         }
         obj.exit_decl_scope();
-        funcnow->exit_scope();
     }
     // [TODO] 'do-while' statement
 }
@@ -2715,6 +2711,7 @@ long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext
     return evalAssign(expr);
 };
 // [TODO] addDeclarations 由 visitDeclartion -> lowerdecl完成 该函数废弃
+[[deprecated("addDeclarations 由 visitDeclartion -> lowerdecl完成 该函数废弃")]]
 std::vector<Type> astVisitor::addDeclarations(std::vector<Type> vars)
 {
     for (auto& each : vars)
