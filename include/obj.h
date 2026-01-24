@@ -7,13 +7,14 @@
 #include <memory>
 #include <optional>
 #include <peglib.h>
+#include <scoped_map.hpp>
 #include <stack>
 #include <string>
+#include <tree_scoped_map.hpp>
 #include <unordered_map>
 #include <variant>
 #include <vector>
 #include <vm.h>
-#include <scoped_map.hpp>
 // 前向声明
 struct Type;
 struct varDef;
@@ -69,6 +70,15 @@ struct Type
     std::string to_string() const;
     size_t getsize() const;
     bool operator==(const Type& other) const;
+    Type& removeID()
+    {
+        if (this->kind == Type::Kind::ID)
+        {
+            auto tp = *this->subType;
+            *this = tp;
+        }
+        return *this;
+    }
 };
 struct Identifi
 {
@@ -79,6 +89,13 @@ struct Identifi
 };
 struct varDef : Identifi
 {
+    enum class Kind
+    {
+        Local,
+        Arg,
+        Global
+    };
+    Kind kind = Kind::Local;
     size_t get_addr_in_stack(size_t posnow);
     varDef() = default;
 };
@@ -87,7 +104,6 @@ struct funcDef : Identifi
     std::vector<std::string> asms;
     std::vector<varDef> args;
     Type rettype;
-    scoped_map<std::string, varDef> funcvar_stack;
     scoped_map<std::string, Type> typedefs;
     std::vector<size_t> scope_stack_marks; // stack_size_now snapshots per scope
     inline static size_t parpera_for_stack_frame = VCPU<>::size_word;
@@ -95,15 +111,48 @@ struct funcDef : Identifi
     size_t stack_size_now = 0;
     void enter_scope();
     void exit_scope();
-    const varDef* lookup_var(const std::string& name) const;
-    const varDef* add_var(const varDef& vardef);
-    bool add_arg(std::vector<varDef>& vardef);
     funcDef(const funcDef&) = default;
     funcDef& operator=(const funcDef&) = default;
     funcDef()
     {
         scope_stack_marks.push_back(0); // root scope baseline
     };
+};
+
+struct DeclRepository
+{
+    using Label = std::string;
+
+    struct ScopeMeta
+    {
+        size_t stack_size = 0; // accumulated size for this scope
+    };
+
+    DeclRepository() = default;
+    DeclRepository(const DeclRepository&) = delete;
+    DeclRepository& operator=(const DeclRepository&) = delete;
+    DeclRepository(DeclRepository&&) noexcept = default;
+    DeclRepository& operator=(DeclRepository&&) noexcept = default;
+
+    tree_scoped_map<std::string, varDef, Label, ScopeMeta> var_decls;
+    tree_scoped_map<std::string, varDef, Label, ScopeMeta> extern_decls;
+    tree_scoped_map<std::string, varDef, Label, ScopeMeta> static_decls;
+    tree_scoped_map<std::string, Type, Label, ScopeMeta> func_decls;
+    tree_scoped_map<std::string, Type, Label, ScopeMeta> typedef_decls;
+
+    void enter_scope(const Label& label = {});
+    void exit_scope();
+
+    bool add_var(varDef v, Type::StorageClassSpecifier storage);
+    bool add_func(const Type& t);
+    bool add_typedef(const Type& t);
+
+    varDef* find_var(const std::string& name);
+    const varDef* find_var(const std::string& name) const;
+    Type* find_func(const std::string& name);
+    const Type* find_func(const std::string& name) const;
+    Type* find_typedef(const std::string& name);
+    const Type* find_typedef(const std::string& name) const;
 };
 
 struct OBJ;
@@ -142,7 +191,30 @@ struct OBJ
     ComplierParser::CompilationUnitContext* program;
     // 符号表
     SymbolTable symbol_table;
-    // typedef表 [TODO] scpoe化
-    std::unordered_map<std::string, Type> typedefs;
+    DeclRepository decls;
+    OBJ() = default;
+    OBJ(const OBJ&) = delete;
+    OBJ& operator=(const OBJ&) = delete;
+    OBJ(OBJ&&) noexcept = default;
+    OBJ& operator=(OBJ&&) noexcept = default;
+    void enter_decl_scope(const std::string& label = {});
+    void exit_decl_scope();
+
+    void flush_global_decls();
+
+    varDef* record_var_decl(const Type& t,
+                            Type::StorageClassSpecifier storage =
+                                Type::StorageClassSpecifier::None,
+                            funcDef* func_ctx = nullptr,
+                            std::optional<std::size_t> arg_index = std::nullopt);
+    bool record_func_decl(const Type& t);
+    bool record_typedef_decl(const std::string& name, const Type& target);
+
+    varDef* lookup_var_decl(const std::string& name);
+    const varDef* lookup_var_decl(const std::string& name) const;
+    Type* lookup_func_decl(const std::string& name);
+    const Type* lookup_func_decl(const std::string& name) const;
+    Type* lookup_typedef(const std::string& name);
+    const Type* lookup_typedef(const std::string& name) const;
     // 代码生成接口
 };

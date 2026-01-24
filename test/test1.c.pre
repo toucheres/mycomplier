@@ -1,6 +1,7 @@
+
 int main()
 {
     int a;
-    a = 0;
+    a = 12;
     return a;
 }

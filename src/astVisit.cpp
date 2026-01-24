@@ -40,41 +40,43 @@ std::vector<Type> astVisitor::lowerDeclaration(ComplierParser::DeclarationSpecif
                                                ComplierParser::InitDeclaratorListContext* initList)
 {
     Type basetype;
+    Type::StorageClassSpecifier storageClassType = Type::StorageClassSpecifier::None;
     std::vector<Type> vars;
     if (specs) // 前类型
     {
         auto declarationSpecifiers = visitDeclarationSpecifiers(specs);
-        std::optional<Type> storageClassType = std::nullopt;
         Type baredBasictype;
         for (auto& each : declarationSpecifiers)
         {
             if (each.kind == Type::Kind::StorageClass)
             {
-                if (storageClassType.has_value())
+                if (storageClassType != Type::StorageClassSpecifier::None)
                 {
                     THROW_ERR(error::double_StorageClassSpecifier, specs);
                 }
-                storageClassType = each;
+                storageClassType = each.storageClassSpecifier;
             }
             else
             {
                 baredBasictype.pushTop(each);
             }
         }
-        if (storageClassType.has_value())
-        {
-            baredBasictype.pushTop(storageClassType.value());
-        }
+        // [CHANGE] storageClassType不由Type链传递，而是由参数传递
+        // if (storageClassType.has_value())
+        // {
+        // baredBasictype.pushTop(storageClassType.value());
+        // }
         basetype = baredBasictype;
     }
     if (initList) // 带初始化的参数
     {
-        vars = visitInitDeclaratorList(initList);
+        vars = visitInitDeclaratorList(initList, basetype, storageClassType);
     }
-    for (auto& each : vars)
-    {
-        each.pushTop(basetype);
-    }
+    // 由visitInitDeclaratorList完成
+    // for (auto& each : vars)
+    // {
+    //     each.pushTop(basetype);
+    // }
     return vars;
 }
 
@@ -97,18 +99,18 @@ void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionConte
                 if (each->typeSpecifier()->typedefName())
                 {
                     auto id = each->typeSpecifier()->typedefName()->toString();
-                    if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id,忽略
-                    {
-                        continue;
-                    }
-                    else
+                    if (auto* tp = obj.lookup_typedef(id))
                     {
                         if (flag)
                         {
                             THROW_ERR(error::double_type, each->typeSpecifier());
                         }
-                        basetype.pushTop(obj.typedefs.find(id)->second);
+                        basetype.pushTop(*tp);
                         flag = true;
+                    }
+                    else // 不是typedef,是id,忽略
+                    {
+                        continue;
                     }
                 }
                 if (flag)
@@ -128,8 +130,20 @@ void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionConte
         // 先忽略func_double define error 防止头文件多次包含
         funnowptr = obj.symbol_table.lookup_func_def(basetype.id);
     }
+    obj.record_func_decl(basetype);
     auto gfunptr = funcnow;
     funcnow = funnowptr;
+    obj.enter_decl_scope(basetype.id);
+    std::size_t arg_index = 0;
+    for (const auto& arg : funcnow->args)
+    {
+        Type argType;
+        argType.kind = Type::Kind::ID;
+        argType.id = arg.name;
+        argType.pushTop(arg.type);
+        obj.record_var_decl(argType, Type::StorageClassSpecifier::None, funcnow, arg_index);
+        ++arg_index;
+    }
     funcnow->asms.push_back("HOLD");
     visitCompoundStatement(ctx->compoundStatement());
     if (funcnow->rettype.kind == Type::Kind::Basic &&
@@ -155,6 +169,7 @@ void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionConte
     funcnow->asms[0] =
         ASM{ASM::basic_asm::NVAR,
             align_up(funcnow->max_stack_size, VCPU<>::size_word) / VCPU<>::size_word};
+    obj.exit_decl_scope();
     funcnow = gfunptr;
 }
 void astVisitor::visitExternalDeclaration(ComplierParser::ExternalDeclarationContext* ctx)
@@ -171,11 +186,8 @@ void astVisitor::visitExternalDeclaration(ComplierParser::ExternalDeclarationCon
     // [TODO] 区分变量定义与声明
     else if (ctx->declaration())
     {
-        auto vars = visitDeclaration(ctx->declaration());
-        for (auto& each : vars)
-        {
-            obj.symbol_table.add_global_var_def(each);
-        }
+        // addDeclarations(visitDeclaration(ctx->declaration()));
+        visitDeclaration(ctx->declaration());
     }
     else if (ctx->asmADDer()) // 拓展
     {
@@ -246,15 +258,12 @@ Type astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
     // varDef rettpe;
     if (ctx->typedefName()) // 是类型别名
     {
-        if (obj.typedefs.find(ctx->typedefName()->getText()) != obj.typedefs.end())
+        if (auto* tp = obj.lookup_typedef(ctx->typedefName()->getText()))
         {
-            rettype = obj.typedefs.find(ctx->typedefName()->getText())->second;
+            rettype = *tp;
             return rettype;
         }
-        else
-        {
-            THROW_ERR(error::undifined_type, ctx);
-        }
+        THROW_ERR(error::undifined_type, ctx);
     }
     // 是基本类型
     rettype.kind = Type::Kind::Basic;
@@ -306,24 +315,128 @@ Type astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
     THROW_ERR(error::unsurpport_basictype, ctx);
 }
 std::vector<Type> astVisitor::visitInitDeclaratorList(
-    ComplierParser::InitDeclaratorListContext* ctx)
+    ComplierParser::InitDeclaratorListContext* ctx, Type basetype,
+    Type::StorageClassSpecifier storageClassSpecifier)
 {
     std::vector<Type> vars;
     for (auto& each : ctx->initDeclarator())
     {
-        vars.push_back((visitInitDeclarator(each)));
+        vars.push_back(visitInitDeclarator(each, basetype, storageClassSpecifier));
     }
     return vars;
 }
+// Type astVisitor::visitInitDeclarator_(ComplierParser::InitDeclaratorContext* ctx)
+// {
+//     auto ret = visitDeclarator(ctx->declarator());
+//     ret.pushTop(baseType);
+//     if (funcnow!=gfuncptr) // 局部
+//     {
+//         obj.record_var_decl(ret);
+//         // funcnow->add_var(var);
+//     }
+//     else
+//     {
+//         obj.symbol_table.add_global_var_def(ret);
+//     }
+//     std::function<std::expected<bool, error>(Type, ComplierParser::InitializerContext*)> func =
+//         [&func, this](Type arg,
+//                       ComplierParser::InitializerContext* init) -> std::expected<bool, error>
+//     {
+//         // addr通过运行时栈传递
+//         auto asmholder = funcnow;
+//         if (arg.kind == Type::Kind::ID)
+//         {
+//             if (funcnow->lookup_var(arg.id)) // 函数局部
+//             {
+//                 funcnow->asms.push_back(
+//                     ASM{ASM::basic_asm::LEA, funcnow->lookup_var(arg.id)->addr});
+//             }
+//             else if (obj.symbol_table.lookup_var_decl(arg.id))
+//             {
+//                 funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD, "globalvar@" + arg.id});
+//             }
+//             arg = *arg.subType;
+//         }
+//         if (arg.kind == Type::Kind::Basic || arg.kind == Type::Kind::Pointer)
+//         {
+//             if (init->assignmentExpression()) // = expr
+//             {
+//                 auto ret = ac<std::expected<Type, error>>(
+//                     visitAssignmentExpression(init->assignmentExpression()));
+//                 if (!ret)
+//                 {
+//                     return std::unexpected<error>(ret.error());
+//                 }
+//                 if (arg.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+//                 {
+//                     asmholder->asms.push_back(ASM{ASM::basic_asm::SC});
+//                 }
+//                 else if (arg.getsize() == Type{Type::Kind::Basic,
+//                 Type::BasicType::Int}.getsize())
+//                 {
+//                     asmholder->asms.push_back(ASM{ASM::basic_asm::SI});
+//                 }
+//                 else if (arg.getsize() == Type{Type::Kind::Basic,
+//                 Type::BasicType::Long}.getsize())
+//                 {
+//                     asmholder->asms.push_back(ASM{ASM::basic_asm::SW});
+//                 }
+//             }
+//         }
+//         else if (arg.kind == Type::Kind::Array)
+//         {
+//             size_t initListSize = 0;
+//             if (init->initializerList())
+//             {
+//                 initListSize = init->initializerList()->initializer().size();
+//             }
+//             for (size_t i = 0;
+//                  i < std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize) - 1; i++)
+//             {
+//                 asmholder->asms.push_back(ASM{ASM::basic_asm::COPY});
+//             }
+//             for (size_t i = 0;
+//                  i < std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize) - 1; i++)
+//             {
+//                 if (i != 0)
+//                 {
+//                     asmholder->asms.push_back(ASM{ASM::basic_asm::IMM, arg.subType->getsize() *
+//                     i}); asmholder->asms.push_back(ASM{ASM::basic_asm::ADD});
+//                 }
+//                 if (init->initializerList()->initializer(i))
+//                 {
+//                     auto ret = func(*arg.subType, init->initializerList()->initializer(i));
+//                     if (!ret)
+//                     {
+//                         return std::unexpected<error>(ret.error());
+//                     }
+//                 }
+//             }
+//         }
+//         return true;
+//     };
+//     if (ctx->initializer())
+//     {
+//         auto fret = func(ret.value(), ctx->initializer());
+//         if (!fret)
+//         {
+//             return std::unexpected<error>(fret.error());
+//         }
+//     }
+//     return std::expected<Type, error>(ret);
+// }
 // [adddef由上级完成]
-Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx)
+Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx, Type basetype,
+                                     Type::StorageClassSpecifier storageClassSpecifier)
 {
     auto ret = (visitDeclarator(ctx->declarator()));
-    ret.pushTop(baseType);
+    ret.pushTop(basetype);
+    obj.record_var_decl(ret, storageClassSpecifier);
     // if (funcnow != gfuncptr) // 局部
     // {
     //     varDef var;
-    //     var.type = *ret.subType;
+    // funcnow->exit_scope();
+    // obj.exit_decl_scope();
     //     var.name = ret.id;
     //     funcnow->add_var(var);
     // }
@@ -511,16 +624,21 @@ Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx)
         auto asmholder = funcnow;
         if (arg.kind == Type::Kind::ID)
         {
-            if (funcnow->lookup_var(arg.id)) // 函数局部
+            if (auto* def = obj.lookup_var_decl(arg.id))
             {
-                funcnow->asms.push_back(
-                    ASM{ASM::basic_asm::IMM, funcnow->lookup_var(arg.id)->addr});
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
-            }
-            else if (obj.symbol_table.lookup_var_decl(arg.id))
-            {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + arg.id});
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
+                const bool is_global =
+                    def->kind == varDef::Kind::Global ||
+                    def->type.storageClassSpecifier == Type::StorageClassSpecifier::Static;
+                if (is_global)
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + arg.id});
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
+                }
+                else
+                {
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, def->addr});
+                    funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
+                }
             }
             arg = *arg.subType;
         }
@@ -709,7 +827,9 @@ void astVisitor::visitCompoundStatement(ComplierParser::CompoundStatementContext
     if (auto ptr = ctx->blockItemList())
     {
         funcnow->enter_scope();
+        obj.enter_decl_scope("compound");
         visitBlockItemList(ctx->blockItemList());
+        obj.exit_decl_scope();
         funcnow->exit_scope();
     }
 }
@@ -734,14 +854,13 @@ Type astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarationC
         if (declarationSpecifiers.back().id != "") // 可能是typedef或变量名
         {
             auto id = declarationSpecifiers.back().id;
-            if (obj.typedefs.find(id) ==
-                obj.typedefs.end()) // 不是typedef,是id(在函数参数申明中应该不会发生)
+            if (!obj.lookup_typedef(id)) // 不是typedef,是id(在函数参数申明中应该不会发生)
             {
                 THROW_ERR(error::undifined_type, ctx->declarationSpecifiers());
             }
             else // 是type
             {
-                basetype = obj.typedefs.find(id)->second;
+                basetype = *obj.lookup_typedef(id);
                 flag = true;
             }
         }
@@ -753,7 +872,7 @@ Type astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarationC
                 if (each->typeSpecifier()->typedefName())
                 {
                     auto id = each->typeSpecifier()->typedefName()->toString();
-                    if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id,忽略
+                    if (!obj.lookup_typedef(id)) // 不是typedef,是id,忽略
                     {
                         continue;
                     }
@@ -763,7 +882,7 @@ Type astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarationC
                         {
                             THROW_ERR(error::double_type, each->typeSpecifier());
                         }
-                        basetype = obj.typedefs.find(id)->second;
+                        basetype = *obj.lookup_typedef(id);
                         flag = true;
                     }
                 }
@@ -785,14 +904,13 @@ Type astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarationC
         if (declarationSpecifiers.back().id != "") // 可能是typedef或变量名
         {
             auto id = declarationSpecifiers.back().id;
-            if (obj.typedefs.find(id) ==
-                obj.typedefs.end()) // 不是typedef,是id(在函数参数申明中应该不会发生)
+            if (!obj.lookup_typedef(id)) // 不是typedef,是id(在函数参数申明中应该不会发生)
             {
                 THROW_ERR(error::undifined_type, ctx->declarationSpecifiers2());
             }
             else // 是type
             {
-                basetype = obj.typedefs.find(id)->second;
+                basetype = *obj.lookup_typedef(id);
                 flag = true;
             }
         }
@@ -804,7 +922,7 @@ Type astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarationC
                 if (each->typeSpecifier()->typedefName())
                 {
                     auto id = each->typeSpecifier()->typedefName()->toString();
-                    if (obj.typedefs.find(id) == obj.typedefs.end()) // 不是typedef,是id,忽略
+                    if (!obj.lookup_typedef(id)) // 不是typedef,是id,忽略
                     {
                         continue;
                     }
@@ -814,7 +932,7 @@ Type astVisitor::visitParameterDeclaration(ComplierParser::ParameterDeclarationC
                         {
                             THROW_ERR(error::double_type, each->typeSpecifier());
                         }
-                        basetype = obj.typedefs.find(id)->second;
+                        basetype = *obj.lookup_typedef(id);
                         flag = true;
                     }
                 }
@@ -920,7 +1038,6 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
         {
             THROW_ERR(error::expected_lvalue, ctx->unaryExpression());
         }
-        funcnow->asms.back();
         funcnow->asms.pop_back();
         if (ctx->assignmentOperator()->getText() == "=")
         {
@@ -1572,6 +1689,12 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
                                .size();
             }
             auto funcaddr = func(0, end - 1); // 解析函数地址
+            funcaddr.removeID();
+            // if (funcaddr.kind == Type::Kind::ID)
+            // {
+            //     auto tp = *funcaddr.subType;
+            //     funcaddr = tp;
+            // }
             funcnow->asms.push_back(ASM{ASM::basic_asm::CALL});
             Type rettype = funcaddr;
             if (funcaddr.kind == Type::Kind::Pointer && funcaddr.arr_or_ptr_num == 1 &&
@@ -1685,11 +1808,24 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
 {
     if (ctx->Identifier())
     {
-        auto var = funcnow->lookup_var(ctx->Identifier()->getText());
-        if (var) // 函数局部找到
+        auto str = ctx->Identifier()->getText();
+        if (auto* var = obj.lookup_var_decl(str))
         {
-            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
-            funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
+            const bool is_global =
+                var->kind == varDef::Kind::Global ||
+                var->type.storageClassSpecifier == Type::StorageClassSpecifier::Static;
+
+            if (is_global)
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + str});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
+            }
+            else
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
+            }
+
             if (var->type.kind == Type::Kind::Array)
             {
                 Type ret = var->type;
@@ -1697,59 +1833,24 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
                 ret.arr_or_ptr_num = 1;
                 return ret;
             }
-            else
+
+            if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
             {
-                // 整形类型
-                if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-                {
-                    funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
-                }
-                else if (var->type.getsize() ==
-                         Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-                {
-                    funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
-                }
-                else if (var->type.getsize() ==
-                         Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-                {
-                    funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
-                }
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+            }
+            else if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+            }
+            else if (var->type.getsize() ==
+                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
             }
             return var->type;
         }
-        auto varg = obj.symbol_table.lookup_var_decl(ctx->Identifier()->getText());
-        if (varg) // 全局变量
-        {
-            funcnow->asms.push_back(
-                ASM{ASM::basic_asm::IMM, "globalvar@" + ctx->Identifier()->getText()});
-            funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
-            if (varg->kind == Type::Kind::Array)
-            {
-                Type ret = *varg;
-                ret.kind = Type::Kind::Pointer;
-                ret.arr_or_ptr_num = 1;
-                return ret;
-            }
-            else
-            {
-                if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-                {
-                    funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
-                }
-                else if (varg->getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-                {
-                    funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
-                }
-                else if (varg->getsize() ==
-                         Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-                {
-                    funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
-                }
-                return *varg;
-            }
-        }
-        auto str = ctx->Identifier()->getText();
-        auto funcret = obj.symbol_table.lookup_func_decl(ctx->Identifier()->getText());
+
+        auto funcret = obj.lookup_func_decl(str);
         if (funcret)
         {
             funcnow->asms.push_back(
@@ -2011,7 +2112,8 @@ void astVisitor::visitBlockItem(ComplierParser::BlockItemContext* ctx)
     }
     else if (ctx->declaration())
     {
-        addDeclarations(visitDeclaration(ctx->declaration()));
+        // addDeclarations(visitDeclaration(ctx->declaration()));
+        visitDeclaration(ctx->declaration());
     }
     else if (ctx->asmADDer())
     {
@@ -2089,6 +2191,7 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
     else if (ctx->children[0]->getText() == "for")
     {
         funcnow->enter_scope();
+        obj.enter_decl_scope("for");
         auto* forCond = ctx->forCondition();
         if (!forCond)
         {
@@ -2115,8 +2218,9 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
 
         if (auto* decl = forCond->forDeclaration())
         {
-            addDeclarations(
-                lowerDeclaration(decl->declarationSpecifiers(), decl->initDeclaratorList()));
+            // addDeclarations(lowerDeclaration(decl->declarationSpecifiers(),
+            // decl->initDeclaratorList()));
+            lowerDeclaration(decl->declarationSpecifiers(), decl->initDeclaratorList());
         }
         else if (auto* initExpr = forCond->expression())
         {
@@ -2177,6 +2281,7 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
                     ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(continue_target)};
             }
         }
+        obj.exit_decl_scope();
         funcnow->exit_scope();
     }
     // [TODO] 'do-while' statement
@@ -2609,33 +2714,24 @@ long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext
 
     return evalAssign(expr);
 };
+// [TODO] addDeclarations 由 visitDeclartion -> lowerdecl完成 该函数废弃
 std::vector<Type> astVisitor::addDeclarations(std::vector<Type> vars)
 {
     for (auto& each : vars)
     {
+        auto storage = Type::StorageClassSpecifier::None;
         if (each.getTop().kind == Type::Kind::StorageClass)
         {
-            if (each.getTop().storageClassSpecifier == Type::StorageClassSpecifier::Typedef)
+            storage = each.getTop().storageClassSpecifier;
+            if (storage == Type::StorageClassSpecifier::Typedef)
             {
-                if (funcnow->typedefs.find(each.id))
-                {
-                    THROW_ERR_NOCTX(error::double_type);
-                }
                 auto tp = each;
-                funcnow->typedefs[each.id] = tp.popTop();
+                obj.record_typedef_decl(each.id, tp.popTop());
+                continue;
             }
         }
-        if (funcnow != gfuncptr) // 局部
-        {
-            varDef var;
-            var.type = *each.subType;
-            var.name = each.id;
-            funcnow->add_var(var);
-        }
-        else
-        {
-            obj.symbol_table.add_global_var_def(each);
-        }
+        funcDef* func_ctx = (funcnow != gfuncptr) ? funcnow : nullptr;
+        obj.record_var_decl(each, storage, func_ctx);
     }
     return vars;
 }

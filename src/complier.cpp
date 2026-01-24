@@ -403,7 +403,6 @@ std::expected<std::vector<std::string>, error> linker::process()
 
 void funcDef::enter_scope()
 {
-    funcvar_stack.in_scope();
     typedefs.in_scope();
     scope_stack_marks.push_back(stack_size_now);
 }
@@ -412,54 +411,10 @@ void funcDef::exit_scope()
 {
     if (scope_stack_marks.size() > 1)
     {
-        funcvar_stack.out_scope();
         typedefs.out_scope();
         scope_stack_marks.pop_back();
         stack_size_now = scope_stack_marks.back();
     }
-}
-
-const varDef* funcDef::lookup_var(const std::string& inname) const
-{
-    if (auto ptr = funcvar_stack.find(inname))
-    {
-        return ptr;
-    }
-    for (auto& each : args)
-    {
-        if (each.name == inname)
-        {
-            return &each;
-        }
-    }
-    return nullptr;
-}
-const varDef* funcDef::add_var(const varDef& vardef)
-{
-    varDef var = vardef;
-    int new_addr = -static_cast<int>(var.get_addr_in_stack(stack_size_now));
-    size_t new_stack_size = static_cast<size_t>(-new_addr);
-    var.addr = new_addr;
-    var.is_defined = true;
-    if (!funcvar_stack.add(var.name, var))
-    {
-        return nullptr; // duplicate in the same scope
-    }
-    stack_size_now = new_stack_size;
-    max_stack_size = std::max(stack_size_now, max_stack_size);
-    return funcvar_stack.find(var.name);
-}
-
-bool funcDef::add_arg(std::vector<varDef>& vardef)
-{
-    // argn ... arg1  ret oldbp localvar1
-    //           +16   +8    0       -8
-    args = vardef;
-    for (int i = 0; i < vardef.size(); i++)
-    {
-        args[i].addr = VCPU<>::size_word * (i + 2);
-    }
-    return true;
 }
 
 size_t varDef::get_addr_in_stack(size_t posnow)
@@ -508,7 +463,8 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
         // 创建和使用自定义访问器
         astVisitor visitor{each, obj};
         visitor.visitCompilationUnit(tree);
-        objs.push_back(visitor.obj);
+        obj.flush_global_decls();
+        objs.push_back(std::move(obj));
     }
     linker linker{objs};
     return linker.process();

@@ -8,7 +8,6 @@
 
 namespace po = boost::program_options;
 using namespace typed_options;
-
 int main(int argc, const char* argv[])
 {
     auto opcli = getsetting(argc, argv);

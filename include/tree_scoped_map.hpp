@@ -13,7 +13,7 @@
 // tree_scoped_map mimics scoped_map but keeps popped scopes in a tree so they
 // remain inspectable (lookups only see the active branch).
 // Label must be equality comparable when used, ScopeInfo lets callers attach
-// per-scope metadata.
+// per-scope metadata and can be inspected via for_each_scope.
 template <class KT, class VT, class Label = std::monostate, class ScopeInfo = std::monostate>
 class tree_scoped_map
 {
@@ -237,6 +237,17 @@ class tree_scoped_map
         return scopes;
     }
 
+    // Visit every scope node in DFS order. Depth is zero-based from the root.
+    template <class Fn> void for_each_scope(Fn&& fn)
+    {
+        for_each_scope_impl(root_.get(), 0, std::forward<Fn>(fn));
+    }
+
+    template <class Fn> void for_each_scope(Fn&& fn) const
+    {
+        for_each_scope_impl(root_.get(), 0, std::forward<Fn>(fn));
+    }
+
     // Find scopes by label anywhere in the tree.
     std::vector<scope_type*> find_scopes_by_label(const Label& lbl)
     {
@@ -269,6 +280,26 @@ class tree_scoped_map
             n_items += total_size_from(child.get());
         }
         return n_items;
+    }
+
+    template <class Fn>
+    void for_each_scope_impl(node* n, std::size_t depth, Fn&& fn)
+    {
+        fn(depth, n->entries, n->info, n->label);
+        for (auto& child : n->children)
+        {
+            for_each_scope_impl(child.get(), depth + 1, fn);
+        }
+    }
+
+    template <class Fn>
+    void for_each_scope_impl(const node* n, std::size_t depth, Fn&& fn) const
+    {
+        fn(depth, n->entries, n->info, n->label);
+        for (const auto& child : n->children)
+        {
+            for_each_scope_impl(child.get(), depth + 1, fn);
+        }
     }
 
     template <class PtrVec>
