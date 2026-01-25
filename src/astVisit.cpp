@@ -1689,8 +1689,8 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
         if (end == 0)
         {
             auto str = ctx->children[0]->getText();
-            return (visitPrimaryExpression(
-                dc<ComplierParser::PrimaryExpressionContext*>(ctx->children[0])));
+            return visitPrimaryExpression(
+                dc<ComplierParser::PrimaryExpressionContext*>(ctx->children[0]));
         }
         auto todo = ctx->children[end - 1];
         if (todo->getText() == "(") // func call
@@ -1833,6 +1833,7 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
             funcnow->asms.push_back(
                 ASM{ASM::basic_asm::IMM, type.structInfo.getmemberbias(membername)});
             funcnow->asms.push_back(ASM{ASM::basic_asm::ADD});
+            loadStackTopAddrByType(memvars->type.whthoutID());
             return memvars->type.whthoutID();
         }
         else if (todo->getText() == "->") //[TODO] 结构体间接成员访问运算符
@@ -1851,57 +1852,63 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
 {
     if (ctx->Identifier())
     {
-        auto str = ctx->Identifier()->getText();
-        if (auto* var = obj.lookup_var_decl(str))
-        {
-            const bool is_global =
-                var->kind == varDef::Kind::Global ||
-                var->type.storageClassSpecifier == Type::StorageClassSpecifier::Static;
+        return load_var_or_func(ctx->Identifier()->getText());
+        // auto str = ctx->Identifier()->getText();
+        // if (auto* var = obj.lookup_var_decl(str))
+        // {
+        //     const bool is_global =
+        //         var->kind == varDef::Kind::Global ||
+        //         var->type.storageClassSpecifier == Type::StorageClassSpecifier::Static;
 
-            if (is_global)
-            {
-                const auto label = obj.global_label(*var);
-                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, label});
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
-            }
-            else
-            {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
-            }
+        //     if (is_global)
+        //     {
+        //         const auto label = obj.global_label(*var);
+        //         funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, label});
+        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
+        //     }
+        //     else
+        //     {
+        //         funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
+        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
+        //     }
+        //     loadStackTopAddrByType(var->type);
+        //     if (var->type.kind == Type::Kind::Array)
+        //     {
+        //         Type ret = var->type;
+        //         ret.kind = Type::Kind::Pointer;
+        //         ret.arr_or_ptr_num = 1;
+        //         return ret;
+        //     }
 
-            if (var->type.kind == Type::Kind::Array)
-            {
-                Type ret = var->type;
-                ret.kind = Type::Kind::Pointer;
-                ret.arr_or_ptr_num = 1;
-                return ret;
-            }
+        //     else if (var->type.kind == Type::Kind::Struct) // struct始终以ptr表示
+        //     {
+        //         funcnow->asms.push_back("STACK_NOW_IS_ADDR");
+        //         return var->type;
+        //     }
+        //     if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+        //     {
+        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
+        //     }
+        //     else if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+        //     {
+        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
+        //     }
+        //     else if (var->type.getsize() ==
+        //              Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+        //     {
+        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
+        //     }
+        //     return var->type;
+        // }
 
-            if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-            {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
-            }
-            else if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-            {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
-            }
-            else if (var->type.getsize() ==
-                     Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-            {
-                funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
-            }
-            return var->type;
-        }
-
-        auto funcret = obj.lookup_func_decl(str);
-        if (funcret)
-        {
-            funcnow->asms.push_back(
-                ASM{ASM::basic_asm::IMM, "func@" + ctx->Identifier()->getText()});
-            return *funcret;
-        }
-        THROW_ERR(error::undifined_id, ctx->Identifier());
+        // auto funcret = obj.lookup_func_decl(str);
+        // if (funcret)
+        // {
+        //     funcnow->asms.push_back(
+        //         ASM{ASM::basic_asm::IMM, "func@" + ctx->Identifier()->getText()});
+        //     return *funcret;
+        // }
+        // THROW_ERR(error::undifined_id, ctx->Identifier());
     }
     else if (ctx->Constant()) // 常量处理
     {
@@ -2949,7 +2956,7 @@ bool astVisitor::isCharacterConstant(const std::string& text)
 bool astVisitor::stackTopIsLvalue()
 {
     return funcnow->asms.back() == "LC" || funcnow->asms.back() == "LI" ||
-           funcnow->asms.back() == "LW" || funcnow->asms.back().starts_with("LO");
+           funcnow->asms.back() == "LW" || funcnow->asms.back() == "STACK_NOW_IS_ADDR";
 }
 
 bool astVisitor::madeTopIsLvalueAddr()
@@ -2962,9 +2969,59 @@ bool astVisitor::madeTopIsLvalueAddr()
     return false;
 }
 
-void astVisitor::loadStackTopAddrToValue(size_t size)
+Type astVisitor::load_var_or_func(std::string name)
 {
-    if (size != 1 && size != 4 && size % 8 != 0)
+    if (auto* var = obj.lookup_var_decl(name))
+    {
+        const bool is_global =
+            var->kind == varDef::Kind::Global ||
+            var->type.storageClassSpecifier == Type::StorageClassSpecifier::Static;
+
+        if (is_global)
+        {
+            const auto label = obj.global_label(*var);
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, label});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
+        }
+        else
+        {
+            funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
+            funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
+        }
+        return loadStackTopAddrByType(var->type);
+    }
+
+    auto funcret = obj.lookup_func_decl(name);
+    if (funcret)
+    {
+        funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, "func@" + name});
+        return *funcret;
+    }
+    THROW_ERR_NOCTX(error::undifined_id);
+}
+
+Type astVisitor::loadStackTopAddrByType(Type type)
+{
+    if (type.kind == Type::Kind::Struct)
+    {
+        funcnow->asms.push_back("STACK_NOW_IS_ADDR");
+        return type;
+    }
+    if (type.kind == Type::Kind::Array)
+    {
+        Type tp;
+        tp.kind = Type::Kind::Pointer;
+        tp.arr_or_ptr_num = 1;
+        tp.subType = type.subType;
+        return tp;
+    }
+    loadStackTopAddrBySize(type.getsize());
+    return type;
+}
+
+void astVisitor::loadStackTopAddrBySize(size_t size)
+{
+    if (size != 1 && size != 4 && size != 8)
     {
         THROW_ERR_NOCTX(error::expected_aligned_addr);
     }
@@ -2984,7 +3041,7 @@ void astVisitor::loadStackTopAddrToValue(size_t size)
 
 void astVisitor::SaveStackTopValueToAddr(size_t size)
 {
-    if (size != 1 && size != 4 && size % 8 != 0)
+    if (size != 1 && size != 4 && size != 8)
     {
         THROW_ERR_NOCTX(error::expected_aligned_addr);
     }

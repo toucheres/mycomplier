@@ -23,7 +23,9 @@ struct astVisitor
     bool isCharacterConstant(const std::string& text);
     bool stackTopIsLvalue();
     bool madeTopIsLvalueAddr();
-    void loadStackTopAddrToValue(size_t size);
+    Type load_var_or_func(std::string name);
+    Type loadStackTopAddrByType(Type size);
+    void loadStackTopAddrBySize(size_t size);
     void SaveStackTopValueToAddr(size_t size);
     std::vector<Type> lowerDeclaration(ComplierParser::DeclarationSpecifiersContext* specs,
                                        ComplierParser::InitDeclaratorListContext* initList);

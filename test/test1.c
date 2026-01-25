@@ -6,6 +6,12 @@ struct tests
 struct tests c;
 int main()
 {
-    c.a;
-    return 0;
+    c.a = 12;
+    return c.a;
 }
+// int main()
+// {
+//     int a = 12;
+//     a = 13;
+//     return a;
+// }
