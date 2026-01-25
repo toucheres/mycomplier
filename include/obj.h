@@ -18,6 +18,13 @@
 struct Type;
 struct varDef;
 
+struct StructInfo
+{
+    std::vector<std::pair<std::string, varDef>> members;
+    size_t getmemberbias(std::string membername);
+    varDef* getmember(std::string name);
+};
+
 struct Type
 {
     enum class BasicType
@@ -34,13 +41,14 @@ struct Type
     };
     enum class Kind
     {
-        Undefined,   // 初始
-        ID,          // id
-        Basic,       // 基本类型
-        Pointer,     // 指针类型
-        Array,       // 数组类型
-        Function,    // 函数类型
-        StorageClass // 存储类
+        Undefined,    // 初始
+        ID,           // id
+        Basic,        // 基本类型
+        Pointer,      // 指针类型
+        Array,        // 数组类型
+        Function,     // 函数类型
+        StorageClass, // 存储类, 一般仅用于参数传递而非类型存储
+        Struct        // 结构体
     };
     enum class StorageClassSpecifier
     {
@@ -48,6 +56,13 @@ struct Type
         Typedef,
         Extern,
         Static
+    };
+    enum class TypeQualifier
+    {
+        Const,
+        Restrict,
+        Volatile,
+        _Atomic
     };
     Type() = default;
     Type(const Type&) = default;
@@ -57,18 +72,27 @@ struct Type
     Type(Kind kind, std::vector<Type> args); // for function
     Kind kind = Kind::Undefined;
     StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::None;
+    StructInfo structInfo;
     std::string id;
     // 基础类型
     BasicType basic_type; // avilable when kind == Basic
     value_ptr<Type> subType;
     std::vector<Type> args;
     int arr_or_ptr_num = -1;
+    size_t alignas_num = 8;
     Type& getTop();
     bool pushTop(const Type& what);
     Type popTop();
     std::string to_string() const;
     size_t getsize() const;
     bool operator==(const Type& other) const;
+    Type whthoutID(){
+        if (this->kind == Type::Kind::ID)
+        {
+            return *this->subType;
+        }
+        return *this;
+    }
     Type& removeID()
     {
         if (this->kind == Type::Kind::ID)
@@ -131,6 +155,7 @@ struct DeclRepository
     tree_scoped_map<std::string, varDef, Label, ScopeMeta> static_decls;
     tree_scoped_map<std::string, Type, Label, ScopeMeta> func_decls;
     tree_scoped_map<std::string, Type, Label, ScopeMeta> typedef_decls;
+    tree_scoped_map<std::string, Type, Label, ScopeMeta> struct_decls;
 
     size_t static_label_counter = 0;
 
@@ -141,6 +166,7 @@ struct DeclRepository
                  std::optional<std::size_t> arg_index = std::nullopt);
     bool add_func(const Type& t);
     bool add_typedef(const Type& t);
+    bool add_struct(const Type& t);
 
     varDef* find_var(const std::string& name);
     const varDef* find_var(const std::string& name) const;
@@ -148,6 +174,8 @@ struct DeclRepository
     const Type* find_func(const std::string& name) const;
     Type* find_typedef(const std::string& name);
     const Type* find_typedef(const std::string& name) const;
+    Type* find_struct(const std::string& name);
+    const Type* find_struct(const std::string& name) const;
 };
 
 struct OBJ;
@@ -198,17 +226,16 @@ struct OBJ
     void flush_global_decls();
 
     std::string global_label(const varDef& v) const;
-    std::string global_label(const std::string& name,
-                             Type::StorageClassSpecifier storage =
-                                 Type::StorageClassSpecifier::None) const;
+    std::string global_label(const std::string& name, Type::StorageClassSpecifier storage =
+                                                          Type::StorageClassSpecifier::None) const;
 
     varDef* record_var_decl(const Type& t,
-                            Type::StorageClassSpecifier storage =
-                                Type::StorageClassSpecifier::None,
+                            Type::StorageClassSpecifier storage = Type::StorageClassSpecifier::None,
                             funcDef* func_ctx = nullptr,
                             std::optional<std::size_t> arg_index = std::nullopt);
     bool record_func_decl(const Type& t);
     bool record_typedef_decl(const std::string& name, const Type& target);
+    bool record_struct_decl(const Type& t);
 
     varDef* lookup_var_decl(const std::string& name);
     const varDef* lookup_var_decl(const std::string& name) const;
@@ -216,5 +243,7 @@ struct OBJ
     const Type* lookup_func_decl(const std::string& name) const;
     Type* lookup_typedef(const std::string& name);
     const Type* lookup_typedef(const std::string& name) const;
+    Type* lookup_struct_decl(const std::string& name);
+    const Type* lookup_struct_decl(const std::string& name) const;
     // 代码生成接口
 };

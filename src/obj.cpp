@@ -5,39 +5,39 @@
 
 namespace
 {
-Type strip_id_preserve(const Type& t)
-{
-    Type cleaned = t;
-    cleaned.removeID();
-    cleaned.id = t.id;
-    return cleaned;
-}
+    Type strip_id_preserve(const Type& t)
+    {
+        Type cleaned = t;
+        cleaned.removeID();
+        cleaned.id = t.id;
+        return cleaned;
+    }
 
-template <class MapT> void enter_scope_all(MapT& map, const std::string& label)
-{
-    auto info = map.current_scope_info();
-    if (label.empty())
+    template <class MapT> void enter_scope_all(MapT& map, const std::string& label)
     {
-        map.enter_scope_with_info(info);
+        auto info = map.current_scope_info();
+        if (label.empty())
+        {
+            map.enter_scope_with_info(info);
+        }
+        else
+        {
+            map.enter_scope(label, info);
+        }
     }
-    else
-    {
-        map.enter_scope(label, info);
-    }
-}
 
-inline varDef::Kind kind_from_depth(std::size_t depth_zero_based)
-{
-    if (depth_zero_based == 0)
+    inline varDef::Kind kind_from_depth(std::size_t depth_zero_based)
     {
-        return varDef::Kind::Global;
+        if (depth_zero_based == 0)
+        {
+            return varDef::Kind::Global;
+        }
+        if (depth_zero_based == 1)
+        {
+            return varDef::Kind::Arg;
+        }
+        return varDef::Kind::Local;
     }
-    if (depth_zero_based == 1)
-    {
-        return varDef::Kind::Arg;
-    }
-    return varDef::Kind::Local;
-}
 } // namespace
 
 void DeclRepository::enter_scope(const Label& label)
@@ -47,6 +47,7 @@ void DeclRepository::enter_scope(const Label& label)
     enter_scope_all(extern_decls, label);
     enter_scope_all(static_decls, label);
     enter_scope_all(typedef_decls, label);
+    enter_scope_all(struct_decls, label);
 }
 
 void DeclRepository::exit_scope()
@@ -56,6 +57,7 @@ void DeclRepository::exit_scope()
     extern_decls.out_scope();
     static_decls.out_scope();
     typedef_decls.out_scope();
+    struct_decls.out_scope();
 }
 
 static tree_scoped_map<std::string, varDef, DeclRepository::Label, DeclRepository::ScopeMeta>*
@@ -90,19 +92,17 @@ bool DeclRepository::add_var(varDef v, Type::StorageClassSpecifier storage, func
     {
         v.addr = static_cast<int>(VCPU<>::size_word * (static_cast<int>(*arg_index) + 2));
     }
-    else if (v.kind == varDef::Kind::Local &&
-             storage != Type::StorageClassSpecifier::Extern &&
+    else if (v.kind == varDef::Kind::Local && storage != Type::StorageClassSpecifier::Extern &&
              storage != Type::StorageClassSpecifier::Static)
     {
-        const auto new_pos = v.get_addr_in_stack(func_ctx ? func_ctx->stack_size_now
-                                                          : scope_info.stack_size);
+        const auto new_pos =
+            v.get_addr_in_stack(func_ctx ? func_ctx->stack_size_now : scope_info.stack_size);
         v.addr = -static_cast<int>(new_pos);
 
         if (func_ctx)
         {
             func_ctx->stack_size_now = static_cast<std::size_t>(-v.addr);
-            func_ctx->max_stack_size =
-                std::max(func_ctx->max_stack_size, func_ctx->stack_size_now);
+            func_ctx->max_stack_size = std::max(func_ctx->max_stack_size, func_ctx->stack_size_now);
         }
         scope_info.stack_size = static_cast<std::size_t>(-v.addr);
     }
@@ -125,6 +125,13 @@ bool DeclRepository::add_typedef(const Type& t)
     auto cleaned = strip_id_preserve(t);
     cleaned.id = t.id;
     return typedef_decls.add(t.id, cleaned);
+}
+
+bool DeclRepository::add_struct(const Type& t)
+{
+    auto cleaned = strip_id_preserve(t);
+    cleaned.id = t.id;
+    return struct_decls.add(t.id, cleaned);
 }
 
 varDef* DeclRepository::find_var(const std::string& name)
@@ -153,7 +160,10 @@ const varDef* DeclRepository::find_var(const std::string& name) const
     return extern_decls.find(name);
 }
 
-Type* DeclRepository::find_func(const std::string& name) { return func_decls.find(name); }
+Type* DeclRepository::find_func(const std::string& name)
+{
+    return func_decls.find(name);
+}
 
 const Type* DeclRepository::find_func(const std::string& name) const
 {
@@ -168,6 +178,16 @@ Type* DeclRepository::find_typedef(const std::string& name)
 const Type* DeclRepository::find_typedef(const std::string& name) const
 {
     return typedef_decls.find(name);
+}
+
+Type* DeclRepository::find_struct(const std::string& name)
+{
+    return struct_decls.find(name);
+}
+
+const Type* DeclRepository::find_struct(const std::string& name) const
+{
+    return struct_decls.find(name);
 }
 
 varDef* SymbolTable::add_global_var_def(const Type& vardef)
@@ -312,8 +332,8 @@ void OBJ::exit_decl_scope()
     decls.exit_scope();
 }
 
-varDef* OBJ::record_var_decl(const Type& t, Type::StorageClassSpecifier storage,
-                             funcDef* func_ctx, std::optional<std::size_t> arg_index)
+varDef* OBJ::record_var_decl(const Type& t, Type::StorageClassSpecifier storage, funcDef* func_ctx,
+                             std::optional<std::size_t> arg_index)
 {
     varDef v;
     v.name = t.id;
@@ -346,45 +366,70 @@ bool OBJ::record_typedef_decl(const std::string& name, const Type& target)
     return decls.add_typedef(tp);
 }
 
-varDef* OBJ::lookup_var_decl(const std::string& name) { return decls.find_var(name); }
+bool OBJ::record_struct_decl(const Type& t)
+{
+    return decls.add_struct(t);
+}
+
+varDef* OBJ::lookup_var_decl(const std::string& name)
+{
+    return decls.find_var(name);
+}
 
 const varDef* OBJ::lookup_var_decl(const std::string& name) const
 {
     return decls.find_var(name);
 }
 
-Type* OBJ::lookup_func_decl(const std::string& name) { return decls.find_func(name); }
+Type* OBJ::lookup_func_decl(const std::string& name)
+{
+    return decls.find_func(name);
+}
 
 const Type* OBJ::lookup_func_decl(const std::string& name) const
 {
     return decls.find_func(name);
 }
 
-Type* OBJ::lookup_typedef(const std::string& name) { return decls.find_typedef(name); }
+Type* OBJ::lookup_typedef(const std::string& name)
+{
+    return decls.find_typedef(name);
+}
 
 const Type* OBJ::lookup_typedef(const std::string& name) const
 {
     return decls.find_typedef(name);
 }
 
+Type* OBJ::lookup_struct_decl(const std::string& name)
+{
+    return decls.find_struct(name);
+}
+
+const Type* OBJ::lookup_struct_decl(const std::string& name) const
+{
+    return decls.find_struct(name);
+}
+
 void OBJ::flush_global_decls()
 {
     // variables: normal
-    decls.var_decls.for_each_scope([this](std::size_t depth, auto& entries, auto&, const auto&)
-                                   {
-                                       if (depth != 0)
-                                       {
-                                           return;
-                                       }
-                                       for (auto& [name, v] : entries)
-                                       {
-                                           Type t;
-                                           t.kind = Type::Kind::ID;
-                                           t.id = name;
-                                           t.subType = v.type;
-                                           symbol_table.add_global_var_def(t);
-                                       }
-                                   });
+    decls.var_decls.for_each_scope(
+        [this](std::size_t depth, auto& entries, auto&, const auto&)
+        {
+            if (depth != 0)
+            {
+                return;
+            }
+            for (auto& [name, v] : entries)
+            {
+                Type t;
+                t.kind = Type::Kind::ID;
+                t.id = name;
+                t.subType = v.type;
+                symbol_table.add_global_var_def(t);
+            }
+        });
 
     // static variables: always emit, scoped to object to avoid cross-object collisions.
     decls.static_decls.for_each_scope(
@@ -421,27 +466,27 @@ void OBJ::flush_global_decls()
         });
 
     // function prototypes/defs recorded as declarations
-    decls.func_decls.for_each_scope([this](std::size_t depth, auto& entries, auto&, const auto&)
-                                    {
-                                        if (depth != 0)
-                                        {
-                                            return;
-                                        }
-                                        for (auto& [name, t] : entries)
-                                        {
-                                            Type tp;
-                                            tp.kind = Type::Kind::ID;
-                                            tp.id = name;
-                                            tp.subType = t;
-                                            (void)symbol_table.add_global_func_decl(t);
-                                        }
-                                    });
+    decls.func_decls.for_each_scope(
+        [this](std::size_t depth, auto& entries, auto&, const auto&)
+        {
+            if (depth != 0)
+            {
+                return;
+            }
+            for (auto& [name, t] : entries)
+            {
+                Type tp;
+                tp.kind = Type::Kind::ID;
+                tp.id = name;
+                tp.subType = t;
+                (void)symbol_table.add_global_func_decl(t);
+            }
+        });
 }
 
 std::string OBJ::global_label(const varDef& v) const
 {
-    return global_label(v.link_label.empty() ? v.name : v.link_label,
-                       v.type.storageClassSpecifier);
+    return global_label(v.link_label.empty() ? v.name : v.link_label, v.type.storageClassSpecifier);
 }
 
 std::string OBJ::global_label(const std::string& var_name,
@@ -452,4 +497,21 @@ std::string OBJ::global_label(const std::string& var_name,
         return "globalvar@" + name + "@" + var_name;
     }
     return "globalvar@" + var_name;
+}
+
+size_t StructInfo::getmemberbias(std::string membername)
+{
+    return getmember(membername)->addr;
+}
+
+varDef* StructInfo::getmember(std::string name)
+{
+    for (auto& each : members)
+    {
+        if (each.first == name)
+        {
+            return &each.second;
+        }
+    }
+    return nullptr;
 }

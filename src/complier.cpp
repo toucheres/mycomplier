@@ -5,6 +5,7 @@
 #include "ComplierParser.h"
 #include "obj.h"
 #include "preprocessor.hpp"
+#include "tools.hpp"
 #include <antlr4-runtime/antlr4-runtime.h>
 #include <astVisit.h>
 #include <filesystem>
@@ -51,6 +52,10 @@ size_t Type::getsize() const
     else if (this->kind == Kind::StorageClass)
     {
         return this->subType->getsize();
+    }
+    else if (this->kind == Kind::Struct)
+    {
+        return align_up(this->structInfo.members.back().second.addr, alignas_num);
     }
     throw;
 }

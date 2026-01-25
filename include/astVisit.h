@@ -9,6 +9,7 @@
 struct astVisitor
 {
   private:
+    // size_t alignas_num = 8;
     funcDef* funcnow = nullptr;
     funcDef* gfuncptr = nullptr;
     // funcDef* globalinitfun = nullptr;
@@ -20,6 +21,10 @@ struct astVisitor
     int parseCharacterConstant(const std::string& text);
     bool isIntegerConstant(const std::string& text);
     bool isCharacterConstant(const std::string& text);
+    bool stackTopIsLvalue();
+    bool madeTopIsLvalueAddr();
+    void loadStackTopAddrToValue(size_t size);
+    void SaveStackTopValueToAddr(size_t size);
     std::vector<Type> lowerDeclaration(ComplierParser::DeclarationSpecifiersContext* specs,
                                        ComplierParser::InitDeclaratorListContext* initList);
     std::tuple<varDef*, std::string> madeConstString(std::vector<antlr4::tree::TerminalNode*> toks);
@@ -80,9 +85,13 @@ struct astVisitor
     void visitBlockItem(ComplierParser::BlockItemContext* ctx);
     std::vector<Type> visitParameterTypeList(ComplierParser::ParameterTypeListContext* ctx);
     void visitCompoundStatement(ComplierParser::CompoundStatementContext* ctx);
-    void visitSpecifierQualifierList(ComplierParser::SpecifierQualifierListContext* ctx);
+    std::tuple<std::vector<Type::TypeQualifier>, std::optional<Type>> visitSpecifierQualifierList(
+        ComplierParser::SpecifierQualifierListContext* ctx,
+        std::vector<Type::TypeQualifier> typeQualifiers = std::vector<Type::TypeQualifier>{});
     void visitSelectionStatement(ComplierParser::SelectionStatementContext* ctx);
     void visitArgumentExpressionList(ComplierParser::ArgumentExpressionListContext* ctx);
     void visitIterationStatement(ComplierParser::IterationStatementContext* ctx);
     void visitJumpStatement(ComplierParser::JumpStatementContext* ctx);
+    std::vector<std::pair<std::string, varDef>> visitStructDeclarationList(
+        ComplierParser::StructDeclarationListContext* ctx);
 };
