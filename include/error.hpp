@@ -26,9 +26,11 @@ enum class error
     invalid_constant,
     expected_lvalue,
     expected_arr_initor,
+    expected_type,
     expected_func_or_funcptr,
     expected_ptr,
-    unsurpported_num
+    unsurpported_num,
+    unexpected_storageClassSpecifier
 };
 
 inline const char* error_name(error e)

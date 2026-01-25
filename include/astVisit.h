@@ -22,6 +22,8 @@ struct astVisitor
     bool isCharacterConstant(const std::string& text);
     std::vector<Type> lowerDeclaration(ComplierParser::DeclarationSpecifiersContext* specs,
                                        ComplierParser::InitDeclaratorListContext* initList);
+    std::tuple<varDef*, std::string> madeConstString(std::vector<antlr4::tree::TerminalNode*> toks);
+    // varDef* madeConstString(std::string origin);
 
   public:
     std::vector<Type> addDeclarations(std::vector<Type> vars);
@@ -34,7 +36,8 @@ struct astVisitor
     std::vector<Type> visitDeclaration(ComplierParser::DeclarationContext* ctx);
     void visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx);
     void visitExternalDeclaration(ComplierParser::ExternalDeclarationContext* ctx);
-    std::vector<Type> visitDeclarationSpecifiers(ComplierParser::DeclarationSpecifiersContext* ctx);
+    std::tuple<std::optional<Type>, std::optional<Type::StorageClassSpecifier>>
+    visitDeclarationSpecifiers(ComplierParser::DeclarationSpecifiersContext* ctx);
     Type visitDeclarationSpecifier(ComplierParser::DeclarationSpecifierContext* ctx);
     Type visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx);
     // std::vector<Type> visitInitDeclaratorList(ComplierParser::InitDeclaratorListContext* ctx);
@@ -42,9 +45,8 @@ struct astVisitor
                                               Type basetype,
                                               Type::StorageClassSpecifier storageClassSpecifier);
     // Type visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx);
-    Type visitInitDeclarator(
-        ComplierParser::InitDeclaratorContext* ctx, Type basetype,
-        Type::StorageClassSpecifier storageClassSpecifier);
+    Type visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx, Type basetype,
+                             Type::StorageClassSpecifier storageClassSpecifier);
     Type visitInitDeclarator_(ComplierParser::InitDeclaratorContext* ctx);
     Type visitDeclarator(ComplierParser::DeclaratorContext* ctx);
     Type visitDirectDeclarator(ComplierParser::DirectDeclaratorContext* ctx);
@@ -70,8 +72,8 @@ struct astVisitor
     Type visitUnaryExpression(ComplierParser::UnaryExpressionContext* ctx);
     Type visitPostfixExpression(ComplierParser::PostfixExpressionContext* ctx);
     Type visitPrimaryExpression(ComplierParser::PrimaryExpressionContext* ctx);
-    std::vector<Type> visitDeclarationSpecifiers2(
-        ComplierParser::DeclarationSpecifiers2Context* ctx);
+    std::tuple<std::optional<Type>, std::optional<Type::StorageClassSpecifier>>
+    visitDeclarationSpecifiers2(ComplierParser::DeclarationSpecifiers2Context* ctx);
     Type visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx);
     Type visitDirectAbstractDeclarator(ComplierParser::DirectAbstractDeclaratorContext* ctx);
     Type visitTypeName(ComplierParser::TypeNameContext* ctx);

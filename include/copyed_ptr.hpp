@@ -30,6 +30,8 @@ template <class T> class value_ptr
         }
         return *this;
     }
+
+    // 从value隐式转化
     value_ptr& operator=(const T& other)
     {
         if (this->ptr.get() != &other)
@@ -38,6 +40,7 @@ template <class T> class value_ptr
         }
         return *this;
     }
+
     // 隐式转换为value
     operator T()
     {
