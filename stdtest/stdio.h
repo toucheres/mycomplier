@@ -264,9 +264,15 @@ long printf(char* fmt, ...)
             fmt = fmt + 1;
             if (*fmt == 'c')
             {
-                write(*load_arg_ptr(&fmt, arg_index));
+                // write(*load_arg_ptr(&fmt, arg_index));
+                // arg_index = arg_index + 1;
+                // charsnum = charsnum + 1;
+                // fmt = fmt + 1;
+                char src[12];
+                long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                print_str(src);
                 arg_index = arg_index + 1;
-                charsnum = charsnum + 1;
+                charsnum = charsnum + size;
                 fmt = fmt + 1;
             }
             else if (*fmt == 's')

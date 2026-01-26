@@ -30,6 +30,8 @@ struct astVisitor
     std::vector<Type> lowerDeclaration(ComplierParser::DeclarationSpecifiersContext* specs,
                                        ComplierParser::InitDeclaratorListContext* initList);
     std::tuple<varDef*, std::string> madeConstString(std::vector<antlr4::tree::TerminalNode*> toks);
+    std::optional<std::vector<int>> decodeStringLiteral(
+        ComplierParser::AssignmentExpressionContext* expr);
     // varDef* madeConstString(std::string origin);
 
   public:

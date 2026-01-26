@@ -34,6 +34,8 @@ enum class error
     expected_func_or_funcptr,
     expected_ptr,
     expected_type,
+    expected_initializerList,
+    initializerList_too_long,
     unsurpported_num,
     unexpected_storageClassSpecifier
 };

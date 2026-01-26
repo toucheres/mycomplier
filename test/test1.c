@@ -1,13 +1,12 @@
+#include <stdio.h>
 struct tests
 {
     int a;
     char b;
+    int c;
 };
-struct tests c;
-// int a = 12, *b = &a, arr[12] = {1, 2};
 int main()
 {
-    c.b = 12;
-    c.a = 13;
-    return c.b;
+    struct tests c = {1, 2, 3};
+    return printf("c.a = %d, c.b = %c, c.c = %d\n", c.a, c.b, c.c);
 }

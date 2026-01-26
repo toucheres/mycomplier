@@ -236,6 +236,178 @@ std::tuple<varDef*, std::string> astVisitor::madeConstString(
     return {obj.symbol_table.add_global_var_def(arrdef), chars_after_transed};
 }
 
+std::optional<std::vector<int>> astVisitor::decodeStringLiteral(
+    ComplierParser::AssignmentExpressionContext* expr)
+{
+    if (!expr)
+    {
+        return std::nullopt;
+    }
+    std::string text;
+    try
+    {
+        text = expr->getText();
+    }
+    catch (...)
+    {
+        return std::nullopt;
+    }
+    if (text.empty())
+    {
+        return std::nullopt;
+    }
+    auto hexValue = [](char ch) -> int
+    {
+        if (ch >= '0' && ch <= '9')
+        {
+            return ch - '0';
+        }
+        if (ch >= 'a' && ch <= 'f')
+        {
+            return ch - 'a' + 10;
+        }
+        if (ch >= 'A' && ch <= 'F')
+        {
+            return ch - 'A' + 10;
+        }
+        return -1;
+    };
+    size_t pos = 0;
+    std::vector<int> result;
+    while (pos < text.size())
+    {
+        if (text.compare(pos, 2, "u8") == 0 && pos + 2 < text.size() && text[pos + 2] == '"')
+        {
+            pos += 2;
+        }
+        else if ((text[pos] == 'u' || text[pos] == 'U' || text[pos] == 'L') &&
+                 pos + 1 < text.size() && text[pos + 1] == '"')
+        {
+            pos += 1;
+        }
+        if (pos >= text.size() || text[pos] != '"')
+        {
+            return std::nullopt;
+        }
+        pos++;
+        while (pos < text.size() && text[pos] != '"')
+        {
+            if (text[pos] == '\\')
+            {
+                pos++;
+                if (pos >= text.size())
+                {
+                    return std::nullopt;
+                }
+                char esc = text[pos];
+                switch (esc)
+                {
+                case 'n':
+                    result.push_back('\n');
+                    pos++;
+                    break;
+                case 't':
+                    result.push_back('\t');
+                    pos++;
+                    break;
+                case 'r':
+                    result.push_back('\r');
+                    pos++;
+                    break;
+                case 'a':
+                    result.push_back('\a');
+                    pos++;
+                    break;
+                case 'b':
+                    result.push_back('\b');
+                    pos++;
+                    break;
+                case 'f':
+                    result.push_back('\f');
+                    pos++;
+                    break;
+                case 'v':
+                    result.push_back('\v');
+                    pos++;
+                    break;
+                case '\\':
+                    result.push_back('\\');
+                    pos++;
+                    break;
+                case '\'':
+                    result.push_back('\'');
+                    pos++;
+                    break;
+                case '"':
+                    result.push_back('"');
+                    pos++;
+                    break;
+                case 'x':
+                {
+                    pos++;
+                    int value = 0;
+                    bool hasDigit = false;
+                    while (pos < text.size())
+                    {
+                        int hv = hexValue(text[pos]);
+                        if (hv < 0)
+                        {
+                            break;
+                        }
+                        hasDigit = true;
+                        value = (value << 4) + hv;
+                        pos++;
+                    }
+                    if (!hasDigit)
+                    {
+                        return std::nullopt;
+                    }
+                    result.push_back(value & 0xFF);
+                    break;
+                }
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                {
+                    int value = esc - '0';
+                    pos++;
+                    int count = 1;
+                    while (count < 3 && pos < text.size() && text[pos] >= '0' && text[pos] <= '7')
+                    {
+                        value = value * 8 + (text[pos] - '0');
+                        pos++;
+                        count++;
+                    }
+                    result.push_back(value & 0xFF);
+                    break;
+                }
+                default:
+                    result.push_back(static_cast<unsigned char>(esc));
+                    pos++;
+                    break;
+                }
+            }
+            else
+            {
+                result.push_back(static_cast<unsigned char>(text[pos]));
+                pos++;
+            }
+        }
+        if (pos >= text.size())
+        {
+            return std::nullopt;
+        }
+        pos++;
+    }
+    result.push_back(0);
+    return result;
+}
+
 std::vector<Type> astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
 {
     return lowerDeclaration(ctx->declarationSpecifiers(), ctx->initDeclaratorList());
@@ -500,184 +672,13 @@ Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx,
     ret.pushTop(basetype);
     funcDef* func_ctx = (funcnow != gfuncptr) ? funcnow : nullptr;
     obj.record_var_decl(ret, storageClassSpecifier, func_ctx);
-    auto decodeStringLiteral =
-        [this](ComplierParser::AssignmentExpressionContext* expr) -> std::optional<std::vector<int>>
-    {
-        if (!expr)
-        {
-            return std::nullopt;
-        }
-        std::string text;
-        try
-        {
-            text = expr->getText();
-        }
-        catch (...)
-        {
-            return std::nullopt;
-        }
-        if (text.empty())
-        {
-            return std::nullopt;
-        }
-        auto hexValue = [](char ch) -> int
-        {
-            if (ch >= '0' && ch <= '9')
-            {
-                return ch - '0';
-            }
-            if (ch >= 'a' && ch <= 'f')
-            {
-                return ch - 'a' + 10;
-            }
-            if (ch >= 'A' && ch <= 'F')
-            {
-                return ch - 'A' + 10;
-            }
-            return -1;
-        };
-        size_t pos = 0;
-        std::vector<int> result;
-        while (pos < text.size())
-        {
-            if (text.compare(pos, 2, "u8") == 0 && pos + 2 < text.size() && text[pos + 2] == '"')
-            {
-                pos += 2;
-            }
-            else if ((text[pos] == 'u' || text[pos] == 'U' || text[pos] == 'L') &&
-                     pos + 1 < text.size() && text[pos + 1] == '"')
-            {
-                pos += 1;
-            }
-            if (pos >= text.size() || text[pos] != '"')
-            {
-                return std::nullopt;
-            }
-            pos++;
-            while (pos < text.size() && text[pos] != '"')
-            {
-                if (text[pos] == '\\')
-                {
-                    pos++;
-                    if (pos >= text.size())
-                    {
-                        return std::nullopt;
-                    }
-                    char esc = text[pos];
-                    switch (esc)
-                    {
-                    case 'n':
-                        result.push_back('\n');
-                        pos++;
-                        break;
-                    case 't':
-                        result.push_back('\t');
-                        pos++;
-                        break;
-                    case 'r':
-                        result.push_back('\r');
-                        pos++;
-                        break;
-                    case 'a':
-                        result.push_back('\a');
-                        pos++;
-                        break;
-                    case 'b':
-                        result.push_back('\b');
-                        pos++;
-                        break;
-                    case 'f':
-                        result.push_back('\f');
-                        pos++;
-                        break;
-                    case 'v':
-                        result.push_back('\v');
-                        pos++;
-                        break;
-                    case '\\':
-                        result.push_back('\\');
-                        pos++;
-                        break;
-                    case '\'':
-                        result.push_back('\'');
-                        pos++;
-                        break;
-                    case '"':
-                        result.push_back('"');
-                        pos++;
-                        break;
-                    case 'x':
-                    {
-                        pos++;
-                        int value = 0;
-                        bool hasDigit = false;
-                        while (pos < text.size())
-                        {
-                            int hv = hexValue(text[pos]);
-                            if (hv < 0)
-                            {
-                                break;
-                            }
-                            hasDigit = true;
-                            value = (value << 4) + hv;
-                            pos++;
-                        }
-                        if (!hasDigit)
-                        {
-                            return std::nullopt;
-                        }
-                        result.push_back(value & 0xFF);
-                        break;
-                    }
-                    case '0':
-                    case '1':
-                    case '2':
-                    case '3':
-                    case '4':
-                    case '5':
-                    case '6':
-                    case '7':
-                    {
-                        int value = esc - '0';
-                        pos++;
-                        int count = 1;
-                        while (count < 3 && pos < text.size() && text[pos] >= '0' &&
-                               text[pos] <= '7')
-                        {
-                            value = value * 8 + (text[pos] - '0');
-                            pos++;
-                            count++;
-                        }
-                        result.push_back(value & 0xFF);
-                        break;
-                    }
-                    default:
-                        result.push_back(static_cast<unsigned char>(esc));
-                        pos++;
-                        break;
-                    }
-                }
-                else
-                {
-                    result.push_back(static_cast<unsigned char>(text[pos]));
-                    pos++;
-                }
-            }
-            if (pos >= text.size())
-            {
-                return std::nullopt;
-            }
-            pos++;
-        }
-        result.push_back(0);
-        return result;
-    };
+    // [TODO] 部分初始化的一般化处理
     std::function<bool(Type, ComplierParser::InitializerContext*)> func =
-        [&func, this, &decodeStringLiteral](Type arg,
-                                            ComplierParser::InitializerContext* init) -> bool
+        [&func, this, ctx](Type arg, ComplierParser::InitializerContext* init) -> bool
     {
         // addr通过运行时栈传递
         auto asmholder = funcnow;
+        // 1.载入需初始化的变量, 不为ID视为栈顶已是addr
         if (arg.kind == Type::Kind::ID)
         {
             if (auto* def = obj.lookup_var_decl(arg.id))
@@ -718,15 +719,51 @@ Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx,
                 }
             }
         }
+        // [TODO] 考虑StrogeClass
+        else if (arg.kind == Type::Kind::Struct)
+        {
+            // struct tests c = {1, 2, 3};
+            // struct tests d = c; // 不允许
+            if (init->assignmentExpression())
+            {
+                THROW_ERR(error::expected_initializerList, ctx);
+            }
+            size_t initListSize = init->initializerList()->initializer().size();
+            if (initListSize > arg.structInfo.members.size())
+            {
+                THROW_ERR(error::initializerList_too_long, ctx);
+            }
+            size_t limit = std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize);
+            for (size_t i = 0; i + 1 < limit; i++)
+            {
+                asmholder->asms.push_back(ASM{ASM::basic_asm::COPY});
+            }
+            for (size_t i = 0; i < limit; i++)
+            {
+                if (i != 0)
+                {
+                    asmholder->asms.push_back(
+                        ASM{ASM::basic_asm::IMM, arg.structInfo.members[i].second.addr});
+                    asmholder->asms.push_back(ASM{ASM::basic_asm::ADD});
+                }
+                if (init->initializerList()->initializer(i))
+                {
+                    func(arg.structInfo.members[i].second.type.whthoutID(),
+                         init->initializerList()->initializer(i));
+                }
+            }
+        }
         else if (arg.kind == Type::Kind::Array)
         {
+            // arr = {'',''} 格式
             if (init->initializerList())
             {
                 size_t initListSize = init->initializerList()->initializer().size();
-                size_t limit = std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize);
-                if (limit == 0)
+                if (initListSize > arg.arr_or_ptr_num)
                 {
+                    THROW_ERR(error::initializerList_too_long, ctx);
                 }
+                size_t limit = std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize);
                 for (size_t i = 0; i + 1 < limit; i++)
                 {
                     asmholder->asms.push_back(ASM{ASM::basic_asm::COPY});
@@ -745,9 +782,10 @@ Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx,
                     }
                 }
             }
+            // arr = xxx; 一般为 char arr[12] = "xxx";
             else if (auto assign = init->assignmentExpression())
             {
-                auto literal = decodeStringLiteral(assign);
+                auto literal = decodeStringLiteral(assign); // 包含\0
                 if (!literal)
                 {
                     THROW_ERR(error::expected_arr_initor, assign);
@@ -757,7 +795,7 @@ Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx,
                 {
                     THROW_ERR(error::expected_arr_initor, assign);
                 }
-                if (arg.arr_or_ptr_num < 0)
+                if (arg.arr_or_ptr_num < 0) // [TODO] 未指定时由 "xxx" 长度隐式决定
                 {
                     THROW_ERR(error::expected_arr_initor, assign);
                 }
@@ -816,6 +854,7 @@ Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx,
         }
         return false;
     };
+    // 有初始化时:
     if (ctx->initializer())
     {
         func(ret, ctx->initializer());
@@ -1835,6 +1874,7 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
         {
             return func(0, end - 1);
         }
+        throw;
     };
     return func(0, ctx->children.size());
 }
@@ -1843,63 +1883,6 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
     if (ctx->Identifier())
     {
         return load_var_or_func(ctx->Identifier()->getText());
-        // auto str = ctx->Identifier()->getText();
-        // if (auto* var = obj.lookup_var_decl(str))
-        // {
-        //     const bool is_global =
-        //         var->kind == varDef::Kind::Global ||
-        //         var->type.storageClassSpecifier == Type::StorageClassSpecifier::Static;
-
-        //     if (is_global)
-        //     {
-        //         const auto label = obj.global_label(*var);
-        //         funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, label});
-        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LEAD});
-        //     }
-        //     else
-        //     {
-        //         funcnow->asms.push_back(ASM{ASM::basic_asm::IMM, var->addr});
-        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LEA});
-        //     }
-        //     loadStackTopAddrByType(var->type);
-        //     if (var->type.kind == Type::Kind::Array)
-        //     {
-        //         Type ret = var->type;
-        //         ret.kind = Type::Kind::Pointer;
-        //         ret.arr_or_ptr_num = 1;
-        //         return ret;
-        //     }
-
-        //     else if (var->type.kind == Type::Kind::Struct) // struct始终以ptr表示
-        //     {
-        //         funcnow->asms.push_back("STACK_NOW_IS_ADDR");
-        //         return var->type;
-        //     }
-        //     if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-        //     {
-        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
-        //     }
-        //     else if (var->type.getsize() == Type{Type::Kind::Basic,
-        //     Type::BasicType::Int}.getsize())
-        //     {
-        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
-        //     }
-        //     else if (var->type.getsize() ==
-        //              Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-        //     {
-        //         funcnow->asms.push_back(ASM{ASM::basic_asm::LW});
-        //     }
-        //     return var->type;
-        // }
-
-        // auto funcret = obj.lookup_func_decl(str);
-        // if (funcret)
-        // {
-        //     funcnow->asms.push_back(
-        //         ASM{ASM::basic_asm::IMM, "func@" + ctx->Identifier()->getText()});
-        //     return *funcret;
-        // }
-        // THROW_ERR(error::undifined_id, ctx->Identifier());
     }
     else if (ctx->Constant()) // 常量处理
     {
