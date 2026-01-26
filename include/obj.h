@@ -80,6 +80,7 @@ struct Type
     std::vector<Type> args;
     int arr_or_ptr_num = -1;
     size_t alignas_num = 8;
+    size_t getAlignas() const;
     Type& getTop();
     bool pushTop(const Type& what);
     Type popTop();

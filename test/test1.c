@@ -4,14 +4,10 @@ struct tests
     char b;
 };
 struct tests c;
+// int a = 12, *b = &a, arr[12] = {1, 2};
 int main()
 {
-    c.a = 12;
-    return c.a;
+    c.b = 12;
+    c.a = 13;
+    return c.b;
 }
-// int main()
-// {
-//     int a = 12;
-//     a = 13;
-//     return a;
-// }

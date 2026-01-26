@@ -12,6 +12,7 @@
 #include <format>
 #include <iostream>
 #include <regex>
+#include <algorithm>
 #if defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
 #endif
@@ -55,7 +56,7 @@ size_t Type::getsize() const
     }
     else if (this->kind == Kind::Struct)
     {
-        return align_up(this->structInfo.members.back().second.addr, alignas_num);
+        return align_up(this->structInfo.members.back().second.addr, getAlignas());
     }
     throw;
 }
@@ -133,6 +134,30 @@ Type::Type(Kind kind_, std::vector<Type> args_)
     assert(kind_ == Type::Kind::Function);
     kind = kind_;
     args = args_;
+}
+
+size_t Type::getAlignas() const
+{
+    if (kind == Kind::Array || kind == Kind::StorageClass || kind == Kind::ID)
+    {
+        return subType->getAlignas();
+    }
+    else if (kind == Kind::Basic || kind == Kind::Pointer)
+    {
+        return std::min(this->getsize(), alignas_num);
+    }
+    else if (kind == Kind::Struct)
+    {
+        std::vector<size_t> memberaligns;
+        for (const auto& each : structInfo.members)
+        {
+            memberaligns.push_back(each.second.type.getAlignas());
+        }
+        if (memberaligns.empty())
+            return 1;
+        return *std::max_element(memberaligns.begin(), memberaligns.end());
+    }
+    throw;
 }
 
 Type& Type::getTop()

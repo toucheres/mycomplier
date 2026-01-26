@@ -490,6 +490,9 @@ std::vector<Type> astVisitor::visitInitDeclaratorList(
     return vars;
 }
 
+// [IMPORTANT]
+// TODO 优化为 load_var
+// TODO 将初始化 移入 visitDeclarator
 Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx, Type basetype,
                                      Type::StorageClassSpecifier storageClassSpecifier)
 {
@@ -497,19 +500,6 @@ Type astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx,
     ret.pushTop(basetype);
     funcDef* func_ctx = (funcnow != gfuncptr) ? funcnow : nullptr;
     obj.record_var_decl(ret, storageClassSpecifier, func_ctx);
-
-    // if (funcnow != gfuncptr) // 局部
-    // {
-    //     varDef var;
-    // funcnow->exit_scope();
-    // obj.exit_decl_scope();
-    //     var.name = ret.id;
-    //     funcnow->add_var(var);
-    // }
-    // else
-    // {
-    //     obj.symbol_table.add_global_var_def(ret);
-    // }
     auto decodeStringLiteral =
         [this](ComplierParser::AssignmentExpressionContext* expr) -> std::optional<std::vector<int>>
     {
@@ -1889,7 +1879,8 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
         //     {
         //         funcnow->asms.push_back(ASM{ASM::basic_asm::LC});
         //     }
-        //     else if (var->type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+        //     else if (var->type.getsize() == Type{Type::Kind::Basic,
+        //     Type::BasicType::Int}.getsize())
         //     {
         //         funcnow->asms.push_back(ASM{ASM::basic_asm::LI});
         //     }
@@ -2239,6 +2230,7 @@ std::vector<std::pair<std::string, varDef>> astVisitor::visitStructDeclarationLi
 {
     long nonameindex = 0;
     std::vector<std::pair<std::string, varDef>> members;
+    std::vector<Type> tps;
     for (auto each : ctx->structDeclaration())
     {
         // [TODO]  目前忽略 const volatile restrict _Atomic
@@ -2250,41 +2242,46 @@ std::vector<std::pair<std::string, varDef>> astVisitor::visitStructDeclarationLi
         }
         if (!each->structDeclaratorList()) // 成员无名
         {
-            varDef tpvar;
-            tpvar.type = *basetype;
-            tpvar.name = "__noname_member_" + nonameindex;
-            members.push_back({tpvar.name, tpvar});
+            Type tpvar;
+            tpvar.kind = Type::Kind::ID;
+            tpvar.id = "__noname_member_" + nonameindex;
+            tpvar.subType = *basetype;
+            tps.push_back(tpvar);
         }
         else
         {
-            std::vector<Type> tps;
+            std::vector<Type> eachstructDeclarationTypes;
             for (auto eachstructDeclarator : each->structDeclaratorList()->structDeclarator())
             {
-                tps.push_back(visitDeclarator(eachstructDeclarator->declarator()));
+                eachstructDeclarationTypes.push_back(
+                    visitDeclarator(eachstructDeclarator->declarator()));
             }
-            for (auto& each : tps)
+            for (auto& eachtype : eachstructDeclarationTypes)
             {
-                each.pushTop(*basetype);
+                eachtype.pushTop(*basetype);
             }
-            // 分配成员空间
-            for (int i = 0; i < tps.size(); i++)
+            for (auto& et : eachstructDeclarationTypes)
             {
-                varDef tpvar;
-                tpvar.name = tps[i].id;
-                tpvar.type = tps[i];
-                if (i == 0)
-                {
-                    tpvar.addr = 0;
-                }
-                else
-                {
-                    tpvar.addr =
-                        align_up(members[i - 1].second.addr + members[i - 1].second.type.getsize(),
-                                 tps[i].alignas_num);
-                }
-                members.push_back({tpvar.name, tpvar});
+                tps.push_back(et);
             }
         }
+    }
+    // 分配成员空间
+    for (int i = 0; i < tps.size(); i++)
+    {
+        varDef tpvar;
+        tpvar.name = tps[i].id;
+        tpvar.type = tps[i];
+        if (i == 0)
+        {
+            tpvar.addr = 0;
+        }
+        else
+        {
+            tpvar.addr = align_up(members[i - 1].second.addr + members[i - 1].second.type.getsize(),
+                                  std::min(tps[i].alignas_num, tps[i].getsize()));
+        }
+        members.push_back({tpvar.name, tpvar});
     }
     return members;
 }
