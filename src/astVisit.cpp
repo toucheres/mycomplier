@@ -1582,9 +1582,9 @@ Type astVisitor::visitCastExpression(ComplierParser::CastExpressionContext* ctx)
 {
     if (ctx->castExpression())
     {
-        auto cret = (visitCastExpression(ctx->castExpression()));
+        auto cret = visitCastExpression(ctx->castExpression());
         // [TODO] visitTypeName
-        auto tret = (visitTypeName(ctx->typeName()));
+        auto tret = visitTypeName(ctx->typeName());
         return tret;
     }
 
@@ -1606,7 +1606,7 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
     {
         if (ctx->unaryOperator()->getText() == "&")
         {
-            auto cret = (visitCastExpression(ctx->castExpression()));
+            auto cret = visitCastExpression(ctx->castExpression());
             if (cret.kind == Type::Kind::Function ||
                 cret.kind == Type::Kind::Array) // arr/function无LC/LI/LW,取地址与值相同，无需处理
             {
@@ -2026,7 +2026,14 @@ Type astVisitor::visitTypeName(ComplierParser::TypeNameContext* ctx)
 {
     // typeName由specifierQualifierList和可选的abstractDeclarator组成
     // [TODO] 没有标识符, 修饰符的申明
-    return Type{};
+    auto [typeQualifiers, basetype] = visitSpecifierQualifierList(ctx->specifierQualifierList());
+    if (ctx->abstractDeclarator())
+    {
+        auto tp = visitAbstractDeclarator(ctx->abstractDeclarator());
+        tp.pushTop(*basetype);
+        return tp;
+    }
+    return *basetype;
 }
 
 void astVisitor::visitBlockItem(ComplierParser::BlockItemContext* ctx)

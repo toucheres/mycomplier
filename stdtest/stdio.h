@@ -1,5 +1,5 @@
-#include <stdarg.h>
-#include <systemcall.h>
+#include "./stdarg.h"
+#include "./systemcall.h"
 void write(long arg)
 {
     return __write(arg);
@@ -332,7 +332,12 @@ long printf(char* fmt, ...)
     }
     return charsnum;
 }
-//  FILE* fopen(const char* __restrict __filename, const char* __restrict __modes)
+// typedef struct FILE_struct
+// {
+
+// } FILE;
+
+// FILE* fopen(const char* __restrict __filename, const char* __restrict __modes)
 // {
 
 // }

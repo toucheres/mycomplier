@@ -1,13 +1,19 @@
-
-struct tests
+// #include <string.h>
+typedef struct tests
 {
     int a;
     char b;
     int c;
-};
-typedef struct tests sh;
+} sh;
+
+int func(sh arg)
+{
+    return arg.a;
+}
+
 int main()
 {
-    sh c = {1, 2, 3};
-    return c.a;
+    int b = 12;
+    int c = 13;
+    return b;
 }

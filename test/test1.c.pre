@@ -1,13 +1,32 @@
 
-struct tests
+typedef struct tests
 {
     int a;
     char b;
     int c;
-};
-typedef struct tests sh;
+} sh;
+
+
+
+
+
+typedef long size_t;
+char* memmove(char* des, char* src, size_t n)
+{
+    for (size_t i = 0; i < n; i++)
+    {
+        des[i] = src[i];
+    }
+    return des;
+}
 int main()
 {
-    sh c = {1, 2, 3};
-    return c.a;
+    
+    
+    
+    int b = 12;
+    int c = 13;
+    
+    
+    return b;
 }
