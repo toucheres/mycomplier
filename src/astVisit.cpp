@@ -579,7 +579,7 @@ std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>> astVisitor
     visitDeclarationSpecifiers(ComplierParser::DeclarationSpecifiersContext* ctx)
 {
     std::optional<Type> type;
-    std::optional<StorageClassSpecifier> storageClassSpecifier;
+    std::optional<StorageClassSpecifier> storageC;
     // 遍历所有声明说明符
     for (auto& each : ctx->declarationSpecifier())
     {
@@ -588,11 +588,11 @@ std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>> astVisitor
         Type result = visitDeclarationSpecifier(each);
         if (result.storageClassSpecifier != StorageClassSpecifier::VarDef)
         {
-            if (storageClassSpecifier)
+            if (storageC)
             {
                 THROW_ERR(error::double_StorageClassSpecifier, ctx);
             }
-            storageClassSpecifier = result.storageClassSpecifier;
+            storageC = result.storageClassSpecifier;
         }
         else
         {
@@ -603,7 +603,7 @@ std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>> astVisitor
             type = result;
         }
     }
-    return {type, storageClassSpecifier};
+    return {type, storageC};
 }
 Type astVisitor::visitDeclarationSpecifier(ComplierParser::DeclarationSpecifierContext* ctx)
 {
@@ -664,6 +664,7 @@ Type astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
                     ctx->structOrUnionSpecifier()->Identifier()
                         ? ctx->structOrUnionSpecifier()->Identifier()->getText()
                         : "__nuname_struct_" + std::to_string(structIndex++);
+                thisStruct.type.kind = Type::Kind::Struct;
                 thisStruct.type.structInfo.members = visitStructDeclarationList(
                     ctx->structOrUnionSpecifier()->structDeclarationList());
                 record_ID_decl(thisStruct);
@@ -922,6 +923,8 @@ IDdef astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx
     // 有初始化时:
     if (ctx->initializer())
     {
+        load_var_or_func(recorded->name);
+        madeTopIsLvalueAddr();
         func(ret.type, ctx->initializer());
     }
     return ret;
@@ -2323,7 +2326,7 @@ std::vector<std::pair<std::string, IDdef>> astVisitor::visitStructDeclarationLis
     // 分配成员空间
     for (int i = 0; i < tps.size(); i++)
     {
-        IDdef tpvar = members[i].second;
+        IDdef tpvar = tps[i];
         if (i == 0)
         {
             tpvar.addr = 0;

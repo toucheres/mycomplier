@@ -1,28 +1,19 @@
 // #pragma once
 #include <string>
-#include <vector>
+#include "scoped_map.hpp"
 class xxxx
 {
     // 这里的代码会直接加入生成的 Parser 类
-    std::vector<std::string> TypedefedId{};
-    bool hasTypeDef(std::string name)
+    scoped_map<std::string, bool> TypedefedId{};
+    bool currentDeclIsTypedef = false;
+
+    bool hasTypeDef(const std::string& name)
     {
-        for (const auto& each : TypedefedId)
-        {
-            if (each == name)
-            {
-                return true;
-            }
-        }
-        return false;
+        return TypedefedId.contains(name);
     }
-    bool addTypeDef(std::string name)
+
+    bool addTypeDef(const std::string& name)
     {
-        if (hasTypeDef(name))
-        {
-            return false;
-        }
-        TypedefedId.push_back(name);
-        return true;
+        return TypedefedId.add(name, true);
     }
 };

@@ -87,26 +87,19 @@ public:
   antlr4::atn::SerializedATNView getSerializedATN() const override;
 
 
-      std::vector<std::string> TypedefedId{};
-      bool hasTypeDef(std::string name)
+      #include "scoped_map.hpp"
+
+      scoped_map<std::string, bool> TypedefedId{};
+      bool currentDeclIsTypedef = false;
+
+      bool hasTypeDef(const std::string& name)
       {
-          for (const auto& each : TypedefedId)
-          {
-              if (each == name)
-              {
-                  return true;
-              }
-          }
-          return false;
+          return TypedefedId.contains(name);
       }
-      bool addTypeDef(std::string name)
+
+      bool addTypeDef(const std::string& name)
       {
-          if (hasTypeDef(name))
-          {
-              return false;
-          }
-          TypedefedId.push_back(name);
-          return true;
+          return TypedefedId.add(name, true);
       }
 
 
@@ -1049,6 +1042,9 @@ public:
 
   class  DirectDeclaratorContext : public antlr4::ParserRuleContext {
   public:
+    antlr4::Token *id = nullptr;
+    antlr4::Token *idBit = nullptr;
+    antlr4::Token *idVc = nullptr;
     DirectDeclaratorContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *Identifier();

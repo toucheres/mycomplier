@@ -1,25 +1,18 @@
 grammar Complier;
  @parser::members {
-    std::vector<std::string> TypedefedId{};
-    bool hasTypeDef(std::string name)
+    #include "scoped_map.hpp"
+
+    scoped_map<std::string, bool> TypedefedId{};
+    bool currentDeclIsTypedef = false;
+
+    bool hasTypeDef(const std::string& name)
     {
-        for (const auto& each : TypedefedId)
-        {
-            if (each == name)
-            {
-                return true;
-            }
-        }
-        return false;
+        return TypedefedId.contains(name);
     }
-    bool addTypeDef(std::string name)
+
+    bool addTypeDef(const std::string& name)
     {
-        if (hasTypeDef(name))
-        {
-            return false;
-        }
-        TypedefedId.push_back(name);
-        return true;
+        return TypedefedId.add(name, true);
     }
 }
 primaryExpression
@@ -145,7 +138,7 @@ constantExpression
     ;
  
 declaration
-    :   declarationSpecifiers initDeclaratorList? ';'
+    :   declarationSpecifiers initDeclaratorList? ';' { currentDeclIsTypedef = false; }
     |   staticAssertDeclaration
     ;
  
@@ -174,7 +167,7 @@ initDeclarator
     ;
  
 storageClassSpecifier
-    :   'typedef'
+    :   'typedef' { currentDeclIsTypedef = true; }
     |   'extern'
     |   'static'
     |   '_Thread_local'
@@ -284,7 +277,7 @@ declarator
     ;
  
 directDeclarator
-    :   Identifier
+    :   id=Identifier { if (currentDeclIsTypedef) addTypeDef($id.text); }
     |   '(' declarator ')'
     |   directDeclarator '[' typeQualifierList? assignmentExpression? ']'
     |   directDeclarator '[' 'static' typeQualifierList? assignmentExpression ']'
@@ -292,8 +285,10 @@ directDeclarator
     |   directDeclarator '[' typeQualifierList? '*' ']'
     |   directDeclarator '(' parameterTypeList ')'
     |   directDeclarator '(' identifierList? ')'
-    |   Identifier ':' DigitSequence  // bit field
-    |   vcSpecificModifer Identifier // Visual C Extension
+    |   idBit=Identifier ':' DigitSequence  // bit field
+        { if (currentDeclIsTypedef) addTypeDef($idBit.text); }
+    |   vcSpecificModifer idVc=Identifier // Visual C Extension
+        { if (currentDeclIsTypedef) addTypeDef($idVc.text); }
     |   '(' vcSpecificModifer declarator ')' // Visual C Extension
     ;
  
@@ -427,7 +422,8 @@ labeledStatement
     ;
  
 compoundStatement
-    :   '{' blockItemList? '}'
+    :   '{' { TypedefedId.in_scope(); } blockItemList? '}'
+        { TypedefedId.out_scope(); currentDeclIsTypedef = false; }
     ;
  
 blockItemList
@@ -467,7 +463,7 @@ forCondition
 	;
  
 forDeclaration
-    :   declarationSpecifiers initDeclaratorList?
+    :   declarationSpecifiers initDeclaratorList? { currentDeclIsTypedef = false; }
     ;
  
 forExpression

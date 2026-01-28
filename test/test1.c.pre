@@ -1,11 +1,13 @@
 
-int print_str()
+struct tests
 {
-    long num = 0;
-    return num;
-}
-
+    int a;
+    char b;
+    int c;
+};
+typedef struct tests sh;
 int main()
 {
-    return 0;
+    sh c = {1, 2, 3};
+    return c.a;
 }

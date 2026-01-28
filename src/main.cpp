@@ -34,7 +34,8 @@ int main(int argc, const char* argv[])
         bool printasm = tvm.get(print_asm).or_(false);
         bool printretvalue = tvm.get(print_ret_value).or_(false);
 
-        auto ret = complier::process(tvm.get_direct(input_files), showASt, tolerate, showFoldedNames);
+        auto ret =
+            complier::process(tvm.get_direct(input_files), showASt, tolerate, showFoldedNames);
         if (!ret)
         {
             std::cout << "error\n";
@@ -57,7 +58,8 @@ int main(int argc, const char* argv[])
         if (retval)
         {
             if (vm.print_ret_value)
-                std::cout << "ret: " << retval.value() << " = " << std::hex << retval.value() << '\n';
+                std::cout << "ret: " << retval.value() << " = " << "0x" << std::hex
+                          << retval.value() << '\n';
             return retval.value();
         }
         else
