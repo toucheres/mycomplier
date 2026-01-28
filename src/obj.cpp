@@ -2,48 +2,21 @@
 #include "complier.hpp"
 #include <algorithm>
 #include <format>
-
-namespace
+template <class MapT> void enter_scope_all(MapT& map, const std::string& label)
 {
-    Type strip_id_preserve(const Type& t)
+    auto info = map.current_scope_info();
+    if (label.empty())
     {
-        Type cleaned = t;
-        cleaned.removeID();
-        cleaned.id = t.id;
-        return cleaned;
+        map.enter_scope_with_info(info);
     }
-
-    template <class MapT> void enter_scope_all(MapT& map, const std::string& label)
+    else
     {
-        auto info = map.current_scope_info();
-        if (label.empty())
-        {
-            map.enter_scope_with_info(info);
-        }
-        else
-        {
-            map.enter_scope(label, info);
-        }
+        map.enter_scope(label, info);
     }
-
-    inline varDef::Kind kind_from_depth(std::size_t depth_zero_based)
-    {
-        if (depth_zero_based == 0)
-        {
-            return varDef::Kind::Global;
-        }
-        if (depth_zero_based == 1)
-        {
-            return varDef::Kind::Arg;
-        }
-        return varDef::Kind::Local;
-    }
-} // namespace
-
+}
 void DeclRepository::enter_scope(const Label& label)
 {
     enter_scope_all(var_decls, label);
-    enter_scope_all(func_decls, label);
     enter_scope_all(extern_decls, label);
     enter_scope_all(static_decls, label);
     enter_scope_all(typedef_decls, label);
@@ -53,362 +26,69 @@ void DeclRepository::enter_scope(const Label& label)
 void DeclRepository::exit_scope()
 {
     var_decls.out_scope();
-    func_decls.out_scope();
     extern_decls.out_scope();
     static_decls.out_scope();
     typedef_decls.out_scope();
     struct_decls.out_scope();
 }
 
-static tree_scoped_map<std::string, varDef, DeclRepository::Label, DeclRepository::ScopeMeta>*
-pick_storage_map(DeclRepository& repo, Type::StorageClassSpecifier storage)
+IDdef* DeclRepository::add_ID_decl(const IDdef& def, StorageClassSpecifier storageClassSpecifier)
 {
-    switch (storage)
+    StorageClassSpecifier effective_storage = storageClassSpecifier;
+    IDdef copy = def;
+    tree_scoped_map<std::string, IDdef, Label, ScopeMeta>* where = nullptr;
+    switch (storageClassSpecifier)
     {
-    case Type::StorageClassSpecifier::Extern:
-        return &repo.extern_decls;
-    case Type::StorageClassSpecifier::Static:
-        return &repo.static_decls;
+    case StorageClassSpecifier::VarDef:
+        // [TODO] 地址/偏移分配
+        where = &this->var_decls;
+        break;
+    case StorageClassSpecifier::Static:
+        // [TODO] 修饰名称
+        where = &this->static_decls;
+        break;
+    case StorageClassSpecifier::Typedef:
+        where = &this->typedef_decls;
+        break;
+    case StorageClassSpecifier::Extern:
+        where = &this->extern_decls;
+        break;
+    case StorageClassSpecifier::StructDef:
+        where = &this->struct_decls;
+        break;
     default:
-        return &repo.var_decls;
+        throw;
     }
+    where->add(copy.name, copy);
+    return find_ID_decl(copy.name, effective_storage);
 }
 
-bool DeclRepository::add_var(varDef v, Type::StorageClassSpecifier storage, funcDef* func_ctx,
-                             std::optional<std::size_t> arg_index)
+IDdef* DeclRepository::find_ID_decl(const std::string& ID,
+                                    StorageClassSpecifier storageClassSpecifier)
 {
-    v.type = strip_id_preserve(v.type);
-    auto* map = pick_storage_map(*this, storage);
-    auto depth = map->scope_depth() - 1; // zero-based: 0 root, 1 params, else locals
-    v.type.storageClassSpecifier = storage;
-    v.kind = kind_from_depth(depth);
-    if (storage == Type::StorageClassSpecifier::Static && v.link_label.empty())
+    switch (storageClassSpecifier)
     {
-        v.link_label = v.name + "#" + std::to_string(static_label_counter++);
+    case StorageClassSpecifier::Extern:
+        return extern_decls.find(ID);
+    case StorageClassSpecifier::Static:
+        return static_decls.find(ID);
+    case StorageClassSpecifier::Typedef:
+        return typedef_decls.find(ID);
+    case StorageClassSpecifier::StructDef:
+        return struct_decls.find(ID);
+    default:
+        break;
     }
-    auto& scope_info = map->current_scope_info();
 
-    if (v.kind == varDef::Kind::Arg && arg_index)
-    {
-        v.addr = static_cast<int>(VCPU<>::size_word * (static_cast<int>(*arg_index) + 2));
-    }
-    else if (v.kind == varDef::Kind::Local && storage != Type::StorageClassSpecifier::Extern &&
-             storage != Type::StorageClassSpecifier::Static)
-    {
-        const auto new_pos =
-            v.get_addr_in_stack(func_ctx ? func_ctx->stack_size_now : scope_info.stack_size);
-        v.addr = -static_cast<int>(new_pos);
-
-        if (func_ctx)
-        {
-            func_ctx->stack_size_now = static_cast<std::size_t>(-v.addr);
-            func_ctx->max_stack_size = std::max(func_ctx->max_stack_size, func_ctx->stack_size_now);
-        }
-        scope_info.stack_size = static_cast<std::size_t>(-v.addr);
-    }
-    else if (storage != Type::StorageClassSpecifier::Extern)
-    {
-        scope_info.stack_size += v.type.getsize();
-    }
-    return map->add(v.name, v);
-}
-
-bool DeclRepository::add_func(const Type& t)
-{
-    auto cleaned = strip_id_preserve(t);
-    cleaned.id = t.id;
-    return func_decls.add(t.id, cleaned);
-}
-
-bool DeclRepository::add_typedef(const Type& t)
-{
-    auto cleaned = strip_id_preserve(t);
-    cleaned.id = t.id;
-    return typedef_decls.add(t.id, cleaned);
-}
-
-bool DeclRepository::add_struct(const Type& t)
-{
-    auto cleaned = strip_id_preserve(t);
-    cleaned.id = t.id;
-    return struct_decls.add(t.id, cleaned);
-}
-
-varDef* DeclRepository::find_var(const std::string& name)
-{
-    if (auto* p = var_decls.find(name))
+    if (auto* p = var_decls.find(ID))
     {
         return p;
     }
-    if (auto* p = static_decls.find(name))
+    if (auto* p = static_decls.find(ID))
     {
         return p;
     }
-    return extern_decls.find(name);
-}
-
-const varDef* DeclRepository::find_var(const std::string& name) const
-{
-    if (auto* p = var_decls.find(name))
-    {
-        return p;
-    }
-    if (auto* p = static_decls.find(name))
-    {
-        return p;
-    }
-    return extern_decls.find(name);
-}
-
-Type* DeclRepository::find_func(const std::string& name)
-{
-    return func_decls.find(name);
-}
-
-const Type* DeclRepository::find_func(const std::string& name) const
-{
-    return func_decls.find(name);
-}
-
-Type* DeclRepository::find_typedef(const std::string& name)
-{
-    return typedef_decls.find(name);
-}
-
-const Type* DeclRepository::find_typedef(const std::string& name) const
-{
-    return typedef_decls.find(name);
-}
-
-Type* DeclRepository::find_struct(const std::string& name)
-{
-    return struct_decls.find(name);
-}
-
-const Type* DeclRepository::find_struct(const std::string& name) const
-{
-    return struct_decls.find(name);
-}
-
-varDef* SymbolTable::add_global_var_def(const Type& vardef)
-{
-    if (vardef.kind != Type::Kind::ID)
-    {
-        return nullptr; // 必须提供有效的标识符
-    }
-
-    // 检查是否已存在变量定义
-    if (globalvardef.find(vardef.id) != globalvardef.end())
-    {
-        return nullptr; // 变量已定义
-    }
-
-    // 创建变量定义
-    varDef newVar;
-    newVar.name = vardef.id;
-    newVar.type = *vardef.subType;
-    newVar.is_defined = true;
-    newVar.kind = varDef::Kind::Global;
-
-    // 添加到全局变量定义与声明表
-    globalvardef[vardef.id] = newVar;
-    globalvardecl[vardef.id] = *vardef.subType;
-
-    return &globalvardef[vardef.id];
-}
-
-funcDef* SymbolTable::add_global_func_def(const Type& vardef)
-{
-    if (vardef.kind != Type::Kind::ID || vardef.subType == nullptr ||
-        vardef.subType->kind != Type::Kind::Function)
-    {
-        return nullptr; // 必须是函数类型
-    }
-
-    // 检查是否已存在函数定义
-    auto it = globalfuncdef.find(vardef.id);
-    if (it != globalfuncdef.end() && it->second.is_defined)
-    {
-        return nullptr; // 函数已定义
-    }
-
-    // 创建或更新函数定义
-    funcDef newFunc;
-    newFunc.name = vardef.id;
-    newFunc.type = *vardef.subType;
-    newFunc.is_defined = true;
-    newFunc.rettype = *vardef.subType->subType;
-    // 添加到全局函数定义/声明表
-    globalfuncdef[vardef.id] = newFunc;
-    globalfuncdecl[vardef.id] = *vardef.subType;
-    return &globalfuncdef[vardef.id];
-}
-
-Type* SymbolTable::add_global_var_decl(const Type& vardef)
-{
-    if (vardef.kind != Type::Kind::ID)
-    {
-        return nullptr; // 必须提供有效的标识符
-    }
-    // 如果已存在变量声明
-    if (globalvardecl.find(vardef.id) != globalvardecl.end())
-    {
-        if (*globalvardecl[vardef.id].subType == *vardef.subType)
-        {
-            return globalvardecl[vardef.id].subType.get();
-        }
-        else
-        {
-            return nullptr;
-        }
-    }
-    // 添加新变量声明
-    globalvardecl[vardef.id] = vardef;
-    return &globalvardecl[vardef.id];
-}
-
-Type* SymbolTable::add_global_func_decl(const Type& vardef)
-{
-    if (vardef.kind != Type::Kind::ID || vardef.subType == nullptr ||
-        vardef.subType->kind != Type::Kind::Function)
-    {
-        return nullptr; // 必须是函数类型
-    }
-
-    // 如果已存在函数声明，检查兼容性并更新
-    if (globalfuncdecl.find(vardef.id) != globalfuncdecl.end())
-    {
-        if (*vardef.subType == *globalfuncdecl[vardef.id].subType)
-        {
-            globalfuncdecl[vardef.id] = vardef;
-        }
-        return &globalfuncdecl[vardef.id];
-    }
-
-    // 添加新函数声明
-    globalfuncdecl[vardef.id] = vardef;
-    return &globalfuncdecl[vardef.id];
-}
-
-Type* SymbolTable::lookup_var_decl(const std::string& name)
-{
-    // 首先查找变量定义
-    auto defIt = globalvardecl.find(name);
-    if (defIt != globalvardecl.end())
-    {
-        return &(defIt->second);
-    }
-    return nullptr; // 未找到
-}
-
-Type* SymbolTable::lookup_func_decl(const std::string& name)
-{
-    // 首先查找函数定义
-    auto defIt = globalfuncdecl.find(name);
-    if (defIt != globalfuncdecl.end())
-    {
-        return &defIt->second;
-    }
-    return nullptr; // 未找到
-}
-funcDef* SymbolTable::lookup_func_def(const std::string& name)
-{
-    // 首先查找函数定义
-    auto defIt = globalfuncdef.find(name);
-    if (defIt != globalfuncdef.end())
-    {
-        return &defIt->second;
-    }
-    return nullptr; // 未找到
-}
-
-void OBJ::enter_decl_scope(const std::string& label)
-{
-    decls.enter_scope(label);
-}
-
-void OBJ::exit_decl_scope()
-{
-    decls.exit_scope();
-}
-
-varDef* OBJ::record_var_decl(const Type& t, Type::StorageClassSpecifier storage, funcDef* func_ctx,
-                             std::optional<std::size_t> arg_index)
-{
-    varDef v;
-    v.name = t.id;
-    v.type = t;
-    v.is_defined = true;
-
-    if (!decls.add_var(v, storage, func_ctx, arg_index))
-    {
-        return nullptr;
-    }
-
-    auto* slot = decls.find_var(v.name);
-    if (!slot)
-    {
-        return nullptr;
-    }
-
-    return slot;
-}
-
-bool OBJ::record_func_decl(const Type& t)
-{
-    return decls.add_func(t);
-}
-
-bool OBJ::record_typedef_decl(const std::string& name, const Type& target)
-{
-    Type tp = target;
-    tp.id = name;
-    return decls.add_typedef(tp);
-}
-
-bool OBJ::record_struct_decl(const Type& t)
-{
-    return decls.add_struct(t);
-}
-
-varDef* OBJ::lookup_var_decl(const std::string& name)
-{
-    return decls.find_var(name);
-}
-
-const varDef* OBJ::lookup_var_decl(const std::string& name) const
-{
-    return decls.find_var(name);
-}
-
-Type* OBJ::lookup_func_decl(const std::string& name)
-{
-    return decls.find_func(name);
-}
-
-const Type* OBJ::lookup_func_decl(const std::string& name) const
-{
-    return decls.find_func(name);
-}
-
-Type* OBJ::lookup_typedef(const std::string& name)
-{
-    return decls.find_typedef(name);
-}
-
-const Type* OBJ::lookup_typedef(const std::string& name) const
-{
-    return decls.find_typedef(name);
-}
-
-Type* OBJ::lookup_struct_decl(const std::string& name)
-{
-    return decls.find_struct(name);
-}
-
-const Type* OBJ::lookup_struct_decl(const std::string& name) const
-{
-    return decls.find_struct(name);
+    return extern_decls.find(ID);
 }
 
 void OBJ::flush_global_decls()
@@ -423,27 +103,18 @@ void OBJ::flush_global_decls()
             }
             for (auto& [name, v] : entries)
             {
-                Type t;
-                t.kind = Type::Kind::ID;
-                t.id = name;
-                t.subType = v.type;
-                symbol_table.add_global_var_def(t);
+                symbol_table.globaldef[name] = v;
             }
         });
 
     // static variables: always emit, scoped to object to avoid cross-object collisions.
+    // 名称修饰在 record 阶段完成
     decls.static_decls.for_each_scope(
         [this](std::size_t /*depth*/, auto& entries, auto&, const auto&)
         {
             for (auto& [name, v] : entries)
             {
-                // Type t = v.type;
-                // t.id = v.link_label.empty() ? name : v.link_label;
-                Type t;
-                t.kind = Type::Kind::ID;
-                t.id = v.link_label.empty() ? name : v.link_label;
-                t.subType = v.type;
-                symbol_table.add_global_var_def(t);
+                symbol_table.globaldef[name] = v;
             }
         });
 
@@ -453,50 +124,9 @@ void OBJ::flush_global_decls()
         {
             for (auto& [name, v] : entries)
             {
-                // Type t = v.type;
-                // t.id = name;
-
-                Type t;
-                t.kind = Type::Kind::ID;
-                t.id = name;
-                t.subType = v.type;
-
-                symbol_table.add_global_var_decl(t);
+                symbol_table.globaldecl[name] = v;
             }
         });
-
-    // function prototypes/defs recorded as declarations
-    decls.func_decls.for_each_scope(
-        [this](std::size_t depth, auto& entries, auto&, const auto&)
-        {
-            if (depth != 0)
-            {
-                return;
-            }
-            for (auto& [name, t] : entries)
-            {
-                Type tp;
-                tp.kind = Type::Kind::ID;
-                tp.id = name;
-                tp.subType = t;
-                (void)symbol_table.add_global_func_decl(t);
-            }
-        });
-}
-
-std::string OBJ::global_label(const varDef& v) const
-{
-    return global_label(v.link_label.empty() ? v.name : v.link_label, v.type.storageClassSpecifier);
-}
-
-std::string OBJ::global_label(const std::string& var_name,
-                              Type::StorageClassSpecifier storage) const
-{
-    if (storage == Type::StorageClassSpecifier::Static)
-    {
-        return "globalvar@" + name + "@" + var_name;
-    }
-    return "globalvar@" + var_name;
 }
 
 size_t StructInfo::getmemberbias(std::string membername)
@@ -504,7 +134,7 @@ size_t StructInfo::getmemberbias(std::string membername)
     return getmember(membername)->addr;
 }
 
-varDef* StructInfo::getmember(std::string name)
+IDdef* StructInfo::getmember(std::string name)
 {
     for (auto& each : members)
     {
@@ -514,4 +144,13 @@ varDef* StructInfo::getmember(std::string name)
         }
     }
     return nullptr;
+}
+void OBJ::enter_decl_scope(const std::string& label)
+{
+    decls.enter_scope(label);
+}
+
+void OBJ::exit_decl_scope()
+{
+    decls.exit_scope();
 }

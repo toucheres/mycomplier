@@ -9,3 +9,4 @@
 [OK][TODO] 结构体变量的运算
 [OK][TODO] 结构体变量的初始化
 [TODO] 结构体变量的参数传递与返回
+[TODO] 优化type的id/storageClass到varDef中, type不再保留id/storageClass信息

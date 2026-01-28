@@ -6,57 +6,47 @@
 #include "obj.h"
 #include "preprocessor.hpp"
 #include "tools.hpp"
+#include <algorithm>
 #include <antlr4-runtime/antlr4-runtime.h>
 #include <astVisit.h>
 #include <filesystem>
 #include <format>
 #include <iostream>
 #include <regex>
-#include <algorithm>
+#include <utility>
 #if defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
 #endif
 #include <cstdio>
 size_t Type::getsize() const
 {
-    if (this->kind == Kind::Pointer)
+    switch (kind)
     {
+    case Kind::Pointer:
         return VCPU<>::size_word;
-    }
-    else if (this->kind == Kind::Basic)
-    {
-        if (this->basic_type == Type::BasicType::Char)
+    case Kind::Basic:
+        switch (basic_type)
         {
+        case BasicType::Char:
             return 1;
-        }
-        else if (this->basic_type == Type::BasicType::Int)
-        {
+        case BasicType::Int:
             return VCPU<>::size_word / 2;
-        }
-        else if (this->basic_type == Type::BasicType::Long)
-        {
+        case BasicType::Long:
             return VCPU<>::size_word;
+        default:
+            break;
         }
-    }
-    else if (this->kind == Kind::Array)
-    {
-        return this->arr_or_ptr_num * subType->getsize();
-    }
-    else if (this->kind == Kind::ID)
-    {
-        return subType->getsize();
-    }
-    else if (this->kind == Kind::Function)
-    {
+        break;
+    case Kind::Array:
+        return static_cast<size_t>(arr_or_ptr_num) * subType->getsize();
+    case Kind::Function:
         return VCPU<>::size_word;
-    }
-    else if (this->kind == Kind::StorageClass)
-    {
-        return this->subType->getsize();
-    }
-    else if (this->kind == Kind::Struct)
-    {
-        return align_up(this->structInfo.members.back().second.addr, getAlignas());
+    case Kind::Struct:
+        return align_up(this->structInfo.members.back().second.addr +
+                            this->structInfo.members.back().second.type.getsize(),
+                        8);
+    case Kind::Undefined:
+        break;
     }
     throw;
 }
@@ -65,14 +55,6 @@ bool Type::operator==(const Type& other_) const
 {
     auto one = this;
     auto other = &other_;
-    if (one->kind == Kind::ID)
-    {
-        one = one->subType.get();
-    }
-    if (other->kind == Kind::ID)
-    {
-        other = other->subType.get();
-    }
     if (other->kind != one->kind)
     {
         return false;
@@ -94,7 +76,7 @@ bool Type::operator==(const Type& other_) const
         }
         for (size_t i = 0; i < one->args.size(); i++)
         {
-            if (one->args[i] != other->args[i])
+            if (one->args[i].type != other->args[i].type)
             {
                 return false;
             }
@@ -124,40 +106,15 @@ Type::Type(Kind kind_, int arg_)
 
 Type::Type(Kind kind_, std::string arg_)
 {
-    assert(kind_ == Type::Kind::ID);
     kind = kind_;
-    id = arg_;
+    structID = std::move(arg_);
 }
 
-Type::Type(Kind kind_, std::vector<Type> args_)
+Type::Type(Kind kind_, std::vector<IDdef> args_)
 {
     assert(kind_ == Type::Kind::Function);
     kind = kind_;
     args = args_;
-}
-
-size_t Type::getAlignas() const
-{
-    if (kind == Kind::Array || kind == Kind::StorageClass || kind == Kind::ID)
-    {
-        return subType->getAlignas();
-    }
-    else if (kind == Kind::Basic || kind == Kind::Pointer)
-    {
-        return std::min(this->getsize(), alignas_num);
-    }
-    else if (kind == Kind::Struct)
-    {
-        std::vector<size_t> memberaligns;
-        for (const auto& each : structInfo.members)
-        {
-            memberaligns.push_back(each.second.type.getAlignas());
-        }
-        if (memberaligns.empty())
-            return 1;
-        return *std::max_element(memberaligns.begin(), memberaligns.end());
-    }
-    throw;
 }
 
 Type& Type::getTop()
@@ -207,15 +164,15 @@ std::string Type::to_string() const
 std::expected<size_t, error> linker::pushfunc(std::string funcname)
 {
     // [TODO] globalvar@name 的链接
-    funcDef* func = nullptr;
+    IDdef* func = nullptr;
     auto ret = addrmap.find("func@" + funcname);
     if (ret == addrmap.end()) // 重定向表未记录
     {
         bool flag = false;
         for (auto& eachobj : objs)
         {
-            auto fun = eachobj.symbol_table.globalfuncdef.find(funcname);
-            if (fun == eachobj.symbol_table.globalfuncdef.end())
+            auto fun = eachobj.symbol_table.globaldef.find(funcname);
+            if (fun == eachobj.symbol_table.globaldef.end())
             {
                 continue;
             }
@@ -230,7 +187,7 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                     func = &fun->second;
                     // 记录在重定向表中
                     size_t thisfuncstart = addrmap["func@" + funcname] = this->exe.asms.size();
-                    for (auto& eachasms : func->asms)
+                    for (auto& eachasms : func->funcInfo.asms)
                     {
                         this->exe.asms.push_back(eachasms);
                     }
@@ -331,8 +288,12 @@ std::expected<std::vector<std::string>, error> linker::process()
     // 分配全局变量空间,确定地址
     for (auto& eachobj : objs)
     {
-        for (auto& [name, eachgvar] : eachobj.symbol_table.globalvardef)
+        for (auto& [name, eachgvar] : eachobj.symbol_table.globaldef)
         {
+            if (eachgvar.type.kind == Type::Kind::Function)
+            {
+                continue;
+            }
             if (eachgvar.type.kind == Type::Kind::Array)
             {
                 eachgvar.addr = exe.global_size; // 数组值在内存底端, 指针指向整形低地址
@@ -342,8 +303,7 @@ std::expected<std::vector<std::string>, error> linker::process()
                 eachgvar.addr = eachgvar.get_addr_in_stack(exe.global_size);
             }
             exe.global_size = eachgvar.addr + eachgvar.type.getsize();
-            const bool is_static =
-                eachgvar.type.storageClassSpecifier == Type::StorageClassSpecifier::Static;
+            const bool is_static = eachgvar.storageClassSpecifier == StorageClassSpecifier::Static;
             auto labal =
                 std::string{"globalvar@"} + (is_static ? eachobj.name + "@" : "") + eachgvar.name;
             if (addrmap.find(labal) != addrmap.end())
@@ -361,12 +321,12 @@ std::expected<std::vector<std::string>, error> linker::process()
     // 拼接obj初始化函数
     for (auto& eachobj : objs)
     {
-        auto ret = eachobj.symbol_table.globalfuncdef.find("__global_init" + eachobj.name);
-        if (ret == eachobj.symbol_table.globalfuncdef.end())
+        auto ret = eachobj.symbol_table.globaldef.find("__global_init" + eachobj.name);
+        if (ret == eachobj.symbol_table.globaldef.end())
         {
             return std::unexpected(error::undifined_obj_init_fun);
         }
-        for (auto& eachasm : ret->second.asms)
+        for (auto& eachasm : ret->second.funcInfo.asms)
         {
             pushfunc("__global_init" + eachobj.name);
         }
@@ -434,7 +394,7 @@ std::expected<std::vector<std::string>, error> linker::process()
 //     name = node.nodes[1]->token_to_string();
 // }
 
-size_t varDef::get_addr_in_stack(size_t posnow)
+size_t IDdef::get_addr_in_stack(size_t posnow)
 {
     // [TODO] char的考虑
     // 考虑对齐要求
@@ -448,6 +408,11 @@ size_t varDef::get_addr_in_stack(size_t posnow)
         return ceiling(posnow + this->type.getsize(), VCPU<>::size_word); // 姑且对齐到size_word
     }
     return posnow;
+}
+bool IDdef::operator==(const IDdef& that) const
+{
+    return this->type == that.type && this->name == that.name &&
+           this->storageClassSpecifier == that.storageClassSpecifier;
 }
 std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths,
                                                                  bool showASt, int tolerate,

@@ -15,16 +15,31 @@
 #include <vector>
 #include <vm.h>
 // 前向声明
-struct Type;
-struct varDef;
+// struct Type;
+// 新的统一标识符定义（原 varDef 将被替换为 IDdef）
+struct IDdef;
 
 struct StructInfo
 {
-    std::vector<std::pair<std::string, varDef>> members;
+    std::vector<std::pair<std::string, IDdef>> members;
     size_t getmemberbias(std::string membername);
-    varDef* getmember(std::string name);
+    IDdef* getmember(std::string name);
 };
 
+// 存储类说明符从 Type 剥离，独立使用
+enum class StorageClassSpecifier
+{
+    VarDef, // func var均视为var
+    StructDef,
+    Typedef,
+    Extern,
+    Static
+};
+enum class ValueType
+{
+    Left,
+    Right
+};
 struct Type
 {
     enum class BasicType
@@ -41,22 +56,17 @@ struct Type
     };
     enum class Kind
     {
-        Undefined,    // 初始
-        ID,           // id
-        Basic,        // 基本类型
-        Pointer,      // 指针类型
-        Array,        // 数组类型
-        Function,     // 函数类型
-        StorageClass, // 存储类, 一般仅用于参数传递而非类型存储
-        Struct        // 结构体
+        Undefined, // 初始
+        // ID,           // id (计划移除)
+        Basic,    // 基本类型
+        Pointer,  // 指针类型
+        Array,    // 数组类型
+        Function, // 函数类型
+        // StorageClass, // 存储类 (计划移除)
+        Struct // 结构体
     };
-    enum class StorageClassSpecifier
-    {
-        None,
-        Typedef,
-        Extern,
-        Static
-    };
+    // 兼容旧代码的别名，后续移除
+    using StorageClassSpecifier = ::StorageClassSpecifier;
     enum class TypeQualifier
     {
         Const,
@@ -66,52 +76,37 @@ struct Type
     };
     Type() = default;
     Type(const Type&) = default;
-    Type(Kind kind, BasicType arg);          // for basic
-    Type(Kind kind, int arg);                // for arr ,ptr
-    Type(Kind kind, std::string arg);        // for id
-    Type(Kind kind, std::vector<Type> args); // for function
+    Type(Kind kind, BasicType arg);           // for basic
+    Type(Kind kind, int arg);                 // for arr ,ptr
+    Type(Kind kind, std::string arg);         // for id
+    Type(Kind kind, std::vector<IDdef> args); // for function
     Kind kind = Kind::Undefined;
-    StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::None;
+    ValueType valueType = ValueType::Right;
     StructInfo structInfo;
-    std::string id;
+    // 标识符名称在迁移到 IDdef 过程中暂时保留，后续可移除
+    std::string structID; // 仅用于struct
     // 基础类型
     BasicType basic_type; // avilable when kind == Basic
     value_ptr<Type> subType;
-    std::vector<Type> args;
+    std::vector<IDdef> args;
     int arr_or_ptr_num = -1;
     size_t alignas_num = 8;
-    size_t getAlignas() const;
+    // TODO: remove after callers stop encoding storage on Type
+    StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::VarDef;
+    // size_t getAlignas() const;
     Type& getTop();
     bool pushTop(const Type& what);
     Type popTop();
     std::string to_string() const;
     size_t getsize() const;
     bool operator==(const Type& other) const;
-    Type whthoutID(){
-        if (this->kind == Type::Kind::ID)
-        {
-            return *this->subType;
-        }
-        return *this;
-    }
-    Type& removeID()
-    {
-        if (this->kind == Type::Kind::ID)
-        {
-            auto tp = *this->subType;
-            *this = tp;
-        }
-        return *this;
-    }
+    // 兼容旧逻辑的占位：当前类型系统已去除 Kind::ID，直接返回自身
+    // Type whthoutID() const
+    // {
+    //     return *this;
+    // }
 };
-struct Identifi
-{
-    std::string name;
-    Type type;
-    bool is_defined;
-    int addr;
-};
-struct varDef : Identifi
+struct IDdef
 {
     enum class Kind
     {
@@ -119,21 +114,24 @@ struct varDef : Identifi
         Arg,
         Global
     };
+    std::string name;
+    Type type;
+    bool is_defined;
+    int addr;
+    StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::VarDef;
+    ValueType valueType = ValueType::Right;
     Kind kind = Kind::Local;
     std::string link_label;
+    struct FuncInfo
+    {
+        std::vector<std::string> asms;
+        inline static size_t parpera_for_stack_frame = VCPU<>::size_word;
+        size_t max_stack_size = 0;
+        size_t stack_size_now = 0;
+    } funcInfo;
     size_t get_addr_in_stack(size_t posnow);
-    varDef() = default;
-};
-struct funcDef : Identifi
-{
-    std::vector<std::string> asms;
-    Type rettype;
-    inline static size_t parpera_for_stack_frame = VCPU<>::size_word;
-    size_t max_stack_size = 0;
-    size_t stack_size_now = 0;
-    funcDef() = default;
-    funcDef(const funcDef&) = default;
-    funcDef& operator=(const funcDef&) = default;
+    IDdef() = default;
+    bool operator==(const IDdef& that) const;
 };
 
 struct DeclRepository
@@ -151,61 +149,31 @@ struct DeclRepository
     DeclRepository(DeclRepository&&) noexcept = default;
     DeclRepository& operator=(DeclRepository&&) noexcept = default;
 
-    tree_scoped_map<std::string, varDef, Label, ScopeMeta> var_decls;
-    tree_scoped_map<std::string, varDef, Label, ScopeMeta> extern_decls;
-    tree_scoped_map<std::string, varDef, Label, ScopeMeta> static_decls;
-    tree_scoped_map<std::string, Type, Label, ScopeMeta> func_decls;
-    tree_scoped_map<std::string, Type, Label, ScopeMeta> typedef_decls;
-    tree_scoped_map<std::string, Type, Label, ScopeMeta> struct_decls;
+    tree_scoped_map<std::string, IDdef, Label, ScopeMeta> var_decls;
+    tree_scoped_map<std::string, IDdef, Label, ScopeMeta> extern_decls;
+    tree_scoped_map<std::string, IDdef, Label, ScopeMeta> static_decls;
+    // tree_scoped_map<std::string, IDdef, Label, ScopeMeta> func_decls;// 与var_decls一起管理
+    tree_scoped_map<std::string, IDdef, Label, ScopeMeta> typedef_decls;
+    tree_scoped_map<std::string, IDdef, Label, ScopeMeta> struct_decls;
 
     size_t static_label_counter = 0;
 
     void enter_scope(const Label& label = {});
     void exit_scope();
-
-    bool add_var(varDef v, Type::StorageClassSpecifier storage, funcDef* func_ctx = nullptr,
-                 std::optional<std::size_t> arg_index = std::nullopt);
-    bool add_func(const Type& t);
-    bool add_typedef(const Type& t);
-    bool add_struct(const Type& t);
-
-    varDef* find_var(const std::string& name);
-    const varDef* find_var(const std::string& name) const;
-    Type* find_func(const std::string& name);
-    const Type* find_func(const std::string& name) const;
-    Type* find_typedef(const std::string& name);
-    const Type* find_typedef(const std::string& name) const;
-    Type* find_struct(const std::string& name);
-    const Type* find_struct(const std::string& name) const;
+    IDdef* add_ID_decl(const IDdef& IDdef,
+                       StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::VarDef);
+    IDdef* find_ID_decl(const std::string& ID, StorageClassSpecifier storageClassSpecifier =
+                                                   StorageClassSpecifier::VarDef);
 };
 
 struct OBJ;
 struct linker;
 struct exefile;
 // 符号表
-class SymbolTable
+struct SymbolTable
 {
-    friend OBJ;
-    friend linker;
-    friend exefile;
-
-  private:
-    std::unordered_map<std::string, varDef> globalvardef;
-    std::unordered_map<std::string, funcDef> globalfuncdef;
-    std::unordered_map<std::string, Type> globalvardecl;
-    std::unordered_map<std::string, Type> globalfuncdecl;
-
-  public:
-    SymbolTable() = default;
-    // 添加
-    varDef* add_global_var_def(const Type& vardef);
-    funcDef* add_global_func_def(const Type& vardef);
-    Type* add_global_var_decl(const Type& vardef);
-    Type* add_global_func_decl(const Type& vardef);
-    // 查找
-    Type* lookup_var_decl(const std::string& name);
-    Type* lookup_func_decl(const std::string& name);
-    funcDef* lookup_func_def(const std::string& name);
+    std::unordered_map<std::string, IDdef> globaldef;
+    std::unordered_map<std::string, IDdef> globaldecl;
 };
 
 struct OBJ
@@ -223,28 +191,5 @@ struct OBJ
     OBJ& operator=(OBJ&&) noexcept = default;
     void enter_decl_scope(const std::string& label = {});
     void exit_decl_scope();
-
     void flush_global_decls();
-
-    std::string global_label(const varDef& v) const;
-    std::string global_label(const std::string& name, Type::StorageClassSpecifier storage =
-                                                          Type::StorageClassSpecifier::None) const;
-
-    varDef* record_var_decl(const Type& t,
-                            Type::StorageClassSpecifier storage = Type::StorageClassSpecifier::None,
-                            funcDef* func_ctx = nullptr,
-                            std::optional<std::size_t> arg_index = std::nullopt);
-    bool record_func_decl(const Type& t);
-    bool record_typedef_decl(const std::string& name, const Type& target);
-    bool record_struct_decl(const Type& t);
-
-    varDef* lookup_var_decl(const std::string& name);
-    const varDef* lookup_var_decl(const std::string& name) const;
-    Type* lookup_func_decl(const std::string& name);
-    const Type* lookup_func_decl(const std::string& name) const;
-    Type* lookup_typedef(const std::string& name);
-    const Type* lookup_typedef(const std::string& name) const;
-    Type* lookup_struct_decl(const std::string& name);
-    const Type* lookup_struct_decl(const std::string& name) const;
-    // 代码生成接口
 };
