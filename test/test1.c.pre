@@ -1,4 +1,3 @@
-
 typedef struct tests
 {
     int a;
@@ -6,27 +5,17 @@ typedef struct tests
     int c;
 } sh;
 
-
-
-
-
-typedef long size_t;
-char* memmove(char* des, char* src, size_t n)
+int func(sh arg)
 {
-    for (size_t i = 0; i < n; i++)
-    {
-        des[i] = src[i];
-    }
-    return des;
+    arg.a = 4;
+    arg.b = 5;
+    arg.c = 6;
+    return 0;
 }
+
 int main()
 {
-    
-    
-    
-    int b = 12;
-    int c = 13;
-    
-    
-    return b;
+    sh aaa = {1, 2, 3};
+    func(aaa);
+    return aaa.b;
 }

@@ -46,49 +46,38 @@ struct ASM
         RET,
         EXIT,
         DARG,
+        MOVS,  // 字节数 n , 次栈顶 src, 次次栈顶 dest ，使用绝对地址拷贝
+        LODS,  // 栈顶字节数 n , 次栈顶绝对地址 addr，拷贝 addr 处 n 字节到栈顶(占用 n/word 向上取整)
+        SAVS,  // 栈顶字节数 n , 次栈顶绝对地址 addr，栈顶(占用 n/word 向上取整)内存拷贝到 addr 处
+        MOVDS, // ds+x,ds+y
+        SAVDS,
         SYSTEMCALL
     };
     static std::string asm2string(basic_asm in)
     {
         static const std::unordered_map<basic_asm, std::string> asm2stringmap{
-            {basic_asm::IMM, "IMM"},
-            {basic_asm::LEA, "LEA"},
-            {basic_asm::LEAD, "LEAD"},
-            {basic_asm::LI, "LI"},
-            {basic_asm::LC, "LC"},
-            {basic_asm::SI, "SI"},
-            {basic_asm::SC, "SC"},
-            {basic_asm::ADD, "ADD"},
-            {basic_asm::SUB, "SUB"},
-            {basic_asm::MUL, "MUL"},
-            {basic_asm::DIV, "DIV"},
-            {basic_asm::MOD, "MOD"},
-            {basic_asm::JMP, "JMP"},
-            {basic_asm::JZ, "JZ"},
-            {basic_asm::JNZ, "JNZ"},
-            {basic_asm::PUSH, "PUSH"},
-            {basic_asm::POP, "POP"},
-            {basic_asm::CALL, "CALL"},
-            {basic_asm::NVAR, "NVAR"},
-            {basic_asm::RET, "RET"},
-            {basic_asm::EXIT, "EXIT"},
-            {basic_asm::DARG, "DARG"},
-            {basic_asm::COPY, "COPY"},
-            {basic_asm::SYSTEMCALL, "SYSTEMCALL"},
-            {basic_asm::LW, "LW"},
-            {basic_asm::SW, "SW"},
-            {basic_asm::AND, "AND"},
-            {basic_asm::OR, "OR"},
-            {basic_asm::LSHIFT, "LSHIFT"},
-            {basic_asm::RSHIFT, "RSHIFT"},
-            {basic_asm::XOR, "XOR"},
-            {basic_asm::SMALL, "SMALL"},
-            {basic_asm::BIG, "BIG"},
-            {basic_asm::SMALLE, "SMALLE"},
-            {basic_asm::BIGE, "BIGE"},
+            {basic_asm::IMM, "IMM"},       {basic_asm::LEA, "LEA"},
+            {basic_asm::LEAD, "LEAD"},     {basic_asm::LI, "LI"},
+            {basic_asm::LC, "LC"},         {basic_asm::SI, "SI"},
+            {basic_asm::SC, "SC"},         {basic_asm::ADD, "ADD"},
+            {basic_asm::SUB, "SUB"},       {basic_asm::MUL, "MUL"},
+            {basic_asm::DIV, "DIV"},       {basic_asm::MOD, "MOD"},
+            {basic_asm::JMP, "JMP"},       {basic_asm::JZ, "JZ"},
+            {basic_asm::JNZ, "JNZ"},       {basic_asm::PUSH, "PUSH"},
+            {basic_asm::POP, "POP"},       {basic_asm::CALL, "CALL"},
+            {basic_asm::NVAR, "NVAR"},     {basic_asm::RET, "RET"},
+            {basic_asm::EXIT, "EXIT"},     {basic_asm::DARG, "DARG"},
+            {basic_asm::COPY, "COPY"},     {basic_asm::SYSTEMCALL, "SYSTEMCALL"},
+            {basic_asm::LW, "LW"},         {basic_asm::SW, "SW"},
+            {basic_asm::MOVS, "MOVS"},     {basic_asm::LODS, "LODS"},
+            {basic_asm::SAVS, "SAVS"},     {basic_asm::MOVDS, "MOVDS"},
+            {basic_asm::SAVDS, "SAVDS"},   {basic_asm::AND, "AND"},
+            {basic_asm::OR, "OR"},         {basic_asm::LSHIFT, "LSHIFT"},
+            {basic_asm::RSHIFT, "RSHIFT"}, {basic_asm::XOR, "XOR"},
+            {basic_asm::SMALL, "SMALL"},   {basic_asm::BIG, "BIG"},
+            {basic_asm::SMALLE, "SMALLE"}, {basic_asm::BIGE, "BIGE"},
             {basic_asm::CMP, "CMP"},
-            {basic_asm::CMPN, "CMPN"},
-            {basic_asm::NOT, "NOT"}};
+            {basic_asm::CMPN, "CMPN"},     {basic_asm::NOT, "NOT"}};
         auto it = asm2stringmap.find(in);
         if (it != asm2stringmap.end())
             return it->second;

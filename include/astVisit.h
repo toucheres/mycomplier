@@ -99,7 +99,7 @@ struct astVisitor
         ComplierParser::SpecifierQualifierListContext* ctx,
         std::vector<Type::TypeQualifier> typeQualifiers = std::vector<Type::TypeQualifier>{});
     void visitSelectionStatement(ComplierParser::SelectionStatementContext* ctx);
-    void visitArgumentExpressionList(ComplierParser::ArgumentExpressionListContext* ctx);
+    size_t visitArgumentExpressionList(ComplierParser::ArgumentExpressionListContext* ctx);
     void visitIterationStatement(ComplierParser::IterationStatementContext* ctx);
     void visitJumpStatement(ComplierParser::JumpStatementContext* ctx);
     std::vector<std::pair<std::string, IDdef>> visitStructDeclarationList(

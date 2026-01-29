@@ -1,4 +1,3 @@
-// #include <string.h>
 typedef struct tests
 {
     int a;
@@ -8,12 +7,15 @@ typedef struct tests
 
 int func(sh arg)
 {
-    return arg.a;
+    arg.a = 4;
+    arg.b = 5;
+    arg.c = 6;
+    return 0;
 }
 
 int main()
 {
-    int b = 12;
-    int c = 13;
-    return b;
+    sh aaa = {1, 2, 3};
+    func(aaa);
+    return aaa.b;
 }

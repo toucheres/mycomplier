@@ -2,6 +2,7 @@
 #include "error.hpp"
 #include <array>
 #include <expected>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -146,6 +147,89 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
         int64_t* addr = reinterpret_cast<int64_t*>(*sp);
         sp++;
         *addr = val;
+        return;
+    }
+    else if (ins == "MOVS")
+    {
+        // stack: [dest][src][n] (all absolute addresses)
+        auto n = static_cast<std::size_t>(*sp);
+        sp++;
+        auto src = reinterpret_cast<char*>(*sp);
+        sp++;
+        auto dst = reinterpret_cast<char*>(*sp);
+        sp++;
+        std::memmove(dst, src, n);
+        return;
+    }
+    else if (ins == "LODS")
+    {
+        // stack: [addr][n]; copy addr .. addr+n into stack as words (ceil)
+        auto n = static_cast<std::size_t>(*sp);
+        sp++;
+        auto addr = reinterpret_cast<char*>(*sp);
+        sp++;
+        const std::size_t word = sizeof(Word);
+        const std::size_t words = (n + word - 1) / word;
+        for (std::size_t i = words; i > 0; --i)
+        {
+            Word w = 0;
+            const std::size_t chunk_off = (i - 1) * word;
+            const std::size_t chunk = std::min(word, n - chunk_off);
+            std::memcpy(&w, addr + chunk_off, chunk);
+            sp--;
+            *sp = w;
+        }
+        return;
+    }
+    else if (ins == "SAVS")
+    {
+        // stack: [addr][n] then packed data words on top (already on stack)
+        auto n = static_cast<std::size_t>(*sp);
+        sp++;
+        auto addr = reinterpret_cast<char*>(*sp);
+        sp++;
+        const std::size_t word = sizeof(Word);
+        const std::size_t words = (n + word - 1) / word;
+        for (std::size_t i = 0; i < words; ++i)
+        {
+            Word w = *sp;
+            sp++;
+            const std::size_t chunk = std::min(word, n - i * word);
+            std::memcpy(addr + i * word, &w, chunk);
+        }
+        return;
+    }
+    else if (ins == "MOVDS")
+    {
+        // stack: [dest_off][src_off][n] relative to ds
+        auto n = static_cast<std::size_t>(*sp);
+        sp++;
+        auto src_off = static_cast<std::ptrdiff_t>(*sp);
+        sp++;
+        auto dst_off = static_cast<std::ptrdiff_t>(*sp);
+        sp++;
+        char* src = reinterpret_cast<char*>(ds) + src_off;
+        char* dst = reinterpret_cast<char*>(ds) + dst_off;
+        std::memmove(dst, src, n);
+        return;
+    }
+    else if (ins == "SAVDS")
+    {
+        // stack: [offset][n] then packed data words on top (already on stack)
+        auto n = static_cast<std::size_t>(*sp);
+        sp++;
+        auto off = static_cast<std::ptrdiff_t>(*sp);
+        sp++;
+        char* dst = reinterpret_cast<char*>(ds) + off;
+        const std::size_t word = sizeof(Word);
+        const std::size_t words = (n + word - 1) / word;
+        for (std::size_t i = 0; i < words; ++i)
+        {
+            Word w = *sp;
+            sp++;
+            const std::size_t chunk = std::min(word, n - i * word);
+            std::memcpy(dst + i * word, &w, chunk);
+        }
         return;
     }
     else if (ins == "ADD")

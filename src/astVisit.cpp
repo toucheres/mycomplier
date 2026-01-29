@@ -56,7 +56,15 @@ IDdef* astVisitor::record_ID_decl(const std::string& name, const Type& type,
 
     if (def.kind == IDdef::Kind::Arg && arg_index)
     {
-        def.addr = static_cast<int>(VCPU<>::size_word * (static_cast<int>(*arg_index) + 2));
+        // 参数按实际字节大小向上对齐到 word 计算偏移：
+        // [bp+0]=old bp, [bp+size_word]=ret addr, 之后依次为各实参
+        const std::size_t base_arg_offset = 2 * VCPU<>::size_word;
+        std::size_t offset = base_arg_offset;
+        for (std::size_t i = 0; i < *arg_index; ++i)
+        {
+            offset += align_up(func_ctx->type.args[i].type.getsize(), VCPU<>::size_word);
+        }
+        def.addr = static_cast<int>(offset);
     }
     else if (def.kind == IDdef::Kind::Local &&
              storageClassSpecifier != StorageClassSpecifier::Extern &&
@@ -969,7 +977,7 @@ IDdef astVisitor::visitDirectDeclarator(ComplierParser::DirectDeclaratorContext*
     else if (ctx->directDeclarator() && ctx->LeftBracket() &&
              ctx->assignmentExpression()) // base+ 数组
     {
-        var = (visitDirectDeclarator(ctx->directDeclarator()));
+        var = visitDirectDeclarator(ctx->directDeclarator());
         // parseConstexpr 返回 long long, 这里数组维度内部使用 int, 显式窄化避免警告
         var.type.pushTop(
             Type(Type::Kind::Array, static_cast<int>(parseConstexpr(ctx->assignmentExpression()))));
@@ -1790,14 +1798,11 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
         auto todo = ctx->children[end - 1];
         if (todo->getText() == "(") // func call
         {
-            int args_num = 0;
+            size_t args_words = 0;
             if (ctx->children[end]->getText() != ")") // 有expressionlist
             {
-                visitArgumentExpressionList(
+                args_words = visitArgumentExpressionList(
                     dc<ComplierParser::ArgumentExpressionListContext*>(ctx->children[end]));
-                args_num = dc<ComplierParser::ArgumentExpressionListContext*>(ctx->children[end])
-                               ->assignmentExpression()
-                               .size();
             }
             auto funcaddr = func(0, end - 1); // 解析函数地址
             // funcaddr.removeID();
@@ -1823,7 +1828,8 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
             {
                 THROW_ERR(error::expected_func_or_funcptr, ctx);
             }
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::DARG, args_num});
+            funcnow->funcInfo.asms.push_back(
+                ASM{ASM::basic_asm::DARG, static_cast<int>(args_words)});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::PUSH});
             return rettype;
         }
@@ -2125,13 +2131,55 @@ void astVisitor::visitSelectionStatement(ComplierParser::SelectionStatementConte
     // [TODO] switch
 }
 
-void astVisitor::visitArgumentExpressionList(ComplierParser::ArgumentExpressionListContext* ctx)
+size_t astVisitor::visitArgumentExpressionList(ComplierParser::ArgumentExpressionListContext* ctx)
 {
-    // 实参从右向左入栈
-    for (int i = ctx->assignmentExpression().size() - 1; i >= 0; i--)
+    // 实参从右向左入栈，返回占用的 word 数（按 8 字节向上取整）
+    size_t words = 0;
+    for (int i = static_cast<int>(ctx->assignmentExpression().size()) - 1; i >= 0; --i)
     {
-        (void)(visitAssignmentExpression(ctx->assignmentExpression()[i]));
+        Type arg = visitAssignmentExpression(ctx->assignmentExpression()[i]);
+
+        if (arg.kind == Type::Kind::Struct)
+        {
+            if (!stackTopIsLvalue())
+            {
+                THROW_ERR(error::expected_lvalue, ctx->assignmentExpression()[i]);
+            }
+            madeTopIsLvalueAddr();
+            // 目前仅支持可取地址的结构体实参（左值）。假定栈顶为地址。
+            const size_t n = arg.getsize();
+            const size_t word = VCPU<>::size_word;
+            const size_t chunks = (n + word - 1) / word;
+
+            // 地址已在栈顶（绝对地址），直接批量拷贝。
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, static_cast<int>(n)});
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LODS});
+
+            words += chunks;
+        }
+        else
+        {
+            const size_t sz = arg.getsize();
+            if (sz == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
+            {
+                words += 1; // char promoted to word on stack (already word)
+            }
+            else if (sz == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
+            {
+                words += 1;
+            }
+            else if (sz == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
+            {
+                words += 1;
+            }
+            else
+            {
+                // 其他类型按 word 对齐
+                words += (sz + VCPU<>::size_word - 1) / VCPU<>::size_word;
+            }
+        }
     }
+    return words;
 }
 
 void astVisitor::visitIterationStatement(ComplierParser::IterationStatementContext* ctx)
@@ -2139,7 +2187,7 @@ void astVisitor::visitIterationStatement(ComplierParser::IterationStatementConte
     if (ctx->children[0]->getText() == "while")
     {
         int startppos = funcnow->funcInfo.asms.size();
-        (void)(visitExpression(ctx->expression()));
+        visitExpression(ctx->expression());
         int after_expr = funcnow->funcInfo.asms.size();
         funcnow->funcInfo.asms.push_back("HOLD"); // for jz end
         visitStatement(ctx->statement());
