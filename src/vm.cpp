@@ -18,6 +18,12 @@ VM::VM(const std::vector<std::string>& asms)
         free((void*)tp);
     };
     vcpu.systemcall_table[VM::systemcall::BREAKPOINT] = [this](VCPU<>& thiscpu) { debug(); };
+    vcpu.systemcall_table[VM::systemcall::OPEN] = [](VCPU<>& thiscpu)
+    {
+        long fileptr = *thiscpu.sp;
+        long modeptr = *(thiscpu.sp + 1);
+        *thiscpu.ax = (long)fopen((char*)fileptr, (char*)modeptr);
+    };
 }
 
 std::optional<int64_t> VM::run()

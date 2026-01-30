@@ -30,3 +30,20 @@ void __write(char in)
     _asm_("POP");
     return;
 }
+long __open(char* file, char* mode)
+{
+    long ret;
+    _asm_("IMM -8");
+    _asm_("LEA");
+    _asm_("IMM 24"); // mode
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("IMM 16"); // file
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("SYSTEMCALL 4");
+    _asm_("DARG 2");
+    _asm_("PUSH");
+    _asm_("SW");
+    return ret;
+}

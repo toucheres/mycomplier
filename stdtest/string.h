@@ -20,6 +20,24 @@ char* strcpy(char* to, char* from)
     }
     return tmp;
 }
+int strcmp(char* str1, char* str2)
+{
+    int ret = 0;
+    while (!(ret = *str1 - *str2) && *str1)
+    {
+        str1++;
+        str2++;
+    }
+    if (ret < 0)
+    {
+        return -1;
+    }
+    else if (ret > 0)
+    {
+        return 1;
+    }
+    return 0;
+}
 char* memmove(char* des, char* src, size_t n)
 {
     for (size_t i = 0; i < n; i++)

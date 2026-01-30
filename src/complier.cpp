@@ -29,6 +29,8 @@ size_t Type::getsize() const
         {
         case BasicType::Char:
             return 1;
+        case BasicType::Short:
+            return VCPU<>::size_word / 4;
         case BasicType::Int:
             return VCPU<>::size_word / 2;
         case BasicType::Long:

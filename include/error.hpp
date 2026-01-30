@@ -31,6 +31,7 @@ enum class error
     expected_arr_initor,
     expected_aligned_addr,
     expected_struct,
+    expected_struct_ptr,
     expected_func_or_funcptr,
     expected_ptr,
     expected_type,

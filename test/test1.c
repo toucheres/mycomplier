@@ -1,4 +1,4 @@
-// #include <stdio.h>
+#include <stdio.h>
 typedef struct tests
 {
     int a;
@@ -11,12 +11,11 @@ sh func(sh arg)
     arg.a = 4;
     arg.b = 5;
     arg.c = 6;
+    printf("arg.a=%d,arg.b=%c,arg.c=%c\n", arg.a, arg.b, arg.c);
     return arg;
 }
 
 int main()
 {
-    sh aaa = {1, 2, 3};
-    aaa = func(aaa);
-    return aaa.a;
+    return fopen("/home/toucher/vscoderope/mycomplier/test/test1.c", "r")->_fileno;
 }

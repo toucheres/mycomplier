@@ -1884,6 +1884,20 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
         {
             auto type = func(0, end - 1);
             auto membername = ctx->Identifier()[idindex--]->getText();
+            if (type.kind != Type::Kind::Pointer || type.subType->kind != Type::Kind::Struct)
+            {
+                THROW_ERR(error::expected_struct_ptr, ctx);
+            }
+            auto memvars = type.subType->structInfo.getmember(membername);
+            if (!memvars)
+            {
+                THROW_ERR(error::undifined_feild, ctx);
+            }
+            funcnow->funcInfo.asms.push_back(
+                ASM{ASM::basic_asm::IMM, type.subType->structInfo.getmemberbias(membername)});
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
+            loadStackTopAddrByType(memvars->type);
+            return memvars->type;
         }
         else
         {
