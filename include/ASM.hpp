@@ -46,11 +46,10 @@ struct ASM
         RET,
         EXIT,
         DARG,
-        MOVS,  // 字节数 n , 次栈顶 src, 次次栈顶 dest ，使用绝对地址拷贝
-        LODS,  // 栈顶字节数 n , 次栈顶绝对地址 addr，拷贝 addr 处 n 字节到栈顶(占用 n/word 向上取整)
-        SAVS,  // 栈顶字节数 n , 次栈顶绝对地址 addr，栈顶(占用 n/word 向上取整)内存拷贝到 addr 处
-        MOVDS, // ds+x,ds+y
-        SAVDS,
+        MOVS,  // 字节数 n 可由可选立即数携带，否则从栈顶取；栈为 [dest][src][n]
+        LODS,  // 字节数 n 可由可选立即数携带，否则从栈顶取；栈为 [addr][n]
+        SAVS,  // 字节数 n 可由可选立即数携带，否则从栈顶取；栈为 [addr][n] + 数据
+        SWAP,  // 交换栈顶和次栈顶
         SYSTEMCALL
     };
     static std::string asm2string(basic_asm in)
@@ -70,8 +69,8 @@ struct ASM
             {basic_asm::COPY, "COPY"},     {basic_asm::SYSTEMCALL, "SYSTEMCALL"},
             {basic_asm::LW, "LW"},         {basic_asm::SW, "SW"},
             {basic_asm::MOVS, "MOVS"},     {basic_asm::LODS, "LODS"},
-            {basic_asm::SAVS, "SAVS"},     {basic_asm::MOVDS, "MOVDS"},
-            {basic_asm::SAVDS, "SAVDS"},   {basic_asm::AND, "AND"},
+            {basic_asm::SAVS, "SAVS"},     {basic_asm::SWAP, "SWAP"},
+            {basic_asm::AND, "AND"},
             {basic_asm::OR, "OR"},         {basic_asm::LSHIFT, "LSHIFT"},
             {basic_asm::RSHIFT, "RSHIFT"}, {basic_asm::XOR, "XOR"},
             {basic_asm::SMALL, "SMALL"},   {basic_asm::BIG, "BIG"},

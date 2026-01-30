@@ -104,6 +104,14 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
         *sp = *(sp + 1);
         return;
     }
+    else if (ins == "SWAP")
+    {
+        // swap top and second-top
+        Word tmp = *sp;
+        *sp = *(sp + 1);
+        *(sp + 1) = tmp;
+        return;
+    }
     else if (ins == "LI")
     {
         int32_t* addr = reinterpret_cast<int32_t*>(*sp);
@@ -151,9 +159,18 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
     }
     else if (ins == "MOVS")
     {
-        // stack: [dest][src][n] (all absolute addresses)
-        auto n = static_cast<std::size_t>(*sp);
-        sp++;
+        // stack: [dest][src][n] (all absolute addresses); n may be immediate
+        std::size_t n = 0;
+        if (std::string arg; str >> arg)
+        {
+            n = static_cast<std::size_t>(std::stoull(arg));
+        }
+        else
+        {
+            n = static_cast<std::size_t>(*sp);
+            sp++;
+        }
+
         auto src = reinterpret_cast<char*>(*sp);
         sp++;
         auto dst = reinterpret_cast<char*>(*sp);
@@ -163,9 +180,18 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
     }
     else if (ins == "LODS")
     {
-        // stack: [addr][n]; copy addr .. addr+n into stack as words (ceil)
-        auto n = static_cast<std::size_t>(*sp);
-        sp++;
+        // stack: [addr][n]; n may be immediate
+        std::size_t n = 0;
+        if (std::string arg; str >> arg)
+        {
+            n = static_cast<std::size_t>(std::stoull(arg));
+        }
+        else
+        {
+            n = static_cast<std::size_t>(*sp);
+            sp++;
+        }
+
         auto addr = reinterpret_cast<char*>(*sp);
         sp++;
         const std::size_t word = sizeof(Word);
@@ -183,9 +209,18 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
     }
     else if (ins == "SAVS")
     {
-        // stack: [addr][n] then packed data words on top (already on stack)
-        auto n = static_cast<std::size_t>(*sp);
-        sp++;
+        // stack: [addr][n] then packed data words on top; n may be immediate
+        std::size_t n = 0;
+        if (std::string arg; str >> arg)
+        {
+            n = static_cast<std::size_t>(std::stoull(arg));
+        }
+        else
+        {
+            n = static_cast<std::size_t>(*sp);
+            sp++;
+        }
+
         auto addr = reinterpret_cast<char*>(*sp);
         sp++;
         const std::size_t word = sizeof(Word);
@@ -196,39 +231,6 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
             sp++;
             const std::size_t chunk = std::min(word, n - i * word);
             std::memcpy(addr + i * word, &w, chunk);
-        }
-        return;
-    }
-    else if (ins == "MOVDS")
-    {
-        // stack: [dest_off][src_off][n] relative to ds
-        auto n = static_cast<std::size_t>(*sp);
-        sp++;
-        auto src_off = static_cast<std::ptrdiff_t>(*sp);
-        sp++;
-        auto dst_off = static_cast<std::ptrdiff_t>(*sp);
-        sp++;
-        char* src = reinterpret_cast<char*>(ds) + src_off;
-        char* dst = reinterpret_cast<char*>(ds) + dst_off;
-        std::memmove(dst, src, n);
-        return;
-    }
-    else if (ins == "SAVDS")
-    {
-        // stack: [offset][n] then packed data words on top (already on stack)
-        auto n = static_cast<std::size_t>(*sp);
-        sp++;
-        auto off = static_cast<std::ptrdiff_t>(*sp);
-        sp++;
-        char* dst = reinterpret_cast<char*>(ds) + off;
-        const std::size_t word = sizeof(Word);
-        const std::size_t words = (n + word - 1) / word;
-        for (std::size_t i = 0; i < words; ++i)
-        {
-            Word w = *sp;
-            sp++;
-            const std::size_t chunk = std::min(word, n - i * word);
-            std::memcpy(dst + i * word, &w, chunk);
         }
         return;
     }

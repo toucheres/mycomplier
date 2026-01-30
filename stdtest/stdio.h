@@ -270,6 +270,7 @@ long printf(char* fmt, ...)
                 // fmt = fmt + 1;
                 char src[12];
                 long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                src[size] = 0;
                 print_str(src);
                 arg_index = arg_index + 1;
                 charsnum = charsnum + size;
@@ -286,6 +287,7 @@ long printf(char* fmt, ...)
             {
                 char src[12];
                 long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                src[size] = 0;
                 print_str(src);
                 arg_index = arg_index + 1;
                 charsnum = charsnum + size;
@@ -298,6 +300,7 @@ long printf(char* fmt, ...)
                 {
                     char src[12];
                     long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
+                    src[size] = 0;
                     print_str(src);
                     arg_index = arg_index + 1;
                     charsnum = charsnum + size;

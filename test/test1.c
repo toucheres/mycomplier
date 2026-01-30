@@ -1,3 +1,4 @@
+#include <stdio.h>
 typedef struct tests
 {
     int a;
@@ -5,17 +6,20 @@ typedef struct tests
     int c;
 } sh;
 
-int func(sh arg)
+sh func(sh arg)
 {
     arg.a = 4;
     arg.b = 5;
     arg.c = 6;
-    return 0;
+    printf("arg.a=%d,arg.b=%c,arg.c=%c\n", arg.a, arg.b, arg.c);
+    return arg;
 }
 
 int main()
 {
     sh aaa = {1, 2, 3};
-    func(aaa);
-    return aaa.b;
+    printf("aaa.a=%d,aaa.b=%c,aaa.c=%d\n", aaa.a, aaa.b, aaa.c);
+    // aaa = func(aaa);
+    printf("aaa.a=%d,aaa.b=%c,aaa.c=%d\n", aaa.a, aaa.b, aaa.c);
+    return 0;
 }

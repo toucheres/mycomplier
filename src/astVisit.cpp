@@ -1145,38 +1145,17 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
             funcnow->funcInfo.asms.push_back(
                 ASM{ASM::basic_asm::COPY}); // 拷贝一份左值地址实现返回值
             (void)(visitAssignmentExpression(ctx->assignmentExpression()));
-            if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SC});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LC});
-            }
-            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SI});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LI});
-            }
-            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SW});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW});
-            }
+            saveStackTopAddrValueByType(uret);
+            loadStackTopAddrByType(uret);
         }
         else
         {
             funcnow->funcInfo.asms.push_back(
                 ASM{ASM::basic_asm::COPY}); // 拷贝一份左值地址实现返回值
+            funcnow->funcInfo.asms.push_back(
+                ASM{ASM::basic_asm::COPY}); // 再拷贝一份用于加载左操作数
 
-            (void)(visitUnaryExpression(ctx->unaryExpression()));
-            funcnow->funcInfo.asms.pop_back(); // 取一份左值用于运算
-
-            if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LC});
-            }
-            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LI});
-            }
+            loadStackTopAddrByType(uret); // 加载左操作数值
 
             (void)(visitAssignmentExpression(ctx->assignmentExpression()));
 
@@ -1212,23 +1191,8 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
             {
                 funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::XOR});
             }
-            // [TODO] bit operator asm
-
-            if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SC});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LC});
-            }
-            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SI});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LI});
-            }
-            else if (uret.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SW});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW});
-            }
+            saveStackTopAddrValueByType(uret);
+            loadStackTopAddrByType(uret);
         }
         return uret;
     }
@@ -1651,18 +1615,7 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
                 THROW_ERR(error::expected_ptr, ctx->castExpression());
             }
             type = *cret.subType;
-            if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LI});
-            }
-            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LC});
-            }
-            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW});
-            }
+            loadStackTopAddrByType(type);
         }
         else if (ctx->unaryOperator()->getText() == "+") //+12
         {
@@ -1700,36 +1653,16 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
                 THROW_ERR(error::expected_lvalue, ctx);
             }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
+            loadStackTopAddrByType(type);
+            long step = 1;
             if (type.kind == Type::Kind::Pointer)
             {
-                const auto step =
-                    static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, step});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SW});
+                step = static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
             }
-            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LC});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 1});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SC});
-            }
-            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LI});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 1});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SI});
-            }
-            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 1});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SW});
-            }
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, step});
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
+            saveStackTopAddrValueByType(type);
+            loadStackTopAddrByType(type);
         }
         else if (ctx->children[i]->getText() == "--")
         {
@@ -1742,36 +1675,16 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
                 THROW_ERR(error::expected_lvalue, ctx);
             }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
+            loadStackTopAddrByType(type);
+            long step = 1;
             if (type.kind == Type::Kind::Pointer)
             {
-                const auto step =
-                    static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, step});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SW});
+                step = static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
             }
-            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LC});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 1});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SC});
-            }
-            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LI});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 1});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SI});
-            }
-            else if (type.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 1});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SW});
-            }
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, step});
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
+            saveStackTopAddrValueByType(type);
+            loadStackTopAddrByType(type);
         }
         //[TODO] sizeof无副作用
         else if (ctx->children[i]->getText() == "sizeof" &&
@@ -1854,51 +1767,24 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, eleType.getsize()});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::MUL});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
-            if (eleType.getsize() == Type{Type::Kind::Basic, Type::BasicType::Int}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LI});
-            }
-            else if (eleType.getsize() == Type{Type::Kind::Basic, Type::BasicType::Char}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LC});
-            }
-            else if (eleType.getsize() == Type{Type::Kind::Basic, Type::BasicType::Long}.getsize())
-            {
-                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW});
-            }
+            loadStackTopAddrByType(eleType);
             return eleType;
         }
         else if (todo->getText() == "++" || todo->getText() == "--")
         {
+            // 后置 ++/--: 返回原值，变量自增/自减
             auto valType = func(0, end - 1);
-            auto& lastAsm = funcnow->funcInfo.asms.back();
             if (!stackTopIsLvalue())
             {
                 THROW_ERR(error::expected_lvalue, ctx);
             }
-            funcnow->funcInfo.asms.pop_back();
+            madeTopIsLvalueAddr(); // 栈顶现在是地址
 
-            auto pickLoadStore = [](const Type& ty)
-            {
-                auto charSize = Type{Type::Kind::Basic, Type::BasicType::Char}.getsize();
-                auto intSize = Type{Type::Kind::Basic, Type::BasicType::Int}.getsize();
-                if (ty.getsize() == charSize)
-                {
-                    return std::pair{ASM::basic_asm::LC, ASM::basic_asm::SC};
-                }
-                if (ty.getsize() == intSize)
-                {
-                    return std::pair{ASM::basic_asm::LI, ASM::basic_asm::SI};
-                }
-                return std::pair{ASM::basic_asm::LW, ASM::basic_asm::SW};
-            };
-
-            auto [loadOp, storeOp] = pickLoadStore(valType);
-
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
-            funcnow->funcInfo.asms.push_back(ASM{loadOp});
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::POP});
+            // 栈: [addr]
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY}); // [addr][addr]
+            loadStackTopAddrByType(valType); // [addr][orig]
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY}); // [addr][orig][orig]
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::POP});  // ax=orig, 栈: [addr][orig]
 
             long step = 1;
             if (valType.kind == Type::Kind::Pointer)
@@ -1910,8 +1796,9 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, step});
             funcnow->funcInfo.asms.push_back(
                 ASM{todo->getText() == "++" ? ASM::basic_asm::ADD : ASM::basic_asm::SUB});
-            funcnow->funcInfo.asms.push_back(ASM{storeOp});
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::PUSH});
+            // 栈: [addr][new_val]
+            saveStackTopAddrValueByType(valType); // 栈: []
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::PUSH}); // [orig]
             return valType;
         }
         else if (todo->getText() == ".") // 结构体直接成员访问运算符
@@ -3128,6 +3015,25 @@ Type astVisitor::loadStackTopAddrByType(Type type)
     }
     loadStackTopAddrBySize(type.getsize());
     return type;
+}
+
+void astVisitor::saveStackTopAddrValueByType(Type type)
+{
+    if (type.kind == Type::Kind::Struct)
+    {
+        //[TODO] LODS
+        THROW_ERR_NOCTX(error::unsurpported_op); // struct assignment not supported here
+    }
+    if (type.kind == Type::Kind::Array)
+    {
+        Type tp;
+        tp.kind = Type::Kind::Pointer;
+        tp.arr_or_ptr_num = 1;
+        tp.subType = type.subType;
+        SaveStackTopValueToAddr(tp.getsize());
+        return;
+    }
+    SaveStackTopValueToAddr(type.getsize());
 }
 
 void astVisitor::loadStackTopAddrBySize(size_t size)

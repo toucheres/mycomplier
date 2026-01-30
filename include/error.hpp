@@ -95,17 +95,35 @@ struct compile_error : std::exception
 {
     error code;
     std::string ctx_text;      // 来自 ctx->getText()
+    std::string file;          // 抛出位置: 源文件
+    int line = 0;              // 抛出位置: 行号
+    std::string func;          // 抛出位置: 函数
     std::string message_cache; // 缓存 what() 返回值
 
-    compile_error(error c, std::string ctx = {}) : code(c), ctx_text(std::move(ctx))
+    compile_error(error c, std::string ctx = {}, const char* file_in = nullptr,
+                  int line_in = 0, const char* func_in = nullptr)
+        : code(c), ctx_text(std::move(ctx)), file(file_in ? file_in : ""), line(line_in),
+          func(func_in ? func_in : "")
     {
+        message_cache = std::string("error[") + error_name(code) + "]";
+
+        if (!file.empty())
+        {
+            message_cache += ": " + file;
+            if (line > 0)
+            {
+                message_cache += ":" + std::to_string(line);
+            }
+        }
+
+        if (!func.empty())
+        {
+            message_cache += " in " + func;
+        }
+
         if (!ctx_text.empty())
         {
-            message_cache = std::string("error[") + error_name(code) + "]: " + ctx_text;
-        }
-        else
-        {
-            message_cache = std::string("error[") + error_name(code) + "]";
+            message_cache += " -> " + ctx_text;
         }
     }
 
@@ -130,8 +148,8 @@ struct compile_error : std::exception
             {                                                                                      \
             }                                                                                      \
         }                                                                                          \
-        throw compile_error((code), std::move(_ctx_str));                                          \
+        throw compile_error((code), std::move(_ctx_str), __FILE__, __LINE__, __func__);            \
     } while (0)
 
 // 无上下文场景
-#define THROW_ERR_NOCTX(code) throw compile_error((code))
+#define THROW_ERR_NOCTX(code) throw compile_error((code), {}, __FILE__, __LINE__, __func__)

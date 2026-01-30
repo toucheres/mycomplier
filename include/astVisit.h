@@ -33,6 +33,7 @@ struct astVisitor
     bool madeTopIsLvalueAddr();
     Type load_var_or_func(std::string name);
     Type loadStackTopAddrByType(Type size);
+    void saveStackTopAddrValueByType(Type type);
     void loadStackTopAddrBySize(size_t size);
     void SaveStackTopValueToAddr(size_t size);
     std::vector<IDdef> lowerDeclaration(ComplierParser::DeclarationSpecifiersContext* specs,

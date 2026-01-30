@@ -8,5 +8,9 @@
 [OK][TODO] 结构体变量的声明解析与内存分配
 [OK][TODO] 结构体变量的运算
 [OK][TODO] 结构体变量的初始化
-[TODO] 结构体变量的参数传递与返回
+[OK][TODO] 结构体变量的参数传递
+[OK][TODO] 结构体变量的拷贝
+[TODO] 结构体变量的返回
 [OK][TODO] 优化type的id/storageClass到varDef中, type不再保留id/storageClass信息
+[OK][TODO] printf的%c乱码
+[TODO] 结构体一律按栈运算
