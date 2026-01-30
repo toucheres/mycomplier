@@ -496,6 +496,24 @@ std::optional<std::vector<int>> astVisitor::decodeStringLiteral(
     return result;
 }
 
+std::optional<Type> astVisitor::tryVisitType(std::function<Type()> expr)
+{
+    auto start = funcnow->funcInfo.asms.size();
+    //[TODO] 目前回退了funasms, 应回退obj状态
+    // auto objcopy = obj;
+    std::optional<Type> rettype;
+    try
+    {
+        rettype = expr();
+    }
+    catch (...)
+    {
+        funcnow->funcInfo.asms.resize(start);
+    }
+    funcnow->funcInfo.asms.resize(start);
+    return rettype;
+}
+
 std::vector<IDdef> astVisitor::visitDeclaration(ComplierParser::DeclarationContext* ctx)
 {
     return lowerDeclaration(ctx->declarationSpecifiers(), ctx->initDeclaratorList());
@@ -526,6 +544,21 @@ void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionConte
     functionType.storageClassSpecifier = storageClassSpecifier;
     functionType.kind = IDdef::Kind::Global;
 
+    // 检查返回类型是否为结构体，如果是则添加隐式返回指针参数
+    const Type rettype = (functionType.type.subType) ? *functionType.type.subType : Type{};
+    const bool is_struct_return = (rettype.kind == Type::Kind::Struct);
+
+    if (is_struct_return)
+    {
+        // 在参数列表最前面添加隐式返回指针参数
+        IDdef ret_ptr_arg;
+        ret_ptr_arg.name = "__struct_ret_ptr";
+        ret_ptr_arg.type = Type{Type::Kind::Pointer, 1};
+        ret_ptr_arg.type.subType = value_ptr<Type>::make_value_ptr(rettype);
+        ret_ptr_arg.storageClassSpecifier = StorageClassSpecifier::VarDef;
+        functionType.type.args.insert(functionType.type.args.begin(), ret_ptr_arg);
+    }
+
     auto gfunptr_local = funcnow;
     auto* funnowptr = record_ID_decl(functionType);
     funcnow = funnowptr;
@@ -539,8 +572,8 @@ void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionConte
     }
     funcnow->funcInfo.asms.push_back("HOLD");
     visitCompoundStatement(ctx->compoundStatement());
-    const Type rettype = (funcnow->type.subType) ? *funcnow->type.subType : Type{};
-    if (rettype.kind == Type::Kind::Basic && rettype.basic_type == Type::BasicType::Void)
+    const Type funcrettype = (funcnow->type.subType) ? *funcnow->type.subType : Type{};
+    if (funcrettype.kind == Type::Kind::Basic && funcrettype.basic_type == Type::BasicType::Void)
     {
         // 为void func添加自动return
         if (funcnow->funcInfo.asms.back() != (std::string)ASM{ASM::basic_asm::RET})
@@ -1714,10 +1747,28 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
         if (todo->getText() == "(") // func call
         {
             size_t args_words = 0;
+
             if (ctx->children[end]->getText() != ")") // 有expressionlist
             {
                 args_words = visitArgumentExpressionList(
                     dc<ComplierParser::ArgumentExpressionListContext*>(ctx->children[end]));
+            }
+            auto funtype = tryVisitType([this, &func, end]() { return func(0, end - 1); });
+            // 返回值为struct
+            if (funtype && (*funtype).subType->kind == Type::Kind::Struct)
+            {
+                // args_words +=
+                //     ((*funtype).subType->getsize() + VCPU<>::size_word - 1) / VCPU<>::size_word;
+                args_words += 1; // 传入指针
+                // 创建局部变量传入指针
+                IDdef struct_ret;
+                struct_ret.type = (*funtype).subType;
+                struct_ret.kind = IDdef::Kind::Local;
+                static size_t index = 0;
+                struct_ret.name = "__struct_ret" + index++;
+                auto def = record_ID_decl(struct_ret, funcnow);
+                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, def->addr});
+                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LEA, def->addr});
             }
             auto funcaddr = func(0, end - 1); // 解析函数地址
             // funcaddr.removeID();
@@ -1732,12 +1783,10 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
                 funcaddr.subType->kind == Type::Kind::Function) // 函数指针
             {
                 rettype = *funcaddr.subType->subType;
-                // args_num = funcaddr.value().subType->args.size();// 由实参决定以支持可变参
             }
             else if (funcaddr.kind == Type::Kind::Function) // 函数
             {
                 rettype = *funcaddr.subType;
-                // args_num = funcaddr.value().args.size();
             }
             else
             {
@@ -1746,6 +1795,11 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
             funcnow->funcInfo.asms.push_back(
                 ASM{ASM::basic_asm::DARG, static_cast<int>(args_words)});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::PUSH});
+            if (funtype && (*funtype).subType->kind == Type::Kind::Struct)
+            {
+                funcnow->funcInfo.asms.push_back(
+                    ASM{ASM::basic_asm::LODS, (*funtype).subType->getsize()});
+            }
             return rettype;
         }
         else if (todo->getText() == "[") // arr[] ptr[]
@@ -2038,12 +2092,10 @@ size_t astVisitor::visitArgumentExpressionList(ComplierParser::ArgumentExpressio
             // 目前仅支持可取地址的结构体实参（左值）。假定栈顶为地址。
             const size_t n = arg.getsize();
             const size_t word = VCPU<>::size_word;
-            const size_t chunks = (n + word - 1) / word;
-
+            const size_t chunks = align_up(n, word) / word;
             // 地址已在栈顶（绝对地址），直接批量拷贝。
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, static_cast<int>(n)});
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LODS});
-
+            // funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, static_cast<int>(n)});
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LODS, n});
             words += chunks;
         }
         else
@@ -2211,9 +2263,48 @@ void astVisitor::visitJumpStatement(ComplierParser::JumpStatementContext* ctx)
     }
     else if (ctx->children[0]->getText() == "return")
     {
+        // 获取当前函数的返回类型
+        const Type rettype = (funcnow->type.subType) ? *funcnow->type.subType : Type{};
+        const bool is_struct_return = (rettype.kind == Type::Kind::Struct);
+
         if (ctx->expression())
         {
-            (void)(visitExpression(ctx->expression()));
+            Type exprType = visitExpression(ctx->expression());
+
+            if (is_struct_return)
+            {
+                // 结构体返回：将返回值写入隐式传入的返回指针
+                // 隐式返回指针是第一个参数，偏移为 2 * size_word（跳过old bp和ret addr）
+                const size_t ret_ptr_offset = 2 * VCPU<>::size_word;
+
+                // 如果表达式结果是左值，取其地址
+                if (stackTopIsLvalue())
+                {
+                    madeTopIsLvalueAddr();
+                }
+                // 栈顶现在是源地址
+
+                // 加载隐式返回指针（目标地址）
+                funcnow->funcInfo.asms.push_back(
+                    ASM{ASM::basic_asm::IMM, static_cast<int>(ret_ptr_offset)});
+                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LEA});
+                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW}); // 解引用获取实际目标地址
+
+                // 交换使得 栈: [dest][src]
+                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SWAP});
+
+                // 拷贝结构体内容
+                const size_t struct_size = rettype.getsize();
+                funcnow->funcInfo.asms.push_back(
+                    ASM{ASM::basic_asm::MOVS, static_cast<int>(struct_size)});
+
+                // 返回隐式返回指针的值（用于链式调用）
+                funcnow->funcInfo.asms.push_back(
+                    ASM{ASM::basic_asm::IMM, static_cast<int>(ret_ptr_offset)});
+                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LEA});
+                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LW});
+            }
+            // 非结构体返回：表达式值已在栈顶
         }
         else
         {
@@ -2964,7 +3055,15 @@ bool astVisitor::madeTopIsLvalueAddr()
 {
     if (stackTopIsLvalue())
     {
-        funcnow->funcInfo.asms.pop_back();
+        if (funcnow->funcInfo.asms.back() == "LODS") // 栈顶还有lods的参数
+        {
+            funcnow->funcInfo.asms.pop_back();
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::POP});
+        }
+        else
+        {
+            funcnow->funcInfo.asms.pop_back();
+        }
         return true;
     }
     return false;
@@ -3028,7 +3127,7 @@ void astVisitor::saveStackTopAddrValueByType(Type type)
             THROW_ERR_NOCTX(error::unsurpported_op);
         }
         funcnow->funcInfo.asms.pop_back();
-        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::MOVS,type.getsize()}) ;
+        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::MOVS, type.getsize()});
         return;
     }
     if (type.kind == Type::Kind::Array)

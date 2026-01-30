@@ -33,7 +33,12 @@ int main(int argc, const char* argv[])
         bool enable_debug = tvm.get(app_options::enable_debug).or_(false);
         bool printasm = tvm.get(print_asm).or_(false);
         bool printretvalue = tvm.get(print_ret_value).or_(false);
-
+        if (enable_debug)
+        {
+            // 禁用 stdout 缓冲，确保崩溃时输出不丢失
+            std::cout << std::unitbuf;
+            std::setvbuf(stdout, nullptr, _IONBF, 0);
+        }
         auto ret =
             complier::process(tvm.get_direct(input_files), showASt, tolerate, showFoldedNames);
         if (!ret)

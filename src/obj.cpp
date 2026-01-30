@@ -40,11 +40,18 @@ IDdef* DeclRepository::add_ID_decl(const IDdef& def, StorageClassSpecifier stora
     switch (storageClassSpecifier)
     {
     case StorageClassSpecifier::VarDef:
-        // [TODO] 地址/偏移分配
+        if (def.kind == IDdef::Kind::Global)
+        {
+            if (var_decls.getwheredeeps(0)[0]->find(def.name) !=
+                var_decls.getwheredeeps(0)[0]->end())
+            {
+                return nullptr;
+            }
+            var_decls.getwheredeeps(0)[0]->try_emplace(def.name, def);
+        }
         where = &this->var_decls;
         break;
     case StorageClassSpecifier::Static:
-        // [TODO] 修饰名称
         where = &this->static_decls;
         break;
     case StorageClassSpecifier::Typedef:

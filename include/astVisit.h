@@ -41,6 +41,7 @@ struct astVisitor
     std::tuple<IDdef*, std::string> madeConstString(std::vector<antlr4::tree::TerminalNode*> toks);
     std::optional<std::vector<int>> decodeStringLiteral(
         ComplierParser::AssignmentExpressionContext* expr);
+    std::optional<Type> tryVisitType(std::function<Type()> expr);
     // varDef* madeConstString(std::string origin);
 
   public:
