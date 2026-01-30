@@ -1657,7 +1657,8 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
             long step = 1;
             if (type.kind == Type::Kind::Pointer)
             {
-                step = static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
+                step =
+                    static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
             }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, step});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
@@ -1679,7 +1680,8 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
             long step = 1;
             if (type.kind == Type::Kind::Pointer)
             {
-                step = static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
+                step =
+                    static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
             }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, step});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
@@ -1782,9 +1784,9 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
 
             // 栈: [addr]
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY}); // [addr][addr]
-            loadStackTopAddrByType(valType); // [addr][orig]
+            loadStackTopAddrByType(valType);                             // [addr][orig]
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY}); // [addr][orig][orig]
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::POP});  // ax=orig, 栈: [addr][orig]
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::POP}); // ax=orig, 栈: [addr][orig]
 
             long step = 1;
             if (valType.kind == Type::Kind::Pointer)
@@ -1797,7 +1799,7 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
             funcnow->funcInfo.asms.push_back(
                 ASM{todo->getText() == "++" ? ASM::basic_asm::ADD : ASM::basic_asm::SUB});
             // 栈: [addr][new_val]
-            saveStackTopAddrValueByType(valType); // 栈: []
+            saveStackTopAddrValueByType(valType);                        // 栈: []
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::PUSH}); // [orig]
             return valType;
         }
@@ -2955,7 +2957,7 @@ bool astVisitor::stackTopIsLvalue()
 {
     return funcnow->funcInfo.asms.back() == "LC" || funcnow->funcInfo.asms.back() == "LI" ||
            funcnow->funcInfo.asms.back() == "LW" ||
-           funcnow->funcInfo.asms.back() == "STACK_NOW_IS_ADDR";
+           funcnow->funcInfo.asms.back().starts_with("LODS");
 }
 
 bool astVisitor::madeTopIsLvalueAddr()
@@ -3002,7 +3004,7 @@ Type astVisitor::loadStackTopAddrByType(Type type)
 {
     if (type.kind == Type::Kind::Struct)
     {
-        funcnow->funcInfo.asms.push_back("STACK_NOW_IS_ADDR");
+        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LODS, type.getsize()});
         return type;
     }
     if (type.kind == Type::Kind::Array)
@@ -3021,8 +3023,13 @@ void astVisitor::saveStackTopAddrValueByType(Type type)
 {
     if (type.kind == Type::Kind::Struct)
     {
-        //[TODO] LODS
-        THROW_ERR_NOCTX(error::unsurpported_op); // struct assignment not supported here
+        if (!funcnow->funcInfo.asms.back().starts_with("LODS"))
+        {
+            THROW_ERR_NOCTX(error::unsurpported_op);
+        }
+        funcnow->funcInfo.asms.pop_back();
+        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::MOVS,type.getsize()}) ;
+        return;
     }
     if (type.kind == Type::Kind::Array)
     {
