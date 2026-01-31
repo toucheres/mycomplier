@@ -225,6 +225,46 @@ static std::string expand_all_macros(const std::string& line, const std::vector<
     
     return result;
 }
+
+// 处理行尾反斜杠续行：将以 '\' 结尾的行与下一行合并
+std::expected<file, error> Preprocessor::deal_line_continuation(file src)
+{
+    std::string content;
+    src.readalllast(content);
+    
+    std::string result;
+    result.reserve(content.size());
+    
+    size_t i = 0;
+    while (i < content.size()) {
+        if (content[i] == '\\') {
+            // 检查是否是行尾反斜杠
+            size_t next = i + 1;
+            
+            // 跳过反斜杠后的空白（某些实现允许 \ 后有空格）
+            while (next < content.size() && (content[next] == ' ' || content[next] == '\t')) {
+                next++;
+            }
+            
+            // 检查是否紧跟换行符
+            if (next < content.size() && content[next] == '\n') {
+                // 跳过反斜杠和换行，继续下一行
+                i = next + 1;
+                continue;
+            } else if (next + 1 < content.size() && content[next] == '\r' && content[next + 1] == '\n') {
+                // Windows 风格换行 \r\n
+                i = next + 2;
+                continue;
+            }
+        }
+        
+        result += content[i];
+        i++;
+    }
+    
+    return file{result, true};
+}
+
 std::expected<file, error> Preprocessor::deal_include(file src)
 {
     std::string out;
@@ -261,9 +301,14 @@ std::expected<file, error> Preprocessor::deal_include(file src)
                 {
                     return std::unexpected(error::file_not_exsist);
                 }
-                file tp{path};
+                // 对被 include 的文件也进行续行处理
+                auto included_result = deal_line_continuation(file{path});
+                if (!included_result)
+                {
+                    return std::unexpected(included_result.error());
+                }
                 std::string f{};
-                tp.readalllast(f);
+                included_result.value().readalllast(f);
                 src.insert("\n" + f + "\n");
             }
             else
@@ -380,13 +425,24 @@ Preprocessor::Preprocessor(const std::vector<std::string>& include_paths_)
 std::expected<bool, error> Preprocessor::process(const std::string& src_path,
                                                  const std::string& out_path)
 {
-    auto result = deal_include(file{src_path});
+    // 1. 首先处理行尾反斜杠续行
+    auto line_cont_result = deal_line_continuation(file{src_path});
+    if (!line_cont_result)
+    {
+        return std::unexpected(line_cont_result.error());
+    }
+    file after_line_continuation = line_cont_result.value();
+    
+    // 2. 处理 include
+    auto result = deal_include(after_line_continuation);
     if (!result)
     {
         // 错误处理
         return std::unexpected(result.error());
     }
     file without_include = result.value();
+    
+    // 3. 处理注释
     auto res = deal_des(without_include);
     if (!res)
     {
@@ -394,6 +450,8 @@ std::expected<bool, error> Preprocessor::process(const std::string& src_path,
         return std::unexpected(res.error());
     }
     file without_include_des = res.value();
+    
+    // 4. 处理宏定义
     auto res2 = deal_def(without_include_des);
     if (!res2)
     {

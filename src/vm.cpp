@@ -24,6 +24,36 @@ VM::VM(const std::vector<std::string>& asms)
         long modeptr = *(thiscpu.sp + 1);
         *thiscpu.ax = (long)fopen((char*)fileptr, (char*)modeptr);
     };
+    vcpu.systemcall_table[VM::systemcall::CLOSE] = [](VCPU<>& thiscpu)
+    {
+        long fp = *thiscpu.sp;
+        *thiscpu.ax = fclose((FILE*)fp);
+    };
+    vcpu.systemcall_table[VM::systemcall::PUTC] = [](VCPU<>& thiscpu)
+    {
+        int c = (int)*thiscpu.sp;
+        long fp = *(thiscpu.sp + 1);
+        *thiscpu.ax = fputc(c, (FILE*)fp);
+    };
+    vcpu.systemcall_table[VM::systemcall::GETC] = [](VCPU<>& thiscpu)
+    {
+        long fp = *thiscpu.sp;
+        *thiscpu.ax = fgetc((FILE*)fp);
+    };
+    vcpu.systemcall_table[VM::systemcall::READ] = [](VCPU<>& thiscpu)
+    {
+        long fp = *thiscpu.sp;
+        long buf = *(thiscpu.sp + 1);
+        long size = *(thiscpu.sp + 2);
+        *thiscpu.ax = fread((void*)buf, 1, size, (FILE*)fp);
+    };
+    vcpu.systemcall_table[VM::systemcall::WRITE_FILE] = [](VCPU<>& thiscpu)
+    {
+        long fp = *thiscpu.sp;
+        long buf = *(thiscpu.sp + 1);
+        long size = *(thiscpu.sp + 2);
+        *thiscpu.ax = fwrite((void*)buf, 1, size, (FILE*)fp);
+    };
 }
 
 std::optional<int64_t> VM::run()

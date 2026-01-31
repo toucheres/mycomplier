@@ -47,7 +47,12 @@ struct VM
         MALLOC,
         FREE,
         BREAKPOINT,
-        OPEN
+        OPEN,
+        CLOSE,
+        PUTC,
+        GETC,
+        READ,
+        WRITE_FILE
     };
     VM(const std::vector<std::string>& asms);
     bool enable_debug = true;
