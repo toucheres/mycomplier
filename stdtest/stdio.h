@@ -1,4 +1,6 @@
+#include "./def.h"
 #include "./stdarg.h"
+#include "./string.h"
 #include "./systemcall.h"
 void write(long arg)
 {
@@ -46,7 +48,7 @@ long num_to_str(char* src, long num)
     }
 }
 // 仅支持%s %d %c %ld
-long fprintf(char* src, char* fmt, ...)
+long sprintf(char* src, char* fmt, ...)
 {
     long arg_index = 1;
     long charsnum = 0;
@@ -115,84 +117,16 @@ long fprintf(char* src, char* fmt, ...)
     return charsnum;
 }
 
+
 long printf(char* fmt, ...)
 {
-    long arg_index = 1;
-    long charsnum = 0;
-    while (*fmt != 0)
-    {
-        if (*fmt == '%')
-        {
-            fmt = fmt + 1;
-            if (*fmt == 'c')
-            {
-                char src[12];
-                long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
-                src[size] = 0;
-                print_str(src);
-                arg_index = arg_index + 1;
-                charsnum = charsnum + size;
-                fmt = fmt + 1;
-            }
-            else if (*fmt == 's')
-            {
-                long size = print_str(*load_arg_ptr(&fmt, arg_index));
-                arg_index = arg_index + 1;
-                charsnum = charsnum + size;
-                fmt = fmt + 1;
-            }
-            else if (*fmt == 'd')
-            {
-                char src[12];
-                long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
-                src[size] = 0;
-                print_str(src);
-                arg_index = arg_index + 1;
-                charsnum = charsnum + size;
-                fmt = fmt + 1;
-            }
-            else if (*fmt == 'l')
-            {
-                fmt = fmt + 1;
-                if (*fmt == 'd')
-                {
-                    char src[12];
-                    long size = num_to_str(src, *load_arg_ptr(&fmt, arg_index));
-                    src[size] = 0;
-                    print_str(src);
-                    arg_index = arg_index + 1;
-                    charsnum = charsnum + size;
-                    fmt = fmt + 1;
-                }
-                else
-                {
-                    write(*fmt);
-                    charsnum = charsnum + 1;
-                    fmt = fmt + 1;
-                }
-            }
-            else
-            {
-                // 未知格式：把 '%' 和随后字符都按字面输出（若后面是 '\0' 则只输出 '%'）
-                write('%');
-                charsnum++;
-                if (*fmt != '\0')
-                {
-                    write(*fmt);
-                    charsnum++;
-                    fmt++;
-                }
-            }
-        }
-        else
-        {
-            write(*fmt);
-            charsnum = charsnum + 1;
-            fmt = fmt + 1;
-        }
-    }
-    return charsnum;
+    va_list ap;
+    va_start(ap, fmt); // 初始化 ap 指向 fixed 后面
+    int arg1 = va_arg(ap, int);
+    char* des = __malloc(strlen(fmt) * 2);
+    sprintf();
 }
+
 typedef struct FILE_struct
 {
     int _flags; /* High-order word is _IO_MAGIC; rest is flags. */
@@ -214,7 +148,7 @@ typedef struct FILE_struct
 
     long _markers;
 
-    long _chain;
+    long _chain; // [TODO] 支持struct嵌套定义自身指针
 
     int _fileno;
     int _flags2;

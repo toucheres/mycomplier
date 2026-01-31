@@ -89,7 +89,7 @@ struct Type
     BasicType basic_type; // avilable when kind == Basic
     value_ptr<Type> subType;
     std::vector<IDdef> args;
-    int arr_or_ptr_num = -1;
+    int arr_num = -1; // 仅用于 Array 类型，表示数组长度；Pointer 通过 subType 层数表示
     size_t alignas_num = 8;
     // TODO: remove after callers stop encoding storage on Type
     StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::VarDef;

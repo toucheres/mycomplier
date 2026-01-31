@@ -40,7 +40,7 @@ size_t Type::getsize() const
         }
         break;
     case Kind::Array:
-        return static_cast<size_t>(arr_or_ptr_num) * subType->getsize();
+        return static_cast<size_t>(arr_num) * subType->getsize();
     case Kind::Function:
         return VCPU<>::size_word;
     case Kind::Struct:
@@ -103,7 +103,10 @@ Type::Type(Kind kind_, int arg_)
 {
     assert(kind_ == Type::Kind::Array || kind_ == Type::Kind::Pointer);
     kind = kind_;
-    arr_or_ptr_num = arg_;
+    if (kind_ == Type::Kind::Array) {
+        arr_num = arg_;
+    }
+    // Pointer 不再使用 arr_num，通过 subType 嵌套表示
 }
 
 Type::Type(Kind kind_, std::string arg_)

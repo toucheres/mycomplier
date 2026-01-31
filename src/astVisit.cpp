@@ -306,7 +306,7 @@ std::tuple<IDdef*, std::string> astVisitor::madeConstString(
     // std::cout << "--------\n";
     Type global_chars_arr_type;
     global_chars_arr_type.kind = Type::Kind::Array;
-    global_chars_arr_type.arr_or_ptr_num = chars_after_transed.size();
+    global_chars_arr_type.arr_num = chars_after_transed.size();
     global_chars_arr_type.pushTop(Type{Type::Kind::Basic, Type::BasicType::Char});
     IDdef arrdef;
     arrdef.kind = IDdef::Kind::Global;
@@ -840,7 +840,7 @@ IDdef astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx
             {
                 THROW_ERR(error::initializerList_too_long, ctx);
             }
-            size_t limit = std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize);
+            size_t limit = std::min(arg.structInfo.members.size(), initListSize);
             for (size_t i = 0; i + 1 < limit; i++)
             {
                 asmholder->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
@@ -866,11 +866,13 @@ IDdef astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx
             if (init->initializerList())
             {
                 size_t initListSize = init->initializerList()->initializer().size();
-                if (initListSize > arg.arr_or_ptr_num)
+                if (arg.arr_num > 0 && initListSize > static_cast<size_t>(arg.arr_num))
                 {
                     THROW_ERR(error::initializerList_too_long, ctx);
                 }
-                size_t limit = std::min(static_cast<size_t>(arg.arr_or_ptr_num), initListSize);
+                size_t limit = arg.arr_num > 0
+                                   ? std::min(static_cast<size_t>(arg.arr_num), initListSize)
+                                   : initListSize;
                 for (size_t i = 0; i + 1 < limit; i++)
                 {
                     asmholder->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
@@ -902,12 +904,12 @@ IDdef astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx
                 {
                     THROW_ERR(error::expected_arr_initor, assign);
                 }
-                if (arg.arr_or_ptr_num < 0) // [TODO] 未指定时由 "xxx" 长度隐式决定
+                if (arg.arr_num < 0) // [TODO] 未指定时由 "xxx" 长度隐式决定
                 {
                     THROW_ERR(error::expected_arr_initor, assign);
                 }
                 auto data = *literal;
-                size_t arrLen = static_cast<size_t>(arg.arr_or_ptr_num);
+                size_t arrLen = static_cast<size_t>(arg.arr_num);
                 if (data.size() > arrLen)
                 {
                     THROW_ERR(error::expected_arr_initor, assign);
@@ -977,9 +979,14 @@ IDdef astVisitor::visitDeclarator(ComplierParser::DeclaratorContext* ctx)
     if (ctx->pointer()) // 有ptr
     {
         auto str = ctx->pointer()->getText();
-        auto tp =
-            Type{Type::Kind::Pointer, static_cast<int>(std::count(str.begin(), str.end(), '*'))};
-        var.type.pushTop(tp);
+        int ptr_count = static_cast<int>(std::count(str.begin(), str.end(), '*'));
+        // 嵌套多层 Pointer
+        for (int i = 0; i < ptr_count; i++)
+        {
+            Type tp;
+            tp.kind = Type::Kind::Pointer;
+            var.type.pushTop(tp);
+        }
     }
     return var;
 }
@@ -1167,7 +1174,7 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
     }
     else if (ctx->assignmentOperator())
     {
-        auto uret = (visitUnaryExpression(ctx->unaryExpression()));
+        auto uret = visitUnaryExpression(ctx->unaryExpression());
         if (!stackTopIsLvalue()) // 不是左值
         {
             THROW_ERR(error::expected_lvalue, ctx->unaryExpression());
@@ -1602,6 +1609,7 @@ Type astVisitor::visitCastExpression(ComplierParser::CastExpressionContext* ctx)
 Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ctx)
 {
     Type type;
+    auto sizenow = funcnow->funcInfo.asms.size();
     if (ctx->postfixExpression())
     {
         auto pret = (visitPostfixExpression(ctx->postfixExpression()));
@@ -1628,16 +1636,11 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
                 {
                     THROW_ERR(error::expected_lvalue, ctx->castExpression());
                 }
-                if (cret.kind == Type::Kind::Pointer)
-                {
-                    type = cret;
-                    type.arr_or_ptr_num++;
-                }
-                else
-                {
-                    type = Type{Type::Kind::Pointer, 1};
-                    type.pushTop(cret);
-                }
+                // 在现有类型上再套一层 Pointer
+                Type outer;
+                outer.kind = Type::Kind::Pointer;
+                outer.subType = cret;
+                type = outer;
             }
         }
         else if (ctx->unaryOperator()->getText() == "*")
@@ -1665,13 +1668,36 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
     }
     else if (ctx->typeName())
     {
-        auto cret = (visitTypeName(ctx->typeName()));
-        if ((ctx->typeName() - 1)->getText() == "sizeof")
+        // 找到 typeName 在 children 中的位置，检查前面是 sizeof 还是 _Alignof
+        // 结构: ... sizeof/alignof '(' typeName ')'
+        auto cret = visitTypeName(ctx->typeName());
+
+        // 遍历 children 找到 '(' typeName ')' 前的关键字
+        for (size_t i = 0; i < ctx->children.size(); i++)
         {
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, cret.getsize()});
-            type = Type{Type::Kind::Basic, Type::BasicType::Int};
+            // 找到 typeName 对应的 child
+            if (ctx->children[i] == ctx->typeName())
+            {
+                // 向前找到对应的关键字 (跳过 '(')
+                // children[i-1] 是 '(', children[i-2] 是 sizeof 或 _Alignof
+                if (i >= 2)
+                {
+                    std::string keyword = ctx->children[i - 2]->getText();
+                    if (keyword == "sizeof")
+                    {
+                        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, cret.getsize()});
+                        type = Type{Type::Kind::Basic, Type::BasicType::Long};
+                    }
+                    else if (keyword == "_Alignof")
+                    {
+                        // [TODO] _Alignof 实现
+                        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 8});
+                        type = Type{Type::Kind::Basic, Type::BasicType::Long};
+                    }
+                }
+                break;
+            }
         }
-        // [TODO] alignas
     }
     for (int i = ctx->children.size() - 1; i >= 0; i--)
     {
@@ -1721,10 +1747,11 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
             saveStackTopAddrValueByType(type);
             loadStackTopAddrByType(type);
         }
-        //[TODO] sizeof无副作用
         else if (ctx->children[i]->getText() == "sizeof" &&
                  ctx->children[i + 1]->getText() != "(") // 排除分支3的sizeof
         {
+            // sizeof无副作用, 回退asm
+            funcnow->funcInfo.asms.resize(sizenow);
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, type.getsize()});
             type = Type{Type::Kind::Basic, Type::BasicType::Int};
         }
@@ -1779,7 +1806,7 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
             // }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::CALL});
             Type rettype = funcaddr;
-            if (funcaddr.kind == Type::Kind::Pointer && funcaddr.arr_or_ptr_num == 1 &&
+            if (funcaddr.kind == Type::Kind::Pointer && funcaddr.subType &&
                 funcaddr.subType->kind == Type::Kind::Function) // 函数指针
             {
                 rettype = *funcaddr.subType->subType;
@@ -1806,14 +1833,9 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
         {
             auto paret = func(0, end - 1);
             Type eleType;
-            if (paret.kind == Type::Kind::Pointer && paret.arr_or_ptr_num == 1)
+            if (paret.kind == Type::Kind::Pointer && paret.subType)
             {
                 eleType = *paret.subType;
-            }
-            else if (paret.kind == Type::Kind::Pointer && paret.arr_or_ptr_num > 1)
-            {
-                eleType = paret;
-                eleType.arr_or_ptr_num--;
             }
             else if (paret.kind == Type::Kind::Array)
             {
@@ -3124,7 +3146,6 @@ Type astVisitor::loadStackTopAddrByType(Type type)
     {
         Type tp;
         tp.kind = Type::Kind::Pointer;
-        tp.arr_or_ptr_num = 1;
         tp.subType = type.subType;
         return tp;
     }
@@ -3148,7 +3169,6 @@ void astVisitor::saveStackTopAddrValueByType(Type type)
     {
         Type tp;
         tp.kind = Type::Kind::Pointer;
-        tp.arr_or_ptr_num = 1;
         tp.subType = type.subType;
         SaveStackTopValueToAddr(tp.getsize());
         return;

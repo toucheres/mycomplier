@@ -27,7 +27,7 @@ int pointer_depth(const Type& t) {
     const Type* cur = &t;
     while (cur) {
         if (cur->kind == Type::Kind::Pointer) {
-            depth += cur->arr_or_ptr_num <= 0 ? 1 : cur->arr_or_ptr_num;
+            depth += 1; // 每层 Pointer 增加 1
         } else if (cur->kind == Type::Kind::Array) {
             // 数组表达式暂未衰减处理
         }
