@@ -1,7 +1,7 @@
-#include "./def.h"
-#include "./stdarg.h"
-#include "./string.h"
-#include "./systemcall.h"
+#include <stdarg.h>
+#include <stdio.h>
+#include <systemcall.h>
+#include <def.h>
 void write(long arg)
 {
     return __write(arg);
@@ -175,42 +175,6 @@ long printf(char* fmt, ...)
     va_end(ap);
     return ret;
 }
-
-typedef struct FILE_struct
-{
-    int _flags; /* High-order word is _IO_MAGIC; rest is flags. */
-
-    /* The following pointers correspond to the C++ streambuf protocol. */
-    char* _IO_read_ptr;   /* Current read pointer */
-    char* _IO_read_end;   /* End of get area. */
-    char* _IO_read_base;  /* Start of putback+get area. */
-    char* _IO_write_base; /* Start of put area. */
-    char* _IO_write_ptr;  /* Current put pointer. */
-    char* _IO_write_end;  /* End of put area. */
-    char* _IO_buf_base;   /* Start of reserve area. */
-    char* _IO_buf_end;    /* End of reserve area. */
-
-    /* The following fields are used to support backing up and undo. */
-    char* _IO_save_base;   /* Pointer to start of non-current get area. */
-    char* _IO_backup_base; /* Pointer to first valid character of backup area */
-    char* _IO_save_end;    /* Pointer to end of non-current get area. */
-
-    long _markers;
-
-    long _chain; // [TODO] 支持struct嵌套定义自身指针
-
-    int _fileno;
-    int _flags2;
-    long _old_offset; /* This used to be _offset but it's too small.  */
-
-    /* 1+column number of pbase(); 0 is unknown. */
-    short _cur_column;
-    char _vtable_offset;
-    char _shortbuf[1];
-
-    long _lock;
-} FILE;
-
 FILE* fopen(char* filename, char* modes)
 {
     return (FILE*)__open(filename, modes);

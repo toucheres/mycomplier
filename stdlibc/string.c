@@ -1,4 +1,4 @@
-typedef long size_t;
+#include <string.h>
 long strlen(char* str)
 {
     long lenth = 0;

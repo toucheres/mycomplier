@@ -1,4 +1,4 @@
-#include "./systemcall.h"
+#include <systemcall.h>
 char* malloc(long in)
 {
     return __malloc(in);

@@ -798,9 +798,20 @@ IDdef astVisitor::visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx
     ret.storageClassSpecifier = storageClassSpecifier;
     ret.valueType = ValueType::Left;
     ret.type.valueType = ValueType::Left;
-    IDdef* func_ctx = (funcnow != gfuncptr) ? funcnow : nullptr;
-    record_ID_decl(ret, func_ctx);
-    IDdef* recorded = lookup_ID_decl(ret.name, storageClassSpecifier);
+    IDdef* recorded;
+    if (ret.type.kind == Type::Kind::Function)
+    {
+        ret.storageClassSpecifier = storageClassSpecifier =
+            StorageClassSpecifier::Extern; // 函数声明默认extern
+        record_ID_decl(ret);
+        recorded = lookup_ID_decl(ret.name, storageClassSpecifier);
+    }
+    else
+    {
+        IDdef* func_ctx = (funcnow != gfuncptr) ? funcnow : nullptr;
+        record_ID_decl(ret, func_ctx);
+        recorded = lookup_ID_decl(ret.name, storageClassSpecifier);
+    }
     // [TODO] 部分初始化的一般化处理
     std::function<bool(Type, ComplierParser::InitializerContext*)> func =
         [&func, this, ctx](Type arg, ComplierParser::InitializerContext* init) -> bool

@@ -103,7 +103,8 @@ Type::Type(Kind kind_, int arg_)
 {
     assert(kind_ == Type::Kind::Array || kind_ == Type::Kind::Pointer);
     kind = kind_;
-    if (kind_ == Type::Kind::Array) {
+    if (kind_ == Type::Kind::Array)
+    {
         arr_num = arg_;
     }
     // Pointer 不再使用 arr_num，通过 subType 嵌套表示
@@ -424,6 +425,35 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
                                                                  bool showFoldedNames)
 {
     std::vector<OBJ> objs;
+    for (auto each : platform::get_default_libc_paths())
+    {
+        OBJ obj;
+        obj.name = each;
+        // 创建输入流
+        Preprocessor{}.process(each);
+        std::ifstream in(each + ".pre");
+        std::string input((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        antlr4::ANTLRInputStream inputStream(input);
+        // 创建词法分析器
+        ComplierLexer lexer(&inputStream);
+        antlr4::CommonTokenStream tokens(&lexer);
+        // 创建自定义语法分析器
+        ComplierParser parser(&tokens);
+        // 使用正确的入口规则
+        ComplierParser::CompilationUnitContext* tree = parser.compilationUnit();
+        // fordebug
+        if (showASt)
+        {
+            std::cout << each << ": \n";
+            printAST(tree, tolerate, showFoldedNames);
+            std::cout << "\n";
+        }
+        // 创建和使用自定义访问器
+        astVisitor visitor{each, obj};
+        visitor.visitCompilationUnit(tree);
+        obj.flush_global_decls();
+        objs.push_back(std::move(obj));
+    }
     for (auto each : paths)
     {
         OBJ obj;
