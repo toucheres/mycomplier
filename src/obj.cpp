@@ -21,6 +21,8 @@ void DeclRepository::enter_scope(const Label& label)
     enter_scope_all(static_decls, label);
     enter_scope_all(typedef_decls, label);
     enter_scope_all(struct_decls, label);
+    enter_scope_all(enum_decls, label);
+    enter_scope_all(enum_const_decls, label);
 }
 
 void DeclRepository::exit_scope()
@@ -30,6 +32,8 @@ void DeclRepository::exit_scope()
     static_decls.out_scope();
     typedef_decls.out_scope();
     struct_decls.out_scope();
+    enum_decls.out_scope();
+    enum_const_decls.out_scope();
 }
 
 IDdef* DeclRepository::add_ID_decl(const IDdef& def, StorageClassSpecifier storageClassSpecifier)
@@ -63,6 +67,12 @@ IDdef* DeclRepository::add_ID_decl(const IDdef& def, StorageClassSpecifier stora
     case StorageClassSpecifier::StructDef:
         where = &this->struct_decls;
         break;
+    case StorageClassSpecifier::EnumDef:
+        where = &this->enum_decls;
+        break;
+    case StorageClassSpecifier::EnumConst:
+        where = &this->enum_const_decls;
+        break;
     default:
         throw;
     }
@@ -83,6 +93,10 @@ IDdef* DeclRepository::find_ID_decl(const std::string& ID,
         return typedef_decls.find(ID);
     case StorageClassSpecifier::StructDef:
         return struct_decls.find(ID);
+    case StorageClassSpecifier::EnumDef:
+        return enum_decls.find(ID);
+    case StorageClassSpecifier::EnumConst:
+        return enum_const_decls.find(ID);
     default:
         break;
     }

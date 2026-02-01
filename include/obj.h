@@ -31,6 +31,8 @@ enum class StorageClassSpecifier
 {
     VarDef, // func var均视为var
     StructDef,
+    EnumDef,  // enum 类型定义
+    EnumConst, // enum 常量
     Typedef,
     Extern,
     Static
@@ -155,6 +157,8 @@ struct DeclRepository
     // tree_scoped_map<std::string, IDdef, Label, ScopeMeta> func_decls;// 与var_decls一起管理
     tree_scoped_map<std::string, IDdef, Label, ScopeMeta> typedef_decls;
     tree_scoped_map<std::string, IDdef, Label, ScopeMeta> struct_decls;
+    tree_scoped_map<std::string, IDdef, Label, ScopeMeta> enum_decls;    // enum 类型定义
+    tree_scoped_map<std::string, IDdef, Label, ScopeMeta> enum_const_decls; // enum 常量
 
     size_t static_label_counter = 0;
 

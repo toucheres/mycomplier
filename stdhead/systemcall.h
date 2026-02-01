@@ -9,4 +9,5 @@ int __putc(int c, long fp);
 int __getc(long fp);
 long __read(long fp, char* buf, long size);
 long __write_file(long fp, char* buf, long size);
+void __exit(long code);
 #endif

@@ -4,6 +4,7 @@ grammar Complier;
     #include <unordered_set>
 
     scoped_map<std::string, bool> TypedefedId{};
+    scoped_map<std::string, bool> EnumConstId{};
     bool currentDeclIsTypedef = false;
 
     bool hasTypeDef(const std::string& name)
@@ -14,6 +15,16 @@ grammar Complier;
     bool addTypeDef(const std::string& name)
     {
         return TypedefedId.add(name, true);
+    }
+
+    bool hasEnumConst(const std::string& name)
+    {
+        return EnumConstId.contains(name);
+    }
+
+    bool addEnumConst(const std::string& name)
+    {
+        return EnumConstId.add(name, true);
     }
 
     // 检查第 n 个 lookahead token 是否是类型名的开始
@@ -276,7 +287,7 @@ enumerator
     ;
  
 enumerationConstant
-    :   Identifier
+    :   id=Identifier { addEnumConst($id.text); }
     ;
  
 atomicTypeSpecifier

@@ -725,6 +725,60 @@ Type astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
             THROW_ERR(error::unsurpport_union, ctx);
         }
     }
+    if (ctx->enumSpecifier()) // 是枚举类型
+    {
+        std::string enumName;
+        static long enumIndex = 0;
+        
+        if (ctx->enumSpecifier()->enumeratorList()) // 同时定义enum
+        {
+            IDdef thisEnum;
+            thisEnum.storageClassSpecifier = StorageClassSpecifier::EnumDef;
+            enumName = thisEnum.name = 
+                ctx->enumSpecifier()->Identifier()
+                    ? ctx->enumSpecifier()->Identifier()->getText()
+                    : "__unnamed_enum_" + std::to_string(enumIndex++);
+            thisEnum.type.kind = Type::Kind::Basic;
+            thisEnum.type.basic_type = Type::BasicType::Int; // enum底层类型为int
+            record_ID_decl(thisEnum.name, thisEnum.type, StorageClassSpecifier::EnumDef, nullptr);
+            
+            // 处理枚举常量列表
+            long long enumValue = 0;
+            for (auto* enumerator : ctx->enumSpecifier()->enumeratorList()->enumerator())
+            {
+                std::string constName = enumerator->enumerationConstant()->Identifier()->getText();
+                
+                // 如果有赋值表达式，计算值
+                if (enumerator->constantExpression())
+                {
+                    enumValue = parseConstexpr(enumerator->constantExpression()->conditionalExpression());
+                }
+                
+                // 将枚举常量注册为整型常量
+                IDdef enumConst;
+                enumConst.name = constName;
+                enumConst.type.kind = Type::Kind::Basic;
+                enumConst.type.basic_type = Type::BasicType::Int;
+                enumConst.addr = static_cast<int>(enumValue); // 使用addr存储枚举值
+                enumConst.storageClassSpecifier = StorageClassSpecifier::EnumConst;
+                enumConst.is_defined = true;
+                record_ID_decl(enumConst.name, enumConst.type, StorageClassSpecifier::EnumConst, nullptr);
+                // 更新枚举值以便为下一个枚举成员使用
+                obj.decls.find_ID_decl(constName, StorageClassSpecifier::EnumConst)->addr = static_cast<int>(enumValue);
+                
+                enumValue++;
+            }
+        }
+        else if (ctx->enumSpecifier()->Identifier())
+        {
+            enumName = ctx->enumSpecifier()->Identifier()->getText();
+        }
+        
+        // enum类型返回int
+        rettype.kind = Type::Kind::Basic;
+        rettype.basic_type = Type::BasicType::Int;
+        return rettype;
+    }
     // 是基本类型
     rettype.kind = Type::Kind::Basic;
     if (ctx->getText() == "int")
@@ -2538,6 +2592,11 @@ long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext
             throw error::invalid_constant;
         if (ctx->Identifier())
         {
+            // 检查是否是枚举常量
+            if (auto* enumConst = lookup_ID_decl(ctx->Identifier()->getText(), StorageClassSpecifier::EnumConst))
+            {
+                return enumConst->addr;
+            }
             // 常量表达式不允许普通标识符（尚未实现宏常量等）
             throw error::invalid_constant;
         }
@@ -2858,6 +2917,267 @@ long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext
 
     return evalAssign(expr);
 };
+
+long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContext* expr)
+{
+    // 创建一个临时的 AssignmentExpressionContext 来复用已有逻辑
+    // 由于 AssignmentExpression 的第一个分支就是 conditionalExpression
+    // 这里直接递归调用内部的求值逻辑
+    
+    // 重新实现一个简化版本，直接求值 ConditionalExpression
+    std::function<long long(ComplierParser::PrimaryExpressionContext*)> evalPrimary;
+    std::function<long long(ComplierParser::PostfixExpressionContext*)> evalPostfix;
+    std::function<long long(ComplierParser::UnaryExpressionContext*)> evalUnary;
+    std::function<long long(ComplierParser::CastExpressionContext*)> evalCast;
+    std::function<long long(ComplierParser::MultiplicativeExpressionContext*)> evalMul;
+    std::function<long long(ComplierParser::AdditiveExpressionContext*)> evalAdd;
+    std::function<long long(ComplierParser::ShiftExpressionContext*)> evalShift;
+    std::function<long long(ComplierParser::RelationalExpressionContext*)> evalRel;
+    std::function<long long(ComplierParser::EqualityExpressionContext*)> evalEq;
+    std::function<long long(ComplierParser::AndExpressionContext*)> evalBitAnd;
+    std::function<long long(ComplierParser::ExclusiveOrExpressionContext*)> evalBitXor;
+    std::function<long long(ComplierParser::InclusiveOrExpressionContext*)> evalBitOr;
+    std::function<long long(ComplierParser::LogicalAndExpressionContext*)> evalLogAnd;
+    std::function<long long(ComplierParser::LogicalOrExpressionContext*)> evalLogOr;
+    std::function<long long(ComplierParser::ExpressionContext*)> evalExpr;
+    std::function<long long(ComplierParser::ConditionalExpressionContext*)> evalCond;
+
+    auto truth = [](long long v) -> long long { return v != 0 ? 1LL : 0LL; };
+
+    evalPrimary = [this, &evalExpr](ComplierParser::PrimaryExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        if (ctx->Identifier())
+        {
+            // 检查是否是枚举常量
+            if (auto* enumConst = lookup_ID_decl(ctx->Identifier()->getText(), StorageClassSpecifier::EnumConst))
+            {
+                return enumConst->addr;
+            }
+            throw error::invalid_constant;
+        }
+        if (ctx->Constant())
+        {
+            const std::string t = ctx->Constant()->getText();
+            if (isCharacterConstant(t))
+                return parseCharacterConstant(t);
+            if (isIntegerConstant(t))
+                return parseIntegerConstant(t);
+            throw error::invalid_constant;
+        }
+        if (ctx->expression())
+        {
+            return evalExpr(ctx->expression());
+        }
+        throw error::invalid_constant;
+    };
+
+    evalPostfix = [&evalPrimary](ComplierParser::PostfixExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        if (ctx->primaryExpression() && ctx->children.size() == 1)
+            return evalPrimary(ctx->primaryExpression());
+        throw error::invalid_constant;
+    };
+
+    evalUnary = [&evalPostfix, &evalCast](ComplierParser::UnaryExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        if (ctx->postfixExpression())
+            return evalPostfix(ctx->postfixExpression());
+        if (ctx->unaryOperator())
+        {
+            long long val = evalCast(ctx->castExpression());
+            std::string op = ctx->unaryOperator()->getText();
+            if (op == "+") return val;
+            if (op == "-") return -val;
+            if (op == "~") return ~val;
+            if (op == "!") return val == 0 ? 1LL : 0LL;
+        }
+        throw error::invalid_constant;
+    };
+
+    evalCast = [&evalCast, &evalUnary](ComplierParser::CastExpressionContext* ctx) -> long long
+    {
+        if (!ctx)
+            throw error::invalid_constant;
+        if (ctx->castExpression())
+            return evalCast(ctx->castExpression());
+        if (ctx->unaryExpression())
+            return evalUnary(ctx->unaryExpression());
+        if (ctx->DigitSequence())
+            return std::stoll(ctx->DigitSequence()->getText(), nullptr, 10);
+        throw error::invalid_constant;
+    };
+
+    evalMul = [&evalCast](ComplierParser::MultiplicativeExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto casts = ctx->castExpression();
+        long long result = evalCast(casts[0]);
+        size_t idx = 1;
+        for (size_t i = 1; i < ctx->children.size(); i += 2)
+        {
+            std::string op = ctx->children[i]->getText();
+            long long rhs = evalCast(casts[idx++]);
+            if (op == "*") result *= rhs;
+            else if (op == "/") result /= rhs;
+            else if (op == "%") result %= rhs;
+        }
+        return result;
+    };
+
+    evalAdd = [&evalMul](ComplierParser::AdditiveExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto muls = ctx->multiplicativeExpression();
+        long long result = evalMul(muls[0]);
+        size_t idx = 1;
+        for (size_t i = 1; i < ctx->children.size(); i += 2)
+        {
+            std::string op = ctx->children[i]->getText();
+            long long rhs = evalMul(muls[idx++]);
+            if (op == "+") result += rhs;
+            else if (op == "-") result -= rhs;
+        }
+        return result;
+    };
+
+    evalShift = [&evalAdd](ComplierParser::ShiftExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto adds = ctx->additiveExpression();
+        long long result = evalAdd(adds[0]);
+        size_t idx = 1;
+        for (size_t i = 1; i < ctx->children.size(); i += 2)
+        {
+            std::string op = ctx->children[i]->getText();
+            long long rhs = evalAdd(adds[idx++]);
+            if (op == "<<") result <<= rhs;
+            else if (op == ">>") result >>= rhs;
+        }
+        return result;
+    };
+
+    evalRel = [&evalShift](ComplierParser::RelationalExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto shifts = ctx->shiftExpression();
+        long long result = evalShift(shifts[0]);
+        size_t idx = 1;
+        for (size_t i = 1; i < ctx->children.size(); i += 2)
+        {
+            std::string op = ctx->children[i]->getText();
+            long long rhs = evalShift(shifts[idx++]);
+            if (op == "<") result = result < rhs ? 1LL : 0LL;
+            else if (op == ">") result = result > rhs ? 1LL : 0LL;
+            else if (op == "<=") result = result <= rhs ? 1LL : 0LL;
+            else if (op == ">=") result = result >= rhs ? 1LL : 0LL;
+        }
+        return result;
+    };
+
+    evalEq = [&evalRel](ComplierParser::EqualityExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto rels = ctx->relationalExpression();
+        long long result = evalRel(rels[0]);
+        size_t idx = 1;
+        for (size_t i = 1; i < ctx->children.size(); i += 2)
+        {
+            std::string op = ctx->children[i]->getText();
+            long long rhs = evalRel(rels[idx++]);
+            if (op == "==") result = result == rhs ? 1LL : 0LL;
+            else if (op == "!=") result = result != rhs ? 1LL : 0LL;
+        }
+        return result;
+    };
+
+    evalBitAnd = [&evalEq](ComplierParser::AndExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto eqs = ctx->equalityExpression();
+        long long result = evalEq(eqs[0]);
+        for (size_t i = 1; i < eqs.size(); ++i)
+            result &= evalEq(eqs[i]);
+        return result;
+    };
+
+    evalBitXor = [&evalBitAnd](ComplierParser::ExclusiveOrExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto ands = ctx->andExpression();
+        long long result = evalBitAnd(ands[0]);
+        for (size_t i = 1; i < ands.size(); ++i)
+            result ^= evalBitAnd(ands[i]);
+        return result;
+    };
+
+    evalBitOr = [&evalBitXor](ComplierParser::InclusiveOrExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto xors = ctx->exclusiveOrExpression();
+        long long result = evalBitXor(xors[0]);
+        for (size_t i = 1; i < xors.size(); ++i)
+            result |= evalBitXor(xors[i]);
+        return result;
+    };
+
+    evalLogAnd = [&evalBitOr, &truth](ComplierParser::LogicalAndExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto ors = ctx->inclusiveOrExpression();
+        for (auto* o : ors)
+            if (!truth(evalBitOr(o)))
+                return 0LL;
+        return 1LL;
+    };
+
+    evalLogOr = [&evalLogAnd, &truth](ComplierParser::LogicalOrExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto ands = ctx->logicalAndExpression();
+        for (auto* a : ands)
+            if (truth(evalLogAnd(a)))
+                return 1LL;
+        return 0LL;
+    };
+
+    evalExpr = [&evalCond](ComplierParser::ExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        auto assigns = ctx->assignmentExpression();
+        long long result = 0;
+        for (auto* a : assigns)
+        {
+            if (a->conditionalExpression())
+                result = evalCond(a->conditionalExpression());
+            else
+                throw error::invalid_constant;
+        }
+        return result;
+    };
+
+    evalCond = [&evalLogOr, &evalExpr, &evalCond](ComplierParser::ConditionalExpressionContext* ctx) -> long long
+    {
+        if (!ctx) throw error::invalid_constant;
+        long long c = evalLogOr(ctx->logicalOrExpression());
+        if (ctx->expression())
+        {
+            if (c)
+                return evalExpr(ctx->expression());
+            else
+                return evalCond(ctx->conditionalExpression());
+        }
+        return c;
+    };
+
+    return evalCond(expr);
+}
+
 // [TODO] addDeclarations 由 visitDeclartion -> lowerdecl完成 该函数废弃
 // [[deprecated("addDeclarations 由 visitDeclartion -> lowerdecl完成 该函数废弃")]]
 // std::vector<Type> astVisitor::addDeclarations(std::vector<Type> vars)
@@ -3151,6 +3471,14 @@ bool astVisitor::madeTopIsLvalueAddr()
 
 Type astVisitor::load_var_or_func(std::string name)
 {
+    // 先检查是否是枚举常量
+    if (auto* enumConst = lookup_ID_decl(name, StorageClassSpecifier::EnumConst))
+    {
+        // 枚举常量作为立即数加载
+        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, enumConst->addr});
+        return enumConst->type;
+    }
+    
     if (auto* id = lookup_ID_decl(name))
     {
         if (id->type.kind == Type::Kind::Function)

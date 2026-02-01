@@ -25,6 +25,7 @@ struct astVisitor
     // 辅助函数
     // Type baseType; // just for args, wait to modifiy
     long long parseConstexpr(ComplierParser::AssignmentExpressionContext* expr);
+    long long parseConstexpr(ComplierParser::ConditionalExpressionContext* expr);
     int parseIntegerConstant(const std::string& text);
     int parseCharacterConstant(const std::string& text);
     bool isIntegerConstant(const std::string& text);

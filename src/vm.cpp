@@ -54,6 +54,12 @@ VM::VM(const std::vector<std::string>& asms)
         long size = *(thiscpu.sp + 2);
         *thiscpu.ax = fwrite((void*)buf, 1, size, (FILE*)fp);
     };
+    vcpu.systemcall_table[VM::systemcall::EXIT] = [](VCPU<>& thiscpu)
+    {
+        long retcode = *thiscpu.sp;
+        *thiscpu.ax = retcode;
+        thiscpu.state = VCPU<>::CpuState::OVER;
+    };
 }
 
 std::optional<int64_t> VM::run()

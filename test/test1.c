@@ -1,6 +1,7 @@
-#include <stdio.h>
+typedef long int64_t;
 int main()
 {
-    printf("%d%c%d\n", 1, '2', 3);
+    int64_t* ptr;
+    ptr = 0;
     return 0;
 }

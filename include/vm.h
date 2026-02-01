@@ -52,7 +52,8 @@ struct VM
         PUTC,
         GETC,
         READ,
-        WRITE_FILE
+        WRITE_FILE,
+        EXIT
     };
     VM(const std::vector<std::string>& asms);
     bool enable_debug = true;

@@ -91,6 +91,7 @@ public:
       #include <unordered_set>
 
       scoped_map<std::string, bool> TypedefedId{};
+      scoped_map<std::string, bool> EnumConstId{};
       bool currentDeclIsTypedef = false;
 
       bool hasTypeDef(const std::string& name)
@@ -101,6 +102,16 @@ public:
       bool addTypeDef(const std::string& name)
       {
           return TypedefedId.add(name, true);
+      }
+
+      bool hasEnumConst(const std::string& name)
+      {
+          return EnumConstId.contains(name);
+      }
+
+      bool addEnumConst(const std::string& name)
+      {
+          return EnumConstId.add(name, true);
       }
 
       // 检查第 n 个 lookahead token 是否是类型名的开始
@@ -976,6 +987,7 @@ public:
 
   class  EnumerationConstantContext : public antlr4::ParserRuleContext {
   public:
+    antlr4::Token *id = nullptr;
     EnumerationConstantContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *Identifier();
