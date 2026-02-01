@@ -80,7 +80,9 @@ struct complier
     static std::expected<std::vector<std::string>, error> process(std::vector<std::string> paths,
                                                                   bool showASt = false,
                                                                   int tolerate = INT_MAX,
-                                                                  bool showFoldedNames = false);
+                                                                  bool showFoldedNames = false,
+                                                                  bool disableStd = false
+                                                                );
 
   private:
     static void printAST(antlr4::tree::ParseTree* tree, int tolerate = INT_MAX, bool showFoldedNames = false);

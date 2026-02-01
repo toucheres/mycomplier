@@ -46,6 +46,13 @@ namespace app_options {
         false,
         true
     };
+    
+    inline constexpr Option<bool> disable_std{
+        "disable_std,disable-std",
+        "disable stdlib",
+        false,
+        true
+    };
 
     inline constexpr Option<bool> print_asm{
         "printasm,print-asm",
@@ -88,6 +95,7 @@ getsetting(int argc, const char* argv[])
         typed_options::add_option(visible, enable_debug);
         typed_options::add_option(visible, print_asm);
         typed_options::add_option(visible, print_ret_value);
+        typed_options::add_option(visible, disable_std);
 
         po::options_description hidden("Hidden options");
         typed_options::add_option(hidden, input_files);

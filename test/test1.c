@@ -1,5 +1,29 @@
-#include <stdio.h>
+long align_up(long num, long align)
+{
+    return 0;
+};
+long vsprintf(char* dst, char* fmt, char* ap)
+{
+    return 0;
+}
+
+long sprintf(char* dst, char* fmt, ...)
+{
+    char* ap;
+    ap = (char*)((long)&fmt + align_up(sizeof(fmt), 8));
+    return 0;
+}
+long printf(char* fmt, ...)
+{
+    char* ap;
+    (ap = (char*)((long)&fmt + align_up(sizeof(fmt), 8)));
+    return 0;
+}
+long test(int a)
+{
+    return sizeof(a);
+}
 int main()
 {
-    return printf("%d%c%d\n", 1, '2', 3);
+    return 0;
 }

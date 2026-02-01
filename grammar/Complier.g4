@@ -1,6 +1,7 @@
 grammar Complier;
  @parser::members {
     #include "scoped_map.hpp"
+    #include <unordered_set>
 
     scoped_map<std::string, bool> TypedefedId{};
     bool currentDeclIsTypedef = false;
@@ -13,6 +14,35 @@ grammar Complier;
     bool addTypeDef(const std::string& name)
     {
         return TypedefedId.add(name, true);
+    }
+
+    // 检查第 n 个 lookahead token 是否是类型名的开始
+    bool isTypeNameStartAt(int n)
+    {
+        std::string text = _input->LT(n)->getText();
+        // 基本类型关键字和类型限定符
+        static const std::unordered_set<std::string> typeKeywords = {
+            "void", "char", "short", "int", "long", "float", "double",
+            "signed", "unsigned", "_Bool", "_Complex", "struct", "union",
+            "enum", "const", "volatile", "restrict", "_Atomic",
+            "__m128", "__m128d", "__m128i", "__extension__", "__typeof__"
+        };
+        if (typeKeywords.count(text)) return true;
+        // 检查是否是 typedef 名字
+        return hasTypeDef(text);
+    }
+
+    // 判断当前 lookahead 是否可能是类型名的开始
+    bool isTypeNameStart()
+    {
+        return isTypeNameStartAt(1);
+    }
+
+    // 检查是否是 sizeof/alignof '(' typeName ')' 的模式
+    // 在消耗任何 token 之前调用，LA(1)=sizeof, LA(2)='(', LA(3)=可能的类型名开始
+    bool isSizeofWithTypeName()
+    {
+        return _input->LA(2) == LeftParen && isTypeNameStartAt(3);
     }
 }
 primaryExpression
@@ -56,13 +86,14 @@ argumentExpressionList
     ;
  
 unaryExpression
-    :
-    ('++' |  '--' |  'sizeof')*
-    (postfixExpression
-    |   unaryOperator castExpression
-    |   ('sizeof' | '_Alignof') '(' typeName ')'
-    |   '&&' Identifier // GCC extension address of label
-    )
+    :   ('++' | '--')* (
+            { isSizeofWithTypeName() }? ('sizeof' | '_Alignof') '(' typeName ')'
+        |   'sizeof' unaryExpression
+        |   '_Alignof' '(' typeName ')'  // _Alignof 必须用于类型
+        |   postfixExpression
+        |   unaryOperator castExpression
+        |   '&&' Identifier // GCC extension address of label
+        )
     ;
  
 unaryOperator
@@ -199,7 +230,7 @@ typeSpecifier
     ;
  
 structOrUnionSpecifier
-    :   structOrUnion Identifier? '{' structDeclarationList '}'
+    :   structOrUnion Identifier? '{' { bool saved = currentDeclIsTypedef; currentDeclIsTypedef = false; } structDeclarationList '}' { currentDeclIsTypedef = saved; }
     |   structOrUnion Identifier
     ;
  

@@ -1,76 +1,29 @@
-
-
-
-long align_up(long num, long align);
-char* va_arg_fun(char** ap, int size);
-
-
-
-
-
-typedef long size_t;
-long strlen(char* str);
-char* strcpy(char* to, char* from);
-int strcmp(char* str1, char* str2);
-char* memmove(char* des, char* src, size_t n);
-void write(long arg);
-long print_str(char* str);
-long num_to_str(char* src, long num);
-
-long vsprintf(char* dst, char* fmt, char* ap);
-
-long sprintf(char* dst, char* fmt, ...);
-
-long vprintf(char* fmt, char* ap);
-long printf(char* fmt, ...);
-
-typedef struct FILE_struct
+long align_up(long num, long align)
 {
-    int _flags; 
+    return 0;
+};
+long vsprintf(char* dst, char* fmt, char* ap)
+{
+    return 0;
+}
 
-    
-    char* _IO_read_ptr;   
-    char* _IO_read_end;   
-    char* _IO_read_base;  
-    char* _IO_write_base; 
-    char* _IO_write_ptr;  
-    char* _IO_write_end;  
-    char* _IO_buf_base;   
-    char* _IO_buf_end;    
-
-    
-    char* _IO_save_base;   
-    char* _IO_backup_base; 
-    char* _IO_save_end;    
-
-    long _markers;
-
-    long _chain; 
-
-    int _fileno;
-    int _flags2;
-    long _old_offset; 
-
-    
-    short _cur_column;
-    char _vtable_offset;
-    char _shortbuf[1];
-
-    long _lock;
-} FILE;
-
-FILE* fopen(char* filename, char* modes);
-
-int fclose(FILE* fp);
-int fputc(int c, FILE* fp);
-int fputs(char* s, FILE* fp);
-int fgetc(FILE* fp);
-char* fgets(char* buf, int n, FILE* fp);
-
-size_t fread(void* ptr, size_t size_of_elements, size_t number_of_elements, FILE* a_file);
-
-size_t fwrite(void* ptr, size_t size_of_elements, size_t number_of_elements, FILE* a_file);
+long sprintf(char* dst, char* fmt, ...)
+{
+    char* ap;
+    ap = (char*)((long)&fmt + align_up(sizeof(fmt), 8));
+    return 0;
+}
+long printf(char* fmt, ...)
+{
+    char* ap;
+    (ap = (char*)((long)&fmt + align_up(sizeof(fmt), 8)));
+    return 0;
+}
+long test(int a)
+{
+    return sizeof(a);
+}
 int main()
 {
-    return printf("%d%c%d\n", 1, '2', 3);
+    return 0;
 }

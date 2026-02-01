@@ -1621,13 +1621,26 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
 {
     Type type;
     auto sizenow = funcnow->funcInfo.asms.size();
+
+    // 新语法结构:
+    // unaryExpression: ('++' | '--')* (
+    //     { isSizeofWithTypeName() }? ('sizeof' | '_Alignof') '(' typeName ')'   // 分支1
+    //   | 'sizeof' unaryExpression                                               // 分支2
+    //   | '_Alignof' '(' typeName ')'                                            // 分支3
+    //   | postfixExpression                                                      // 分支4
+    //   | unaryOperator castExpression                                           // 分支5
+    //   | '&&' Identifier                                                        // 分支6
+    // )
+
     if (ctx->postfixExpression())
     {
+        // 分支4: postfixExpression
         auto pret = (visitPostfixExpression(ctx->postfixExpression()));
         type = pret;
     }
     else if (ctx->unaryOperator())
     {
+        // 分支5: unaryOperator castExpression
         if (ctx->unaryOperator()->getText() == "&")
         {
             auto cret = visitCastExpression(ctx->castExpression());
@@ -1676,43 +1689,71 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
             type = cret;
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
         }
+        else if (ctx->unaryOperator()->getText() == "~")
+        {
+            auto cret = (visitCastExpression(ctx->castExpression()));
+            type = cret;
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::NOT});
+        }
+        else if (ctx->unaryOperator()->getText() == "!")
+        {
+            auto cret = (visitCastExpression(ctx->castExpression()));
+            type = Type{Type::Kind::Basic, Type::BasicType::Int};
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 0});
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::CMP});
+        }
     }
     else if (ctx->typeName())
     {
-        // 找到 typeName 在 children 中的位置，检查前面是 sizeof 还是 _Alignof
-        // 结构: ... sizeof/alignof '(' typeName ')'
+        // 分支1或分支3: sizeof(typeName) 或 _Alignof(typeName)
         auto cret = visitTypeName(ctx->typeName());
 
-        // 遍历 children 找到 '(' typeName ')' 前的关键字
-        for (size_t i = 0; i < ctx->children.size(); i++)
+        // 检查是 sizeof 还是 _Alignof
+        bool is_sizeof = false;
+        bool is_alignof = false;
+        for (auto child : ctx->children)
         {
-            // 找到 typeName 对应的 child
-            if (ctx->children[i] == ctx->typeName())
+            std::string text = child->getText();
+            if (text == "sizeof")
             {
-                // 向前找到对应的关键字 (跳过 '(')
-                // children[i-1] 是 '(', children[i-2] 是 sizeof 或 _Alignof
-                if (i >= 2)
-                {
-                    std::string keyword = ctx->children[i - 2]->getText();
-                    if (keyword == "sizeof")
-                    {
-                        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, cret.getsize()});
-                        type = Type{Type::Kind::Basic, Type::BasicType::Long};
-                    }
-                    else if (keyword == "_Alignof")
-                    {
-                        // [TODO] _Alignof 实现
-                        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 8});
-                        type = Type{Type::Kind::Basic, Type::BasicType::Long};
-                    }
-                }
+                is_sizeof = true;
+                break;
+            }
+            else if (text == "_Alignof")
+            {
+                is_alignof = true;
                 break;
             }
         }
+
+        if (is_sizeof)
+        {
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, cret.getsize()});
+            type = Type{Type::Kind::Basic, Type::BasicType::Long};
+        }
+        else if (is_alignof)
+        {
+            // [TODO] _Alignof 实现 - 目前简化为8字节对齐
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 8});
+            type = Type{Type::Kind::Basic, Type::BasicType::Long};
+        }
     }
+    else if (ctx->unaryExpression())
+    {
+        // 分支2: 'sizeof' unaryExpression
+        // sizeof 后面跟表达式，如 sizeof x, sizeof *p, sizeof (var)
+        auto inner_type = visitUnaryExpression(ctx->unaryExpression());
+        // sizeof 无副作用，回退生成的 asm
+        funcnow->funcInfo.asms.resize(sizenow);
+        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, inner_type.getsize()});
+        type = Type{Type::Kind::Basic, Type::BasicType::Long};
+    }
+
+    // 处理前缀 ++ 和 --
     for (int i = ctx->children.size() - 1; i >= 0; i--)
     {
-        if (ctx->children[i]->getText() == "++")
+        std::string child_text = ctx->children[i]->getText();
+        if (child_text == "++")
         {
             if (stackTopIsLvalue())
             {
@@ -1735,7 +1776,7 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
             saveStackTopAddrValueByType(type);
             loadStackTopAddrByType(type);
         }
-        else if (ctx->children[i]->getText() == "--")
+        else if (child_text == "--")
         {
             if (stackTopIsLvalue())
             {
@@ -1757,14 +1798,6 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
             saveStackTopAddrValueByType(type);
             loadStackTopAddrByType(type);
-        }
-        else if (ctx->children[i]->getText() == "sizeof" &&
-                 ctx->children[i + 1]->getText() != "(") // 排除分支3的sizeof
-        {
-            // sizeof无副作用, 回退asm
-            funcnow->funcInfo.asms.resize(sizenow);
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, type.getsize()});
-            type = Type{Type::Kind::Basic, Type::BasicType::Int};
         }
     }
     return type;
