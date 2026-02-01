@@ -1,3 +1,5 @@
+#ifndef STDIO_H
+#define STDIO_H
 #include "./stdarg.h"
 #include "./string.h"
 void write(long arg);
@@ -57,3 +59,4 @@ char* fgets(char* buf, int n, FILE* fp);
 size_t fread(void* ptr, size_t size_of_elements, size_t number_of_elements, FILE* a_file);
 
 size_t fwrite(void* ptr, size_t size_of_elements, size_t number_of_elements, FILE* a_file);
+#endif
