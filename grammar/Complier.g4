@@ -477,8 +477,8 @@ asmADDer
     ;
 
 blockItem
-    :   statement
-    |   declaration
+    :   declaration
+    |   statement // TOFIX: int64_t* ptr;
     |   asmADDer
     ;
  

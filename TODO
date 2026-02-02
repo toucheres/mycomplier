@@ -14,4 +14,6 @@
 [OK][TODO] 优化type的id/storageClass到varDef中, type不再保留id/storageClass信息
 [OK][TODO] printf的%c乱码
 [OK][TODO] 结构体一律按栈运算
-[TODO] sizeof(struct)
+[OK][TODO] sizeof(struct)
+[OK][TODO] main(int argn,char**argc)的传参
+[TODO] printf()的%s崩溃

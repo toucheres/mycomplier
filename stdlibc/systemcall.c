@@ -1,3 +1,4 @@
+#include "systemcall.h"
 char* __malloc(char in)
 {
     char* ptr;
@@ -136,4 +137,12 @@ long __write_file(long fp, char* buf, long size)
     _asm_("PUSH");
     _asm_("SW");
     return ret;
+}
+void __exit(long code)
+{
+    _asm_("IMM 16"); // code
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("POP");
+    _asm_("EXIT");
 }

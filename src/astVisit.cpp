@@ -729,31 +729,31 @@ Type astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
     {
         std::string enumName;
         static long enumIndex = 0;
-        
+
         if (ctx->enumSpecifier()->enumeratorList()) // 同时定义enum
         {
             IDdef thisEnum;
             thisEnum.storageClassSpecifier = StorageClassSpecifier::EnumDef;
-            enumName = thisEnum.name = 
-                ctx->enumSpecifier()->Identifier()
-                    ? ctx->enumSpecifier()->Identifier()->getText()
-                    : "__unnamed_enum_" + std::to_string(enumIndex++);
+            enumName = thisEnum.name = ctx->enumSpecifier()->Identifier()
+                                           ? ctx->enumSpecifier()->Identifier()->getText()
+                                           : "__unnamed_enum_" + std::to_string(enumIndex++);
             thisEnum.type.kind = Type::Kind::Basic;
             thisEnum.type.basic_type = Type::BasicType::Int; // enum底层类型为int
             record_ID_decl(thisEnum.name, thisEnum.type, StorageClassSpecifier::EnumDef, nullptr);
-            
+
             // 处理枚举常量列表
             long long enumValue = 0;
             for (auto* enumerator : ctx->enumSpecifier()->enumeratorList()->enumerator())
             {
                 std::string constName = enumerator->enumerationConstant()->Identifier()->getText();
-                
+
                 // 如果有赋值表达式，计算值
                 if (enumerator->constantExpression())
                 {
-                    enumValue = parseConstexpr(enumerator->constantExpression()->conditionalExpression());
+                    enumValue =
+                        parseConstexpr(enumerator->constantExpression()->conditionalExpression());
                 }
-                
+
                 // 将枚举常量注册为整型常量
                 IDdef enumConst;
                 enumConst.name = constName;
@@ -762,10 +762,12 @@ Type astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
                 enumConst.addr = static_cast<int>(enumValue); // 使用addr存储枚举值
                 enumConst.storageClassSpecifier = StorageClassSpecifier::EnumConst;
                 enumConst.is_defined = true;
-                record_ID_decl(enumConst.name, enumConst.type, StorageClassSpecifier::EnumConst, nullptr);
+                record_ID_decl(enumConst.name, enumConst.type, StorageClassSpecifier::EnumConst,
+                               nullptr);
                 // 更新枚举值以便为下一个枚举成员使用
-                obj.decls.find_ID_decl(constName, StorageClassSpecifier::EnumConst)->addr = static_cast<int>(enumValue);
-                
+                obj.decls.find_ID_decl(constName, StorageClassSpecifier::EnumConst)->addr =
+                    static_cast<int>(enumValue);
+
                 enumValue++;
             }
         }
@@ -773,7 +775,7 @@ Type astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
         {
             enumName = ctx->enumSpecifier()->Identifier()->getText();
         }
-        
+
         // enum类型返回int
         rettype.kind = Type::Kind::Basic;
         rettype.basic_type = Type::BasicType::Int;
@@ -2519,9 +2521,14 @@ Type astVisitor::visitAbstractDeclarator(ComplierParser::AbstractDeclaratorConte
     }
     if (ctx->pointer())
     {
-        rettype.pushTop(Type(Type::Kind::Pointer,
-                             static_cast<int>(std::count(ctx->pointer()->getText().begin(),
-                                                         ctx->pointer()->getText().end(), '*'))));
+        for (int i = 0; i < static_cast<int>(std::count(ctx->pointer()->getText().begin(),
+                                                        ctx->pointer()->getText().end(), '*'));
+             i++)
+        {
+            Type ptr;
+            ptr.kind = Type::Kind::Pointer;
+            rettype.pushTop(ptr);
+        }
     }
     return rettype;
 }
@@ -2593,7 +2600,8 @@ long long astVisitor::parseConstexpr(ComplierParser::AssignmentExpressionContext
         if (ctx->Identifier())
         {
             // 检查是否是枚举常量
-            if (auto* enumConst = lookup_ID_decl(ctx->Identifier()->getText(), StorageClassSpecifier::EnumConst))
+            if (auto* enumConst =
+                    lookup_ID_decl(ctx->Identifier()->getText(), StorageClassSpecifier::EnumConst))
             {
                 return enumConst->addr;
             }
@@ -2923,7 +2931,7 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
     // 创建一个临时的 AssignmentExpressionContext 来复用已有逻辑
     // 由于 AssignmentExpression 的第一个分支就是 conditionalExpression
     // 这里直接递归调用内部的求值逻辑
-    
+
     // 重新实现一个简化版本，直接求值 ConditionalExpression
     std::function<long long(ComplierParser::PrimaryExpressionContext*)> evalPrimary;
     std::function<long long(ComplierParser::PostfixExpressionContext*)> evalPostfix;
@@ -2951,7 +2959,8 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         if (ctx->Identifier())
         {
             // 检查是否是枚举常量
-            if (auto* enumConst = lookup_ID_decl(ctx->Identifier()->getText(), StorageClassSpecifier::EnumConst))
+            if (auto* enumConst =
+                    lookup_ID_decl(ctx->Identifier()->getText(), StorageClassSpecifier::EnumConst))
             {
                 return enumConst->addr;
             }
@@ -2992,10 +3001,14 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         {
             long long val = evalCast(ctx->castExpression());
             std::string op = ctx->unaryOperator()->getText();
-            if (op == "+") return val;
-            if (op == "-") return -val;
-            if (op == "~") return ~val;
-            if (op == "!") return val == 0 ? 1LL : 0LL;
+            if (op == "+")
+                return val;
+            if (op == "-")
+                return -val;
+            if (op == "~")
+                return ~val;
+            if (op == "!")
+                return val == 0 ? 1LL : 0LL;
         }
         throw error::invalid_constant;
     };
@@ -3015,7 +3028,8 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
 
     evalMul = [&evalCast](ComplierParser::MultiplicativeExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto casts = ctx->castExpression();
         long long result = evalCast(casts[0]);
         size_t idx = 1;
@@ -3023,16 +3037,20 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         {
             std::string op = ctx->children[i]->getText();
             long long rhs = evalCast(casts[idx++]);
-            if (op == "*") result *= rhs;
-            else if (op == "/") result /= rhs;
-            else if (op == "%") result %= rhs;
+            if (op == "*")
+                result *= rhs;
+            else if (op == "/")
+                result /= rhs;
+            else if (op == "%")
+                result %= rhs;
         }
         return result;
     };
 
     evalAdd = [&evalMul](ComplierParser::AdditiveExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto muls = ctx->multiplicativeExpression();
         long long result = evalMul(muls[0]);
         size_t idx = 1;
@@ -3040,15 +3058,18 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         {
             std::string op = ctx->children[i]->getText();
             long long rhs = evalMul(muls[idx++]);
-            if (op == "+") result += rhs;
-            else if (op == "-") result -= rhs;
+            if (op == "+")
+                result += rhs;
+            else if (op == "-")
+                result -= rhs;
         }
         return result;
     };
 
     evalShift = [&evalAdd](ComplierParser::ShiftExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto adds = ctx->additiveExpression();
         long long result = evalAdd(adds[0]);
         size_t idx = 1;
@@ -3056,15 +3077,18 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         {
             std::string op = ctx->children[i]->getText();
             long long rhs = evalAdd(adds[idx++]);
-            if (op == "<<") result <<= rhs;
-            else if (op == ">>") result >>= rhs;
+            if (op == "<<")
+                result <<= rhs;
+            else if (op == ">>")
+                result >>= rhs;
         }
         return result;
     };
 
     evalRel = [&evalShift](ComplierParser::RelationalExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto shifts = ctx->shiftExpression();
         long long result = evalShift(shifts[0]);
         size_t idx = 1;
@@ -3072,17 +3096,22 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         {
             std::string op = ctx->children[i]->getText();
             long long rhs = evalShift(shifts[idx++]);
-            if (op == "<") result = result < rhs ? 1LL : 0LL;
-            else if (op == ">") result = result > rhs ? 1LL : 0LL;
-            else if (op == "<=") result = result <= rhs ? 1LL : 0LL;
-            else if (op == ">=") result = result >= rhs ? 1LL : 0LL;
+            if (op == "<")
+                result = result < rhs ? 1LL : 0LL;
+            else if (op == ">")
+                result = result > rhs ? 1LL : 0LL;
+            else if (op == "<=")
+                result = result <= rhs ? 1LL : 0LL;
+            else if (op == ">=")
+                result = result >= rhs ? 1LL : 0LL;
         }
         return result;
     };
 
     evalEq = [&evalRel](ComplierParser::EqualityExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto rels = ctx->relationalExpression();
         long long result = evalRel(rels[0]);
         size_t idx = 1;
@@ -3090,15 +3119,18 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         {
             std::string op = ctx->children[i]->getText();
             long long rhs = evalRel(rels[idx++]);
-            if (op == "==") result = result == rhs ? 1LL : 0LL;
-            else if (op == "!=") result = result != rhs ? 1LL : 0LL;
+            if (op == "==")
+                result = result == rhs ? 1LL : 0LL;
+            else if (op == "!=")
+                result = result != rhs ? 1LL : 0LL;
         }
         return result;
     };
 
     evalBitAnd = [&evalEq](ComplierParser::AndExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto eqs = ctx->equalityExpression();
         long long result = evalEq(eqs[0]);
         for (size_t i = 1; i < eqs.size(); ++i)
@@ -3108,7 +3140,8 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
 
     evalBitXor = [&evalBitAnd](ComplierParser::ExclusiveOrExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto ands = ctx->andExpression();
         long long result = evalBitAnd(ands[0]);
         for (size_t i = 1; i < ands.size(); ++i)
@@ -3118,7 +3151,8 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
 
     evalBitOr = [&evalBitXor](ComplierParser::InclusiveOrExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto xors = ctx->exclusiveOrExpression();
         long long result = evalBitXor(xors[0]);
         for (size_t i = 1; i < xors.size(); ++i)
@@ -3128,7 +3162,8 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
 
     evalLogAnd = [&evalBitOr, &truth](ComplierParser::LogicalAndExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto ors = ctx->inclusiveOrExpression();
         for (auto* o : ors)
             if (!truth(evalBitOr(o)))
@@ -3138,7 +3173,8 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
 
     evalLogOr = [&evalLogAnd, &truth](ComplierParser::LogicalOrExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto ands = ctx->logicalAndExpression();
         for (auto* a : ands)
             if (truth(evalLogAnd(a)))
@@ -3148,7 +3184,8 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
 
     evalExpr = [&evalCond](ComplierParser::ExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         auto assigns = ctx->assignmentExpression();
         long long result = 0;
         for (auto* a : assigns)
@@ -3161,9 +3198,11 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         return result;
     };
 
-    evalCond = [&evalLogOr, &evalExpr, &evalCond](ComplierParser::ConditionalExpressionContext* ctx) -> long long
+    evalCond = [&evalLogOr, &evalExpr,
+                &evalCond](ComplierParser::ConditionalExpressionContext* ctx) -> long long
     {
-        if (!ctx) throw error::invalid_constant;
+        if (!ctx)
+            throw error::invalid_constant;
         long long c = evalLogOr(ctx->logicalOrExpression());
         if (ctx->expression())
         {
@@ -3478,7 +3517,7 @@ Type astVisitor::load_var_or_func(std::string name)
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, enumConst->addr});
         return enumConst->type;
     }
-    
+
     if (auto* id = lookup_ID_decl(name))
     {
         if (id->type.kind == Type::Kind::Function)

@@ -40,3 +40,13 @@ void exit(int code)
 {
     return __exit(code);
 }
+
+void* memset(void* s, int c, long n)
+{
+    char* p = s;
+    for (long i = 0; i < n; i++)
+    {
+        p[i] = c;
+    }
+    return s;
+}

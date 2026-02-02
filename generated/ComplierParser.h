@@ -1569,8 +1569,8 @@ public:
   public:
     BlockItemContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    StatementContext *statement();
     DeclarationContext *declaration();
+    StatementContext *statement();
     AsmADDerContext *asmADDer();
 
 

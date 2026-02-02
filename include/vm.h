@@ -1,8 +1,8 @@
 #pragma once
 #include "error.hpp"
 #include <array>
-#include <expected>
 #include <cstring>
+#include <expected>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -89,7 +89,7 @@ inline void VCPU<StackSize, Word>::do_ins(const std::string& in)
     {
         std::string arg;
         str >> arg;
-        int num = std::stoi(arg);
+        Word num = std::stol(arg);
         sp--;
         *sp = static_cast<Word>(num);
         return;

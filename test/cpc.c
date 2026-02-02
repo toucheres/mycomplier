@@ -5,7 +5,6 @@
 typedef long int64_t;
 typedef int int32_t;
 #define int int64_t
-
 int MAX_SIZE;
 
 int *code,      // code segment
@@ -1096,6 +1095,8 @@ void parse_fun()
 
 void parse()
 {
+    printf("[debug] parse\n");
+
     int type, base_type;
     int* p;
     line = 1;
@@ -1157,6 +1158,8 @@ void parse()
 
 void keyword()
 {
+    printf("[debug] keyword\n");
+
     int i;
     src = "char int enum if else return sizeof while "
           "open read close printf malloc free memset memcmp exit void main";
@@ -1185,6 +1188,7 @@ void keyword()
 
 int init_vm()
 {
+    printf("[debug] init_vm\n");
     // allocate memory for virtual machine
     if (!(code = code_dump = malloc(MAX_SIZE)))
     {
@@ -1215,6 +1219,7 @@ int init_vm()
 
 int run_vm(int argc, char** argv)
 {
+    printf("[debug] run_vm\n");
     int op;
     int* tmp;
     // exit code for main
@@ -1319,9 +1324,9 @@ int run_vm(int argc, char** argv)
         else if (op == OPEN)
         {
             // Use C stdio: fopen. Return FILE* cast to int.
-            const char* fname = (char*)sp[1];
+            char* fname = (char*)sp[1];
             int flags = sp[0];
-            const char* mode = (flags == 0) ? "r" : "w+";
+            char* mode = (flags == 0) ? "r" : "w+";
             FILE* f = fopen(fname, mode);
             ax = (int)f;
         }
@@ -1413,14 +1418,17 @@ void write_as()
 
 int load_src(char* file)
 {
+    printf("[debug] load_src\n");
     int cnt;
     FILE* fp;
+
     // use fopen/fread/fclose for bootstrap.
     if (!(fp = fopen(file, "r")))
     {
         printf("could not open source code(%s)\n", file);
         return -1;
     }
+
     if (!(src = src_dump = malloc(MAX_SIZE)))
     {
         printf("could not malloc(%lld) for source code\n", MAX_SIZE);
@@ -1443,17 +1451,28 @@ int32_t main(int32_t argc, char** argv)
 {
     MAX_SIZE = 128 * 1024 * 8; // 1MB = 128k * 64bit
     // load source code
+    printf("[debug] main1\n");
     if (load_src(*(argv + 1)) != 0)
         return -1;
     // init memory & register
+    printf("[debug] main2\n");
+
     if (init_vm() != 0)
         return -1;
     // prepare keywords for symbol table
+    printf("[debug] main3\n");
+
     keyword();
     // parse and generate vm instructions, save to vm
+    printf("[debug] main4\n");
+
     parse();
+    printf("[debug] main5\n");
+
     // print assembles: vm instructions. for debug
     write_as();
+    printf("[debug] main6\n");
+
     // run vm and execute instructions
     return run_vm(--argc, ++argv);
 }

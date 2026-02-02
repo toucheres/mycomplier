@@ -46,10 +46,10 @@
 #include "ComplierParser.h"
 #include "error.hpp"
 #include "obj.h"
+#include <climits>
 #include <expected>
 #include <map>
 #include <memory>
-#include <climits>
 #include <optional>
 #include <peglib.h>
 #include <stack>
@@ -68,22 +68,23 @@ struct linker
 {
     std::unordered_map<std::string, size_t> addrmap;
     std::vector<OBJ>& objs;
+    std::vector<std::string> mainargs;
     exefile exe;
     std::expected<size_t, error> pushfunc(std::string funcname);
     std::expected<std::vector<std::string>, error> process();
-    linker(std::vector<OBJ>& ins) : objs(ins)
+    linker(std::vector<OBJ>& ins, std::vector<std::string> amainargs)
+        : objs(ins), mainargs(amainargs)
     {
     }
 };
 struct complier
 {
-    static std::expected<std::vector<std::string>, error> process(std::vector<std::string> paths,
-                                                                  bool showASt = false,
-                                                                  int tolerate = INT_MAX,
-                                                                  bool showFoldedNames = false,
-                                                                  bool disableStd = false
-                                                                );
+    static std::expected<std::vector<std::string>, error> process(
+        std::vector<std::string> paths, bool showASt = false, int tolerate = INT_MAX,
+        bool showFoldedNames = false, bool disableStd = false,
+        std::vector<std::string> mainargs = std::vector<std::string>{});
 
   private:
-    static void printAST(antlr4::tree::ParseTree* tree, int tolerate = INT_MAX, bool showFoldedNames = false);
+    static void printAST(antlr4::tree::ParseTree* tree, int tolerate = INT_MAX,
+                         bool showFoldedNames = false);
 };

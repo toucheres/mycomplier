@@ -337,6 +337,19 @@ std::expected<std::vector<std::string>, error> linker::process()
             pushfunc("__global_init" + eachobj.name);
         }
     }
+
+    int argn = mainargs.size() + 1;
+    char** argv = (char**)malloc((argn + 1) * sizeof(char*));
+    argv[0] = ""; // [TODO]
+    for (int i = 0; i < mainargs.size(); i++)
+    {
+        argv[i + 1] = (char*)malloc(mainargs[i].length() + 1);
+        strcpy(argv[i + 1], mainargs[i].c_str());
+        argv[i + 1][mainargs[i].length()] = '\0';
+    }
+
+    this->exe.asms.push_back(ASM{ASM::basic_asm::IMM, (long)argv});          // argv
+    this->exe.asms.push_back(ASM{ASM::basic_asm::IMM, argn});                // argn
     this->exe.asms.push_back(ASM{ASM::basic_asm::IMM, exe.asms.size() + 3}); // call main
     this->exe.asms.push_back(ASM{ASM::basic_asm::CALL});                     // call main
     this->exe.asms.push_back(ASM{ASM::basic_asm::EXIT});
@@ -423,7 +436,8 @@ bool IDdef::operator==(const IDdef& that) const
 std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths,
                                                                  bool showASt, int tolerate,
                                                                  bool showFoldedNames,
-                                                                 bool disableStd)
+                                                                 bool disableStd,
+                                                                 std::vector<std::string> mainargs)
 {
     std::vector<OBJ> objs;
     if (!disableStd)
@@ -488,7 +502,7 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
         obj.flush_global_decls();
         objs.push_back(std::move(obj));
     }
-    linker linker{objs};
+    linker linker{objs, mainargs};
     return linker.process();
 }
 

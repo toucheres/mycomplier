@@ -34,6 +34,7 @@ int main(int argc, const char* argv[])
         bool printasm = tvm.get(print_asm).or_(false);
         bool printretvalue = tvm.get(print_ret_value).or_(false);
         bool disablestd = tvm.get(disable_std).or_(false);
+        std::vector<std::string> mainargs = tvm.get(main_args).or_(std::vector<std::string>{});
         if (enable_debug)
         {
             // 禁用 stdout 缓冲，确保崩溃时输出不丢失
@@ -41,7 +42,7 @@ int main(int argc, const char* argv[])
             std::setvbuf(stdout, nullptr, _IONBF, 0);
         }
         auto ret = complier::process(tvm.get_direct(input_files), showASt, tolerate,
-                                     showFoldedNames, disablestd);
+                                     showFoldedNames, disablestd, mainargs);
         if (!ret)
         {
             std::cout << "error\n";

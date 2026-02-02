@@ -482,7 +482,7 @@ void complierParserInitialize() {
   	1017,3,152,76,0,1016,1015,1,0,0,0,1017,1018,1,0,0,0,1018,1016,1,0,0,0,
   	1018,1019,1,0,0,0,1019,149,1,0,0,0,1020,1021,5,20,0,0,1021,1022,5,65,
   	0,0,1022,1023,5,114,0,0,1023,1024,5,66,0,0,1024,1025,5,93,0,0,1025,151,
-  	1,0,0,0,1026,1030,3,142,71,0,1027,1030,3,48,24,0,1028,1030,3,150,75,0,
+  	1,0,0,0,1026,1030,3,48,24,0,1027,1030,3,142,71,0,1028,1030,3,150,75,0,
   	1029,1026,1,0,0,0,1029,1027,1,0,0,0,1029,1028,1,0,0,0,1030,153,1,0,0,
   	0,1031,1033,3,44,22,0,1032,1031,1,0,0,0,1032,1033,1,0,0,0,1033,1034,1,
   	0,0,0,1034,1035,5,93,0,0,1035,155,1,0,0,0,1036,1037,5,36,0,0,1037,1038,
@@ -8343,12 +8343,12 @@ ComplierParser::BlockItemContext::BlockItemContext(ParserRuleContext *parent, si
   : ParserRuleContext(parent, invokingState) {
 }
 
-ComplierParser::StatementContext* ComplierParser::BlockItemContext::statement() {
-  return getRuleContext<ComplierParser::StatementContext>(0);
-}
-
 ComplierParser::DeclarationContext* ComplierParser::BlockItemContext::declaration() {
   return getRuleContext<ComplierParser::DeclarationContext>(0);
+}
+
+ComplierParser::StatementContext* ComplierParser::BlockItemContext::statement() {
+  return getRuleContext<ComplierParser::StatementContext>(0);
 }
 
 ComplierParser::AsmADDerContext* ComplierParser::BlockItemContext::asmADDer() {
@@ -8386,14 +8386,14 @@ ComplierParser::BlockItemContext* ComplierParser::blockItem() {
     case 1: {
       enterOuterAlt(_localctx, 1);
       setState(1026);
-      statement();
+      declaration();
       break;
     }
 
     case 2: {
       enterOuterAlt(_localctx, 2);
       setState(1027);
-      declaration();
+      statement();
       break;
     }
 

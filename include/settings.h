@@ -72,6 +72,11 @@ namespace app_options {
         "input-files",
         "input files"
     };
+
+    inline constexpr Option<std::vector<std::string>> main_args{
+        "main-args",
+        "arguments to pass to the compiled program's main function"
+    };
 }
 
 std::optional<
@@ -96,6 +101,7 @@ getsetting(int argc, const char* argv[])
         typed_options::add_option(visible, print_asm);
         typed_options::add_option(visible, print_ret_value);
         typed_options::add_option(visible, disable_std);
+        typed_options::add_option(visible, main_args);
 
         po::options_description hidden("Hidden options");
         typed_options::add_option(hidden, input_files);

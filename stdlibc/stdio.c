@@ -1,7 +1,7 @@
+#include <def.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <systemcall.h>
-#include <def.h>
 void write(long arg)
 {
     return __write(arg);
@@ -76,7 +76,7 @@ long vsprintf(char* dst, char* fmt, va_list ap)
             }
             else if (*fmt == 's')
             {
-                char* str = va_arg(ap, char*);
+                char* str = va_arg(ap, char*);   
                 while (*str != '\0')
                 {
                     *src = *str;
