@@ -12,11 +12,7 @@ void free(char* ptr)
 
 char* memcpy(char* dest, char* src, long count)
 {
-    for (int i = 0; i < count; i++)
-    {
-        ((char*)dest)[i] = ((char*)src)[i];
-    }
-    return dest;
+    return __memcpy(dest, src, count);
 }
 
 int memcmp(char* str1, char* str2, long n)
@@ -43,10 +39,5 @@ void exit(int code)
 
 char* memset(char* s, int c, long n)
 {
-    char* p = s;
-    for (long i = 0; i < n; i++)
-    {
-        p[i] = c;
-    }
-    return s;
+    return __memset(s, c, n);
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include "error.hpp"
 #include <array>
+#include <deque>
 #include <cstring>
 #include <expected>
 #include <fstream>
@@ -55,13 +56,17 @@ struct VM
         GETC,
         READ,
         WRITE_FILE,
-        EXIT
+        EXIT,
+        MEMCPY,
+        MEMSET
     };
     VM(const std::vector<std::string>& asms);
     bool enable_debug = true;
     bool print_asm = false;
     bool print_ret_value = false;
+    std::deque<std::string> debug_buffer{10000000};
     VCPU vcpu;
     std::optional<int64_t> run();
     void debug();
+    void dump_debug_buffer(size_t lo);
 };

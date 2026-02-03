@@ -10,4 +10,6 @@ int __getc(long fp);
 long __read(long fp, char* buf, long size);
 long __write_file(long fp, char* buf, long size);
 void __exit(long code);
+char* __memcpy(char* dest, char* src, long n);
+char* __memset(char* s, int c, long n);
 #endif

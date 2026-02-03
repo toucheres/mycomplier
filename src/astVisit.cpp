@@ -1372,8 +1372,9 @@ Type astVisitor::visitLogicalOrExpression(ComplierParser::LogicalOrExpressionCon
         }
         auto lret = (visitLogicalAndExpression(in[0]));
         // 保存当前位置，用于生成条件跳转指令
+        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY}); // 短路的jz/jnz会消耗栈顶
         int pos = funcnow->funcInfo.asms.size();
-        funcnow->funcInfo.asms.push_back("HOLD"); // 占位，后面会替换为实际指令
+        funcnow->funcInfo.asms.push_back("HOLD");                    // 占位，后面会替换为实际指令
         // 如果左操作数为true（非零），跳过右操作数的计算（短路）
         // JNZ指令：当栈顶值非零时跳转
         // 弹出左操作数结果，为右操作数腾出栈顶位置
@@ -1401,6 +1402,7 @@ Type astVisitor::visitLogicalAndExpression(ComplierParser::LogicalAndExpressionC
         }
         auto lret = (visitInclusiveOrExpression(in[0]));
         // 保存当前位置，用于生成条件跳转指令
+        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY}); // 短路的jz/jnz会消耗栈顶
         int pos = funcnow->funcInfo.asms.size();
         funcnow->funcInfo.asms.push_back("HOLD"); // 占位，后面会替换为实际指令
         // 如果左操作数为true（非零），跳过右操作数的计算（短路）
@@ -1824,6 +1826,7 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
                 THROW_ERR(error::expected_lvalue, ctx);
             }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
             loadStackTopAddrByType(type);
             long step = 1;
             if (type.kind == Type::Kind::Pointer)
@@ -1845,6 +1848,7 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
             {
                 THROW_ERR(error::expected_lvalue, ctx);
             }
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY});
             loadStackTopAddrByType(type);
             long step = 1;

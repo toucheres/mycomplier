@@ -143,6 +143,10 @@ void tokenize()
     printf("[debug] tokenize\n");
     char* ch_ptr;
     long i = 0;
+    printf("src now:\n");
+    printf(src);
+    printf("\n");
+
     while ((token = *src++))
     {
         printf("[debug] tokenize:%d\n", i);
@@ -166,14 +170,20 @@ void tokenize()
             ch_ptr = src - 1;
             while ((*src >= 'a' && *src <= 'z') || (*src >= 'A' && *src <= 'Z') ||
                    (*src >= '0' && *src <= '9') || (*src == '_'))
+            {
                 // use token store hash value
                 token = token * 147 + *src++;
+                printf("handle symbol_1\n");
+            }
+            printf("handle symbol_2\n");
             // keep hash
             token = (token << 6) + (src - ch_ptr);
             symbol_ptr = symbol_table;
             // search same symbol in table
+            printf("handle symbol_3\n");
             while (symbol_ptr[Token])
             {
+                printf("handle symbol_4\n");
                 if (token == symbol_ptr[Hash] &&
                     !memcmp((char*)symbol_ptr[Name], ch_ptr, src - ch_ptr))
                 {
@@ -182,10 +192,12 @@ void tokenize()
                 }
                 symbol_ptr = symbol_ptr + SymSize;
             }
+            printf("handle symbol_5\n");
             // add new symbol
             symbol_ptr[Name] = (int)ch_ptr;
             symbol_ptr[Hash] = token;
             token = symbol_ptr[Token] = Id;
+            printf("handle symbol_6\n");
             return;
         }
         // handle number
@@ -393,7 +405,10 @@ void tokenize()
         }
         else if (token == '~' || token == ';' || token == '{' || token == '}' || token == '(' ||
                  token == ')' || token == ']' || token == ',' || token == ':')
+        {
             return;
+        }
+        printf("symbol_7\n");
     }
 }
 
@@ -1198,7 +1213,9 @@ void keyword()
     i = Char;
     while (i <= While)
     {
+        printf("[debug] keyword loop\n");
         tokenize();
+        printf("[debug] keyword loop over\n");
         symbol_ptr[Token] = i++;
     }
     // add Native CALL to symbol table

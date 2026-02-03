@@ -1,4 +1,65 @@
 #include "vm.h"
+
+#ifdef __linux__
+#include <csignal>
+#include <cstdlib>
+
+namespace
+{
+    VM* g_current_vm = nullptr;
+
+    void crash_signal_handler(int sig)
+    {
+        const char* sig_name = "Unknown signal";
+        switch (sig)
+        {
+        case SIGSEGV:
+            sig_name = "SIGSEGV (Segmentation fault)";
+            break;
+        case SIGBUS:
+            sig_name = "SIGBUS (Bus error)";
+            break;
+        case SIGFPE:
+            sig_name = "SIGFPE (Floating point exception)";
+            break;
+        case SIGABRT:
+            sig_name = "SIGABRT (Abort)";
+            break;
+        case SIGILL:
+            sig_name = "SIGILL (Illegal instruction)";
+            break;
+        }
+        std::cerr << "\n=== FATAL SIGNAL: " << sig_name << " ===" << std::endl;
+        if (g_current_vm)
+        {
+            g_current_vm->dump_debug_buffer(1024);
+        }
+        // 恢复默认处理并重新触发信号，让程序正常终止
+        signal(sig, SIG_DFL);
+        raise(sig);
+    }
+
+    void setup_signal_handlers(VM* vm)
+    {
+        g_current_vm = vm;
+        signal(SIGSEGV, crash_signal_handler);
+        signal(SIGBUS, crash_signal_handler);
+        signal(SIGFPE, crash_signal_handler);
+        signal(SIGABRT, crash_signal_handler);
+        signal(SIGILL, crash_signal_handler);
+    }
+
+    void cleanup_signal_handlers()
+    {
+        g_current_vm = nullptr;
+        signal(SIGSEGV, SIG_DFL);
+        signal(SIGBUS, SIG_DFL);
+        signal(SIGFPE, SIG_DFL);
+        signal(SIGABRT, SIG_DFL);
+        signal(SIGILL, SIG_DFL);
+    }
+} // namespace
+#endif
 VM::VM(const std::vector<std::string>& asms)
 {
     vcpu.asms = asms;
@@ -60,30 +121,46 @@ VM::VM(const std::vector<std::string>& asms)
         *thiscpu.ax = retcode;
         thiscpu.state = VCPU::CpuState::OVER;
     };
+    vcpu.systemcall_table[VM::systemcall::MEMCPY] = [](VCPU& thiscpu)
+    {
+        long dest = *thiscpu.sp;
+        long src = *(thiscpu.sp + 1);
+        long n = *(thiscpu.sp + 2);
+        *thiscpu.ax = (long)std::memcpy((void*)dest, (void*)src, n);
+    };
+    vcpu.systemcall_table[VM::systemcall::MEMSET] = [](VCPU& thiscpu)
+    {
+        long s = *thiscpu.sp;
+        int c = (int)*(thiscpu.sp + 1);
+        long n = *(thiscpu.sp + 2);
+        *thiscpu.ax = (long)std::memset((void*)s, c, n);
+    };
 }
 
 std::optional<int64_t> VM::run()
 try
 {
+#ifdef __linux__
+    setup_signal_handlers(this);
+#endif
 
     while (vcpu.state == VCPU::CpuState::OK)
     {
-        if (vcpu.ip == 10434)
-        {
-            enable_debug = true;
-        }
-        if (enable_debug)
-        {
-            debug();
-        }
+        debug();
         vcpu.step();
     }
     if (vcpu.state == VCPU::CpuState::OVER)
     {
+#ifdef __linux__
+        cleanup_signal_handlers();
+#endif
         return *vcpu.ax;
     }
     else
     {
+#ifdef __linux__
+        cleanup_signal_handlers();
+#endif
         return std::nullopt;
     }
 
@@ -92,33 +169,69 @@ try
 catch (...)
 {
     debug();
+    dump_debug_buffer(128);
+    throw;
 }
 void VM::debug()
 {
+    std::ostringstream out;
     if (print_asm)
-        std::cout << "next ins: " << vcpu.asms[vcpu.ip] << '\n';
-    std::cout << "ip: " << vcpu.ip << '\n';
-    std::cout << "bp: " << vcpu.bp << '\n';
-    std::cout << "ax: " << std::hex << *vcpu.ax << '\n';
-    std::cout << "stack:\n";
+        out << "next ins: " << vcpu.asms[vcpu.ip] << '\n';
+    out << "ip: " << vcpu.ip << '\n';
+    out << "bp: " << vcpu.bp << '\n';
+    out << "ax: " << std::hex << *vcpu.ax << '\n';
+    out << "stack:\n";
     for (int i = &vcpu.mem.back() - vcpu.sp - 1; i >= 0; i--)
     {
         if (&vcpu.sp[i] == vcpu.bp)
         {
-            std::cout << "[" << &vcpu.sp[i] << "]: " << std::hex << vcpu.sp[i] << "<- bp" << '\n';
+            out << "[" << &vcpu.sp[i] << "]: " << std::hex << vcpu.sp[i] << "<- bp" << '\n';
         }
         else
         {
-            std::cout << "[" << &vcpu.sp[i] << "]: " << std::hex << vcpu.sp[i] << '\n';
+            out << "[" << &vcpu.sp[i] << "]: " << std::hex << vcpu.sp[i] << '\n';
         }
     }
-    std::cout << "data:\n";
+    out << "data:\n";
     for (int i = 3; i >= 0; i--)
     {
-        std::cout << "[" << &vcpu.mem[i] << "]: " << std::hex << vcpu.mem[i] << '\n';
+        out << "[" << &vcpu.mem[i] << "]: " << std::hex << vcpu.mem[i] << '\n';
     }
-    std::cout << std::dec; // 恢复为十进制
-    std::cout << '\n';
+    out << std::dec; // 恢复为十进制
+    out << '\n';
+
+    const std::string info = out.str();
+    if (enable_debug)
+    {
+        std::cout << info;
+    }
+    else
+    {
+        debug_buffer.push_back(info);
+    }
+}
+
+void VM::dump_debug_buffer(size_t lo)
+{
+    // for (const auto& info : debug_buffer)
+    // {
+    //     std::cout << info;
+    // }
+    if (lo == SIZE_MAX)
+    {
+        for (auto& each : debug_buffer)
+        {
+            std::cout << each;
+        }
+    }
+    else
+    {
+        for (int i = 0; i < lo; i++)
+        {
+            std::cout << debug_buffer[debug_buffer.size() - lo + i];
+        }
+    }
+    std::cout.flush();
 }
 
 void VCPU::do_ins(const std::string& in)

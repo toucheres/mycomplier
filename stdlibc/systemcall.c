@@ -146,3 +146,45 @@ void __exit(long code)
     _asm_("POP");
     _asm_("EXIT");
 }
+
+char* __memcpy(char* dest, char* src, long n)
+{
+    char* ret;
+    _asm_("IMM -8");
+    _asm_("LEA");
+    _asm_("IMM 32"); // n
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("IMM 24"); // src
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("IMM 16"); // dest
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("SYSTEMCALL 11");
+    _asm_("DARG 3");
+    _asm_("PUSH");
+    _asm_("SW");
+    return ret;
+}
+
+char* __memset(char* s, int c, long n)
+{
+    char* ret;
+    _asm_("IMM -8");
+    _asm_("LEA");
+    _asm_("IMM 32"); // n
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("IMM 24"); // c
+    _asm_("LEA");
+    _asm_("LI");
+    _asm_("IMM 16"); // s
+    _asm_("LEA");
+    _asm_("LW");
+    _asm_("SYSTEMCALL 12");
+    _asm_("DARG 3");
+    _asm_("PUSH");
+    _asm_("SW");
+    return ret;
+}
