@@ -58,11 +58,11 @@ IDdef* astVisitor::record_ID_decl(const std::string& name, const Type& type,
     {
         // 参数按实际字节大小向上对齐到 word 计算偏移：
         // [bp+0]=old bp, [bp+size_word]=ret addr, 之后依次为各实参
-        const std::size_t base_arg_offset = 2 * VCPU<>::size_word;
+        const std::size_t base_arg_offset = 2 * VCPU::size_word;
         std::size_t offset = base_arg_offset;
         for (std::size_t i = 0; i < *arg_index; ++i)
         {
-            offset += align_up(func_ctx->type.args[i].type.getsize(), VCPU<>::size_word);
+            offset += align_up(func_ctx->type.args[i].type.getsize(), VCPU::size_word);
         }
         def.addr = static_cast<int>(offset);
     }
@@ -583,7 +583,7 @@ void astVisitor::visitFunctionDefinition(ComplierParser::FunctionDefinitionConte
     }
     funcnow->funcInfo.asms[0] =
         ASM{ASM::basic_asm::NVAR,
-            align_up(funcnow->funcInfo.max_stack_size, VCPU<>::size_word) / VCPU<>::size_word};
+            align_up(funcnow->funcInfo.max_stack_size, VCPU::size_word) / VCPU::size_word};
     obj.exit_decl_scope();
     funcnow = gfunptr_local;
 }
@@ -1318,11 +1318,13 @@ Type astVisitor::visitConditionalExpression(ComplierParser::ConditionalExpressio
         funcnow->funcInfo.asms.push_back("HOLD");
         (void)(visitExpression(ctx->expression()));
         funcnow->funcInfo.asms[pos] =
-            ASM{ASM::basic_asm::JZ, funcnow->funcInfo.asms.size() + 1}; // 跳过JMP
+            ASM{ASM::basic_asm::JZ,
+                "thisfun@" + std::to_string(funcnow->funcInfo.asms.size() + 1)}; // 跳过JMP
         int pos2 = funcnow->funcInfo.asms.size();
         funcnow->funcInfo.asms.push_back("HOLD");
         (void)(visitConditionalExpression(ctx->conditionalExpression()));
-        funcnow->funcInfo.asms[pos2] = ASM{ASM::basic_asm::JMP, funcnow->funcInfo.asms.size()};
+        funcnow->funcInfo.asms[pos2] =
+            ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(funcnow->funcInfo.asms.size())};
         return Type{Type::Kind::Basic, Type::BasicType::Char};
     }
     throw;
@@ -1378,7 +1380,8 @@ Type astVisitor::visitLogicalOrExpression(ComplierParser::LogicalOrExpressionCon
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::POP});
         // 计算右侧表达式
         auto rret = func(in.subspan(1, in.size() - 1));
-        funcnow->funcInfo.asms[pos] = ASM{ASM::basic_asm::JNZ, funcnow->funcInfo.asms.size()};
+        funcnow->funcInfo.asms[pos] =
+            ASM{ASM::basic_asm::JNZ, "thisfun@" + std::to_string(funcnow->funcInfo.asms.size())};
         // 返回计算结果类型
         return rret; // 语义上应该是整型，保持右值类型沿用
     };
@@ -1406,7 +1409,8 @@ Type astVisitor::visitLogicalAndExpression(ComplierParser::LogicalAndExpressionC
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::POP});
         // 计算右侧表达式
         auto rret = func(in.subspan(1, in.size() - 1));
-        funcnow->funcInfo.asms[pos] = ASM{ASM::basic_asm::JZ, funcnow->funcInfo.asms.size()};
+        funcnow->funcInfo.asms[pos] =
+            ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(funcnow->funcInfo.asms.size())};
         // 返回计算结果类型
         return rret;
     };
@@ -1824,8 +1828,7 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
             long step = 1;
             if (type.kind == Type::Kind::Pointer)
             {
-                step =
-                    static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
+                step = static_cast<long>(type.subType ? type.subType->getsize() : VCPU::size_word);
             }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, step});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
@@ -1847,8 +1850,7 @@ Type astVisitor::visitUnaryExpression(ComplierParser::UnaryExpressionContext* ct
             long step = 1;
             if (type.kind == Type::Kind::Pointer)
             {
-                step =
-                    static_cast<long>(type.subType ? type.subType->getsize() : VCPU<>::size_word);
+                step = static_cast<long>(type.subType ? type.subType->getsize() : VCPU::size_word);
             }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, step});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
@@ -1885,7 +1887,7 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
             if (funtype && (*funtype).subType->kind == Type::Kind::Struct)
             {
                 // args_words +=
-                //     ((*funtype).subType->getsize() + VCPU<>::size_word - 1) / VCPU<>::size_word;
+                //     ((*funtype).subType->getsize() + VCPU::size_word - 1) / VCPU::size_word;
                 args_words += 1; // 传入指针
                 // 创建局部变量传入指针
                 IDdef struct_ret;
@@ -1967,7 +1969,7 @@ Type astVisitor::visitPostfixExpression(ComplierParser::PostfixExpressionContext
             long step = 1;
             if (valType.kind == Type::Kind::Pointer)
             {
-                auto pointed = valType.subType ? valType.subType->getsize() : VCPU<>::size_word;
+                auto pointed = valType.subType ? valType.subType->getsize() : VCPU::size_word;
                 step = static_cast<long>(pointed);
             }
 
@@ -2227,7 +2229,7 @@ size_t astVisitor::visitArgumentExpressionList(ComplierParser::ArgumentExpressio
             madeTopIsLvalueAddr();
             // 目前仅支持可取地址的结构体实参（左值）。假定栈顶为地址。
             const size_t n = arg.getsize();
-            const size_t word = VCPU<>::size_word;
+            const size_t word = VCPU::size_word;
             const size_t chunks = align_up(n, word) / word;
             // 地址已在栈顶（绝对地址），直接批量拷贝。
             // funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, static_cast<int>(n)});
@@ -2252,7 +2254,7 @@ size_t astVisitor::visitArgumentExpressionList(ComplierParser::ArgumentExpressio
             else
             {
                 // 其他类型按 word 对齐
-                words += (sz + VCPU<>::size_word - 1) / VCPU<>::size_word;
+                words += (sz + VCPU::size_word - 1) / VCPU::size_word;
             }
         }
     }
@@ -2411,7 +2413,7 @@ void astVisitor::visitJumpStatement(ComplierParser::JumpStatementContext* ctx)
             {
                 // 结构体返回：将返回值写入隐式传入的返回指针
                 // 隐式返回指针是第一个参数，偏移为 2 * size_word（跳过old bp和ret addr）
-                const size_t ret_ptr_offset = 2 * VCPU<>::size_word;
+                const size_t ret_ptr_offset = 2 * VCPU::size_word;
 
                 // 如果表达式结果是左值，取其地址
                 if (stackTopIsLvalue())

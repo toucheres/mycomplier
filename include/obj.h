@@ -127,7 +127,7 @@ struct IDdef
     struct FuncInfo
     {
         std::vector<std::string> asms;
-        inline static size_t parpera_for_stack_frame = VCPU<>::size_word;
+        inline static size_t parpera_for_stack_frame = VCPU::size_word;
         size_t max_stack_size = 0;
         size_t stack_size_now = 0;
     } funcInfo;

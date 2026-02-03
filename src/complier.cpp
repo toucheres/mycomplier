@@ -23,18 +23,18 @@ size_t Type::getsize() const
     switch (kind)
     {
     case Kind::Pointer:
-        return VCPU<>::size_word;
+        return VCPU::size_word;
     case Kind::Basic:
         switch (basic_type)
         {
         case BasicType::Char:
             return 1;
         case BasicType::Short:
-            return VCPU<>::size_word / 4;
+            return VCPU::size_word / 4;
         case BasicType::Int:
-            return VCPU<>::size_word / 2;
+            return VCPU::size_word / 2;
         case BasicType::Long:
-            return VCPU<>::size_word;
+            return VCPU::size_word;
         default:
             break;
         }
@@ -42,7 +42,7 @@ size_t Type::getsize() const
     case Kind::Array:
         return static_cast<size_t>(arr_num) * subType->getsize();
     case Kind::Function:
-        return VCPU<>::size_word;
+        return VCPU::size_word;
     case Kind::Struct:
         return align_up(this->structInfo.members.back().second.addr +
                             this->structInfo.members.back().second.type.getsize(),
@@ -370,7 +370,7 @@ std::expected<std::vector<std::string>, error> linker::process()
 //     {
 //         return 1;
 //     }
-//     return VCPU<>::size_word;
+//     return VCPU::size_word;
 // }
 
 // Type::Type(std::shared_ptr<peg::Ast> astnode)
@@ -424,7 +424,7 @@ size_t IDdef::get_addr_in_stack(size_t posnow)
     };
     if (type.getsize() >= 1)
     {
-        return ceiling(posnow + this->type.getsize(), VCPU<>::size_word); // 姑且对齐到size_word
+        return ceiling(posnow + this->type.getsize(), VCPU::size_word); // 姑且对齐到size_word
     }
     return posnow;
 }

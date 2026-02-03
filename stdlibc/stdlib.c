@@ -10,7 +10,7 @@ void free(char* ptr)
     return;
 }
 
-void* memcpy(void* dest, void* src, long count)
+char* memcpy(char* dest, char* src, long count)
 {
     for (int i = 0; i < count; i++)
     {
@@ -19,7 +19,7 @@ void* memcpy(void* dest, void* src, long count)
     return dest;
 }
 
-int memcmp(void* str1, void* str2, long n)
+int memcmp(char* str1, char* str2, long n)
 {
     char* s1 = str1;
     char* s2 = str2;
@@ -41,7 +41,7 @@ void exit(int code)
     return __exit(code);
 }
 
-void* memset(void* s, int c, long n)
+char* memset(char* s, int c, long n)
 {
     char* p = s;
     for (long i = 0; i < n; i++)

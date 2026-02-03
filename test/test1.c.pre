@@ -73,9 +73,9 @@ size_t fwrite(void* ptr, size_t size_of_elements, size_t number_of_elements, FIL
 
 char* malloc(long in);
 void free(char* ptr);
-void* memcpy(void* dest, void* src, long count);
-int memcmp(void* dest, void* src, long count);
-void* memset(void* s, int c, long n);
+char* memcpy(char* dest, char* src, long count);
+int memcmp(char* dest, char* src, long count);
+char* memset(char* s, int c, long n);
 void exit(int code);
 
 typedef long int64_t;
@@ -215,18 +215,33 @@ int64_t line;
 
 void tokenize()
 {
+    printf("[debug] tokenize\n");
     char* ch_ptr;
+    long i = 0;
+    printf("src now:\n");
+    printf(src);
+    printf("\n");
+
     while ((token = *src++))
     {
+        printf("[debug] tokenize:%d\n", i);
+        printf("[debug] now is:%d\n", token);
         if (token == '\n')
+        {
+            printf("handle n\n");
             line++;
+        }
         
         else if (token == '#')
+        {
+            printf("handle #\n");
             while (*src != 0 && *src != '\n')
                 src++;
+        }
         
         else if ((token >= 'a' && token <= 'z') || (token >= 'A' && token <= 'Z') || (token == '_'))
         {
+            printf("handle symbol\n");
             ch_ptr = src - 1;
             while ((*src >= 'a' && *src <= 'z') || (*src >= 'A' && *src <= 'Z') ||
                    (*src >= '0' && *src <= '9') || (*src == '_'))
@@ -255,6 +270,7 @@ void tokenize()
         
         else if (token >= '0' && token <= '9')
         {
+            printf("handle number\n");
             
             if ((token_val = token - '0'))
                 while (*src >= '0' && *src <= '9')
@@ -276,6 +292,8 @@ void tokenize()
         
         else if (token == '"' || token == '\'')
         {
+            printf("handle string & char\n");
+
             ch_ptr = data;
             while (*src != 0 && *src != token)
             {
@@ -300,6 +318,8 @@ void tokenize()
         
         else if (token == '/')
         {
+            printf(" handle comments or divide\n");
+
             if (*src == '/')
             {
                 
@@ -316,6 +336,7 @@ void tokenize()
         
         else if (token == '=')
         {
+            printf("handle =\n");
             if (*src == '=')
             {
                 src++;
@@ -327,6 +348,8 @@ void tokenize()
         }
         else if (token == '+')
         {
+            printf("handle +\n");
+
             if (*src == '+')
             {
                 src++;
@@ -338,6 +361,8 @@ void tokenize()
         }
         else if (token == '-')
         {
+            printf("handle -\n");
+
             if (*src == '-')
             {
                 src++;
@@ -349,6 +374,8 @@ void tokenize()
         }
         else if (token == '!')
         {
+            printf("handle !\n");
+
             if (*src == '=')
             {
                 src++;
@@ -358,6 +385,8 @@ void tokenize()
         }
         else if (token == '<')
         {
+            printf("handle <\n");
+
             if (*src == '=')
             {
                 src++;
@@ -374,6 +403,8 @@ void tokenize()
         }
         else if (token == '>')
         {
+            printf("handle >\n");
+
             if (*src == '=')
             {
                 src++;
@@ -390,6 +421,8 @@ void tokenize()
         }
         else if (token == '|')
         {
+            printf("handle |\n");
+
             if (*src == '|')
             {
                 src++;
@@ -401,6 +434,8 @@ void tokenize()
         }
         else if (token == '&')
         {
+            printf("handle &\n");
+
             if (*src == '&')
             {
                 src++;
@@ -1236,8 +1271,7 @@ void keyword()
     printf("[debug] keyword\n");
 
     int64_t i;
-    src = "char int64_t enum if else return sizeof while "
-          "open read close printf malloc free memset memcmp exit void main";
+    src = "char int64_t enum if else return sizeof while open read close printf malloc free memset memcmp exit void main";
     
     i = Char;
     while (i <= While)
@@ -1287,10 +1321,13 @@ int64_t init_vm()
     }
     printf("[debug] init_vm_1\n");
     memset(code, 0, MAX_SIZE);
-    memset(data, 0, MAX_SIZE);
-    memset(stack, 0, MAX_SIZE);
-    memset(symbol_table, 0, MAX_SIZE / 16);
     printf("[debug] init_vm_2\n");
+    memset(data, 0, MAX_SIZE);
+    printf("[debug] init_vm_3\n");
+    memset(stack, 0, MAX_SIZE);
+    printf("[debug] init_vm_4\n");
+    memset(symbol_table, 0, MAX_SIZE / 16);
+    printf("[debug] init_vm_5\n");
     return 0;
 }
 
@@ -1461,9 +1498,9 @@ void write_as()
     FILE* fp;
     char* buffer;
     int64_t code_len = code - code_dump; 
-    insts = "IMM ,LEA ,JMP ,JZ  ,JNZ ,CALL,NVAR,DARG,RET ,LI  ,LC  ,SI  ,SC  ,PUSH,"
-            "OR  ,XOR ,AND ,EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD ,"
-            "OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,";
+    insts = "IMM ,LEA ,JMP ,JZ  ,JNZ ,CALL,NVAR,DARG,RET ,LI  ,LC  ,SI  ,SC  ,PUSH,OR  ,XOR ,AND "
+            ",EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD "
+            ",OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,";
     fp = fopen("assemble", "w");
     if (!fp)
         return;
