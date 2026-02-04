@@ -2,21 +2,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-typedef long int64_t;
-typedef int int32_t;
-#define int int64_t
-int MAX_SIZE;
+long MAX_SIZE;
 
-int *code,      // code segment
+long *code,     // code segment
     *code_dump, // for dump
     *stack;     // stack segment
 char* data;     // data segment
 
-int *pc, // pc register
-    *sp, // rsp register
-    *bp; // rbp register
+long *pc, // pc register
+    *sp,  // rsp register
+    *bp;  // rbp register
 
-int ax, // common register
+long ax, // common register
     cycle;
 
 // instruction set: copy from c4, change JSR/ENT/ADJ/LEV/BZ/BNZ to CALL/NVAR/DARG/RET/JZ/JNZ.
@@ -133,10 +130,10 @@ enum
 char *src, *src_dump;
 
 // symbol table & pointer
-int *symbol_table, *symbol_ptr, *main_ptr;
+long *symbol_table, *symbol_ptr, *main_ptr;
 
-int token, token_val;
-int line;
+long token, token_val;
+long line;
 
 void tokenize()
 {
@@ -194,7 +191,7 @@ void tokenize()
             }
             printf("handle symbol_5\n");
             // add new symbol
-            symbol_ptr[Name] = (int)ch_ptr;
+            symbol_ptr[Name] = (long)ch_ptr;
             symbol_ptr[Hash] = token;
             token = symbol_ptr[Token] = Id;
             printf("handle symbol_6\n");
@@ -242,7 +239,7 @@ void tokenize()
             }
             src++;
             if (token == '"')
-                token_val = (int)ch_ptr;
+                token_val = (long)ch_ptr;
             // single char is Num
             else
                 token = Num;
@@ -412,11 +409,11 @@ void tokenize()
     }
 }
 
-void assert(int tk)
+void assert(long tk)
 {
     if (token != tk)
     {
-        printf("line %lld: expect token: %lld(%c), get: %lld(%c)\n", line, tk, (char)tk, token,
+        printf("line %ld: expect token: %ld(%c), get: %ld(%c)\n", line, tk, (char)tk, token,
                (char)token);
         exit(-1);
     }
@@ -427,12 +424,12 @@ void check_local_id()
 {
     if (token != Id)
     {
-        printf("line %lld: invalid identifer\n", line);
+        printf("line %ld: invalid identifer\n", line);
         exit(-1);
     }
     if (symbol_ptr[Class] == Loc)
     {
-        printf("line %lld: duplicate declaration\n", line);
+        printf("line %ld: duplicate declaration\n", line);
         exit(-1);
     }
 }
@@ -441,19 +438,19 @@ void check_new_id()
 {
     if (token != Id)
     {
-        printf("line %lld: invalid identifer\n", line);
+        printf("line %ld: invalid identifer\n", line);
         exit(-1);
     }
     if (symbol_ptr[Class])
     {
-        printf("line %lld: duplicate declaration\n", line);
+        printf("line %ld: duplicate declaration\n", line);
         exit(-1);
     }
 }
 
 void parse_enum()
 {
-    int i;
+    long i;
     i = 0; // enum index
     while (token != '}')
     {
@@ -474,7 +471,7 @@ void parse_enum()
     }
 }
 
-int parse_base_type()
+long parse_base_type()
 {
     // parse base type
     if (token == Char)
@@ -503,10 +500,10 @@ void recover_global()
     symbol_ptr[Value] = symbol_ptr[GValue];
 }
 
-int ibp;
+long ibp;
 void parse_param()
 {
-    int type, i;
+    long type, i;
     i = 0;
     while (token != ')')
     {
@@ -529,17 +526,20 @@ void parse_param()
     ibp = ++i;
 }
 
-int type; // pass type in recursive parse expr
-void parse_expr(int precd)
+long type; // pass type in recursive parse expr
+void parse_expr(long precd)
 {
-    int tmp_type, i;
-    int* tmp_ptr;
+    long tmp_type, i;
+    long* tmp_ptr;
     // const number
     if (token == Num)
     {
         tokenize();
+        printf("parsed code!\n");
+        printf("code now: %ld\n", code);
         *++code = IMM;
         *++code = token_val;
+        printf("code after: %ld\n", code);
         type = INT;
     }
     // const string
@@ -549,8 +549,8 @@ void parse_expr(int precd)
         *++code = token_val; // string addr
         assert('"');
         while (token == '"')
-            assert('"');                    // handle multi-row
-        data = (char*)((int)data + 8 & -8); // add \0 for string & align 8
+            assert('"');                     // handle multi-row
+        data = (char*)((long)data + 8 & -8); // add \0 for string & align 8
         type = PTR;
     }
     else if (token == Sizeof)
@@ -598,7 +598,7 @@ void parse_expr(int precd)
             }
             else
             {
-                printf("line %lld: invalid function call\n", line);
+                printf("line %ld: invalid function call\n", line);
                 exit(-1);
             }
             // delete stack frame for args
@@ -633,7 +633,7 @@ void parse_expr(int precd)
             }
             else
             {
-                printf("line %lld: invalid variable\n", line);
+                printf("line %ld: invalid variable\n", line);
                 exit(-1);
             }
             type = tmp_ptr[Type];
@@ -673,7 +673,7 @@ void parse_expr(int precd)
             type = type - PTR;
         else
         {
-            printf("line %lld: invalid dereference\n", line);
+            printf("line %ld: invalid dereference\n", line);
             exit(-1);
         }
         *++code = (type == CHAR) ? LC : LI;
@@ -687,7 +687,7 @@ void parse_expr(int precd)
             code--; // rollback load by addr
         else
         {
-            printf("line %lld: invalid reference\n", line);
+            printf("line %ld: invalid reference\n", line);
             exit(-1);
         }
         type = type + PTR;
@@ -751,7 +751,7 @@ void parse_expr(int precd)
         }
         else
         {
-            printf("line %lld: invalid Inc or Dec\n", line);
+            printf("line %ld: invalid Inc or Dec\n", line);
             exit(-1);
         }
         *++code = PUSH; // save var val
@@ -762,12 +762,13 @@ void parse_expr(int precd)
     }
     else
     {
-        printf("line %lld: invalid expression\n", line);
+        printf("line %ld: invalid expression\n", line);
         exit(-1);
     }
     // use [precedence climbing] method to handle binary(or postfix) operators
     while (token >= precd)
     {
+        printf("[precedence climbing],token:%ld, precd: %ld\n", token, precd);
         tmp_type = type;
         // assignment
         if (token == Assign)
@@ -777,7 +778,7 @@ void parse_expr(int precd)
                 *code = PUSH;
             else
             {
-                printf("line %lld: invalid assignment\n", line);
+                printf("line %ld: invalid assignment\n", line);
                 exit(-1);
             }
             parse_expr(Assign);
@@ -792,11 +793,11 @@ void parse_expr(int precd)
             tmp_ptr = ++code;
             parse_expr(Assign);
             assert(':');
-            *tmp_ptr = (int)(code + 3);
+            *tmp_ptr = (long)(code + 3);
             *++code = JMP;
             tmp_ptr = ++code; // save endif addr
             parse_expr(Cond);
-            *tmp_ptr = (int)(code + 1); // write back endif point
+            *tmp_ptr = (long)(code + 1); // write back endif point
         }
         // logic operators, simple and boring, copy from c4
         else if (token == Lor)
@@ -805,7 +806,7 @@ void parse_expr(int precd)
             *++code = JNZ;
             tmp_ptr = ++code;
             parse_expr(Land);
-            *tmp_ptr = (int)(code + 1);
+            *tmp_ptr = (long)(code + 1);
             type = INT;
         }
         else if (token == Land)
@@ -814,7 +815,7 @@ void parse_expr(int precd)
             *++code = JZ;
             tmp_ptr = ++code;
             parse_expr(Or);
-            *tmp_ptr = (int)(code + 1);
+            *tmp_ptr = (long)(code + 1);
             type = INT;
         }
         else if (token == Or)
@@ -988,7 +989,7 @@ void parse_expr(int precd)
             }
             else
             {
-                printf("%lld: invlid operator=%lld\n", line, token);
+                printf("%ld: invlid operator=%ld\n", line, token);
                 exit(-1);
             }
             *++code = PUSH;
@@ -1018,7 +1019,7 @@ void parse_expr(int precd)
             }
             else if (tmp_type < PTR)
             {
-                printf("line %lld: invalid index op\n", line);
+                printf("line %ld: invalid index op\n", line);
                 exit(-1);
             }
             *++code = ADD;
@@ -1027,7 +1028,7 @@ void parse_expr(int precd)
         }
         else
         {
-            printf("%lld: invlid token=%lld\n", line, token);
+            printf("%ld: invlid token=%ld\n", line, token);
             exit(-1);
         }
     }
@@ -1035,8 +1036,8 @@ void parse_expr(int precd)
 
 void parse_stmt()
 {
-    int* a;
-    int* b;
+    long* a;
+    long* b;
     if (token == If)
     {
         assert(If);
@@ -1049,12 +1050,12 @@ void parse_stmt()
         if (token == Else)
         {
             assert(Else);
-            *b = (int)(code + 3); // write back false point
+            *b = (long)(code + 3); // write back false point
             *++code = JMP;
             b = ++code;   // JMP to endif
             parse_stmt(); // parse false stmt
         }
-        *b = (int)(code + 1); // write back endif point
+        *b = (long)(code + 1); // write back endif point
     }
     else if (token == While)
     {
@@ -1067,8 +1068,8 @@ void parse_stmt()
         b = ++code; // JZ to endloop
         parse_stmt();
         *++code = JMP;
-        *++code = (int)a;     // JMP to loop point
-        *b = (int)(code + 1); // write back endloop point
+        *++code = (long)a;     // JMP to loop point
+        *b = (long)(code + 1); // write back endloop point
     }
     else if (token == Return)
     {
@@ -1096,7 +1097,7 @@ void parse_stmt()
 
 void parse_fun()
 {
-    int type, i;
+    long type, i;
     i = ibp; // bp handle by NVAR itself.
     // local variables must be declare in advance
     while (token == Char || token == Int)
@@ -1143,8 +1144,8 @@ void parse()
 {
     printf("[debug] parse\n");
 
-    int type, base_type;
-    int* p;
+    long type, base_type;
+    long* p;
     line = 1;
     token = 1; // just for loop condition
     while (token > 0)
@@ -1180,7 +1181,7 @@ void parse()
                 {
                     // function
                     symbol_ptr[Class] = Fun;
-                    symbol_ptr[Value] = (int)(code + 1);
+                    symbol_ptr[Value] = (long)(code + 1);
                     assert('(');
                     parse_param();
                     assert(')');
@@ -1191,7 +1192,7 @@ void parse()
                 {
                     // variable
                     symbol_ptr[Class] = Glo;
-                    symbol_ptr[Value] = (int)data;
+                    symbol_ptr[Value] = (long)data;
                     data = data + 8; // keep 64 bits for each var
                 }
                 // handle int a,b,c;
@@ -1206,7 +1207,7 @@ void keyword()
 {
     printf("[debug] keyword\n");
 
-    int i;
+    long i;
     src = "char int enum if else return sizeof while open read close printf malloc free memset "
           "memcmp exit void main";
     // add keywords to symbol table
@@ -1230,32 +1231,35 @@ void keyword()
     tokenize();
     symbol_ptr[Token] = Char; // handle void type
     tokenize();
+    printf("set main_ptr\n");
+    printf("symbolptr: %ld\n", symbol_ptr);
     main_ptr = symbol_ptr; // keep track of main
+    printf("main_ptr: %ld\n", main_ptr);
     src = src_dump;
 }
 
-int init_vm()
+long init_vm()
 {
     printf("[debug] init_vm\n");
     // allocate memory for virtual machine
     if (!(code = code_dump = malloc(MAX_SIZE)))
     {
-        printf("could not malloc(%lld) for code segment\n", MAX_SIZE);
+        printf("could not malloc(%ld) for code segment\n", MAX_SIZE);
         return -1;
     }
     if (!(data = malloc(MAX_SIZE)))
     {
-        printf("could not malloc(%lld) for data segment\n", MAX_SIZE);
+        printf("could not malloc(%ld) for data segment\n", MAX_SIZE);
         return -1;
     }
     if (!(stack = malloc(MAX_SIZE)))
     {
-        printf("could not malloc(%lld) for stack segment\n", MAX_SIZE);
+        printf("could not malloc(%ld) for stack segment\n", MAX_SIZE);
         return -1;
     }
     if (!(symbol_table = malloc(MAX_SIZE / 16)))
     {
-        printf("could not malloc(%lld) for symbol_table\n", MAX_SIZE / 16);
+        printf("could not malloc(%ld) for symbol_table\n", MAX_SIZE / 16);
         return -1;
     }
     printf("[debug] init_vm_1\n");
@@ -1273,17 +1277,17 @@ int init_vm()
 int run_vm(int argc, char** argv)
 {
     printf("[debug] run_vm\n");
-    int op;
-    int* tmp;
+    long op;
+    long* tmp;
     // exit code for main
-    bp = sp = (int*)((int)stack + MAX_SIZE);
+    bp = sp = (long*)((long)stack + MAX_SIZE);
     *--sp = EXIT;
     *--sp = PUSH;
     tmp = sp;
     *--sp = argc;
-    *--sp = (int)argv;
-    *--sp = (int)tmp;
-    if (!(pc = (int*)main_ptr[Value]))
+    *--sp = (long)argv;
+    *--sp = (long)tmp;
+    if (!(pc = (long*)main_ptr[Value]))
     {
         printf("main function is not defined\n");
         exit(-1);
@@ -1297,24 +1301,24 @@ int run_vm(int argc, char** argv)
         if (op == IMM)
             ax = *pc++; // load immediate(or global addr)
         else if (op == LEA)
-            ax = (int)(bp + *pc++); // load local addr
+            ax = (long)(bp + *pc++); // load local addr
         else if (op == LC)
             ax = *(char*)ax; // load char
         else if (op == LI)
-            ax = *(int*)ax; // load int
+            ax = *(long*)ax; // load int
         else if (op == SC)
             *(char*)*sp++ = ax; // save char to stack
         else if (op == SI)
-            *(int*)*sp++ = ax; // save int to stack
+            *(long*)*sp++ = ax; // save int to stack
         else if (op == PUSH)
             *--sp = ax; // push ax to stack
         // jump
         else if (op == JMP)
-            pc = (int*)*pc; // jump
+            pc = (long*)*pc; // jump
         else if (op == JZ)
-            pc = ax ? pc + 1 : (int*)*pc; // jump if ax == 0
+            pc = ax ? pc + 1 : (long*)*pc; // jump if ax == 0
         else if (op == JNZ)
-            pc = ax ? (int*)*pc : pc + 1; // jump if ax != 0
+            pc = ax ? (long*)*pc : pc + 1; // jump if ax != 0
         // arithmetic
         else if (op == OR)
             ax = *sp++ | ax;
@@ -1352,13 +1356,13 @@ int run_vm(int argc, char** argv)
         // call function: push pc + 1 to stack & pc jump to func addr(pc point to)
         else if (op == CALL)
         {
-            *--sp = (int)(pc + 1);
-            pc = (int*)*pc;
+            *--sp = (long)(pc + 1);
+            pc = (long*)*pc;
         }
         // new stack frame for vars: save bp, bp -> caller stack, stack add frame
         else if (op == NVAR)
         {
-            *--sp = (int)bp;
+            *--sp = (long)bp;
             bp = sp;
             sp = sp - *pc++;
         }
@@ -1369,8 +1373,8 @@ int run_vm(int argc, char** argv)
         else if (op == RET)
         {
             sp = bp;
-            bp = (int*)*sp++;
-            pc = (int*)*sp++;
+            bp = (long*)*sp++;
+            pc = (long*)*sp++;
         }
         // end for call function.
         // native call
@@ -1378,10 +1382,10 @@ int run_vm(int argc, char** argv)
         {
             // Use C stdio: fopen. Return FILE* cast to int.
             char* fname = (char*)sp[1];
-            int flags = sp[0];
+            long flags = sp[0];
             char* mode = (flags == 0) ? "r" : "w+";
             FILE* f = fopen(fname, mode);
-            ax = (int)f;
+            ax = (long)f;
         }
         else if (op == CLOS)
         {
@@ -1403,7 +1407,7 @@ int run_vm(int argc, char** argv)
         }
         else if (op == MALC)
         {
-            ax = (int)malloc(*sp);
+            ax = (long)malloc(*sp);
         }
         else if (op == FREE)
         {
@@ -1411,7 +1415,7 @@ int run_vm(int argc, char** argv)
         }
         else if (op == MSET)
         {
-            ax = (int)memset((char*)sp[2], sp[1], *sp);
+            ax = (long)memset((char*)sp[2], sp[1], *sp);
         }
         else if (op == MCMP)
         {
@@ -1419,12 +1423,12 @@ int run_vm(int argc, char** argv)
         }
         else if (op == EXIT)
         {
-            printf("exit(%lld)\n", *sp);
+            printf("exit(%ld)\n", *sp);
             return *sp;
         }
         else
         {
-            printf("unkown instruction: %lld, cycle: %lld\n", op, cycle);
+            printf("unkown instruction: %ld, cycle: %ld\n", op, cycle);
             return -1;
         }
     }
@@ -1436,27 +1440,30 @@ void write_as()
 {
     FILE* fp;
     char* buffer;
-    int code_len = code - code_dump; // 指令数量
+    long code_len = code - code_dump; // 指令数量
     insts = "IMM ,LEA ,JMP ,JZ  ,JNZ ,CALL,NVAR,DARG,RET ,LI  ,LC  ,SI  ,SC  ,PUSH,OR  ,XOR ,AND "
             ",EQ  ,NE  ,LT  ,GT  ,LE  ,GE  ,SHL ,SHR ,ADD ,SUB ,MUL ,DIV ,MOD "
             ",OPEN,READ,CLOS,PRTF,MALC,FREE,MSET,MCMP,EXIT,";
+    printf("insts: %s\n", insts);
+    printf("code_len = %d\n", code_len);
     fp = fopen("assemble", "w");
     if (!fp)
         return;
     buffer = malloc(100);
-    for (int i = 0; i < code_len; i++)
+    for (long i = 0; i < code_len; i++)
     {
-        int op = code_dump[i];
+        long op = code_dump[i];
         char* opname;
         if (op >= 0 && op <= EXIT)
             opname = insts + (op * 5);
         else
             opname = "UNKN ";
         sprintf(buffer, "(%d) %8.4s", i, opname);
+        printf("towrite: %s\n", buffer);
         fwrite(buffer, 1, strlen(buffer), fp);
         if (op < RET)
         {
-            sprintf(buffer, " %lld\n", code_dump[i + 1]);
+            sprintf(buffer, " %ld\n", code_dump[i + 1]);
             i++; // 跳过下一个参数
         }
         else
@@ -1464,15 +1471,16 @@ void write_as()
             buffer[0] = '\n';
             buffer[1] = '\0';
         }
+        printf("towrite: %s\n", buffer);
         fwrite(buffer, 1, strlen(buffer), fp);
     }
     fclose(fp);
 }
 
-int load_src(char* file)
+long load_src(char* file)
 {
     printf("[debug] load_src\n");
-    int cnt;
+    long cnt;
     FILE* fp;
 
     // use fopen/fread/fclose for bootstrap.
@@ -1484,7 +1492,7 @@ int load_src(char* file)
 
     if (!(src = src_dump = malloc(MAX_SIZE)))
     {
-        printf("could not malloc(%lld) for source code\n", MAX_SIZE);
+        printf("could not malloc(%ld) for source code\n", MAX_SIZE);
         fclose(fp);
         return -1;
     }
@@ -1500,7 +1508,7 @@ int load_src(char* file)
 }
 
 // after bootstrap use [int] istead of [int32_t]
-int32_t main(int32_t argc, char** argv)
+int main(int argc, char** argv)
 {
     MAX_SIZE = 128 * 1024 * 8; // 1MB = 128k * 64bit
     // load source code

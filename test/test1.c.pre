@@ -1,8 +1,10 @@
-int main(int arg, char** argv)
+enum
 {
-    int a;
-    int b;
-    int c;
-    b = 42;
-    return --b;
+    NUM1 = 128,
+    NUM2,
+    NUM3,
+};
+int main()
+{
+    return NUM3;
 }

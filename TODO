@@ -16,4 +16,7 @@
 [OK][TODO] 结构体一律按栈运算
 [OK][TODO] sizeof(struct)
 [OK][TODO] main(int argn,char**argc)的传参
-[TODO] printf()的%s崩溃
+[OK][TODO] printf()的%s崩溃
+[TODO] sprintf 有问题
+[TODO] 指针相减
+[TODO] 枚举指定值

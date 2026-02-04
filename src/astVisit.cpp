@@ -750,6 +750,7 @@ Type astVisitor::visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx)
                 // 如果有赋值表达式，计算值
                 if (enumerator->constantExpression())
                 {
+                    auto tesxts = enumerator->getText();
                     enumValue =
                         parseConstexpr(enumerator->constantExpression()->conditionalExpression());
                 }
@@ -1374,7 +1375,7 @@ Type astVisitor::visitLogicalOrExpression(ComplierParser::LogicalOrExpressionCon
         // 保存当前位置，用于生成条件跳转指令
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY}); // 短路的jz/jnz会消耗栈顶
         int pos = funcnow->funcInfo.asms.size();
-        funcnow->funcInfo.asms.push_back("HOLD");                    // 占位，后面会替换为实际指令
+        funcnow->funcInfo.asms.push_back("HOLD"); // 占位，后面会替换为实际指令
         // 如果左操作数为true（非零），跳过右操作数的计算（短路）
         // JNZ指令：当栈顶值非零时跳转
         // 弹出左操作数结果，为右操作数腾出栈顶位置
@@ -1583,10 +1584,22 @@ Type astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionConte
         {
             return (visitMultiplicativeExpression(in[0]));
         }
+        std::string op_token = ctx->children[index * 2 + 1]->getText();
         auto posnow = funcnow->funcInfo.asms.size();
         auto lret = (visitMultiplicativeExpression(in[0]));
         auto rret = func(in.subspan(1, in.size() - 1), index + 1);
         funcnow->funcInfo.asms.resize(posnow); // 之前只是为了拿到类型
+        if (lret.kind == Type::Kind::Struct || rret.kind == Type::Kind::Struct)
+        {
+            THROW_ERR(error::unsurpported_op, ctx);
+        }
+        if (lret.kind == Type::Kind::Pointer && rret.kind == Type::Kind::Pointer)
+        {
+            if (op_token == "+" || *lret.subType != *rret.subType)
+            {
+                THROW_ERR(error::unsurpported_op, ctx);
+            }
+        }
         if (lret.kind == Type::Kind::Pointer && rret.kind == Type::Kind::Basic &&
             (rret.basic_type == Type::BasicType::Int || rret.basic_type == Type::BasicType::Char ||
              rret.basic_type == Type::BasicType::Long))
@@ -1608,12 +1621,11 @@ Type astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionConte
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::MUL});
             auto rret = func(in.subspan(1, in.size() - 1), index + 1);
         }
-        else // 其他类型不做特殊处理
+        else // 其他基础2类型不做特殊处理
         {
             auto lret = (visitMultiplicativeExpression(in[0]));
             auto rret = func(in.subspan(1, in.size() - 1), index + 1);
         }
-        std::string op_token = ctx->children[index * 2 + 1]->getText();
         if (op_token == "+")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
@@ -1624,6 +1636,12 @@ Type astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionConte
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
             auto res = deduce_binary_type(lret, rret, BinOp::Sub);
+            if (lret.kind == Type::Kind::Pointer || rret.kind == Type::Kind::Pointer)
+            {
+                // 指针相减
+                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, lret.subType->getsize()});
+                funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::DIV});
+            }
             return res;
         }
         THROW_ERR(error::unsurpported_op, ctx);
@@ -3171,6 +3189,10 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         if (!ctx)
             throw error::invalid_constant;
         auto ors = ctx->inclusiveOrExpression();
+        if (ors.size() == 1)
+        {
+            return evalBitOr(ors[0]);
+        }
         for (auto* o : ors)
             if (!truth(evalBitOr(o)))
                 return 0LL;
@@ -3182,6 +3204,10 @@ long long astVisitor::parseConstexpr(ComplierParser::ConditionalExpressionContex
         if (!ctx)
             throw error::invalid_constant;
         auto ands = ctx->logicalAndExpression();
+        if (ands.size() == 1)
+        {
+            return evalLogAnd(ands[0]);
+        }
         for (auto* a : ands)
             if (truth(evalLogAnd(a)))
                 return 1LL;
