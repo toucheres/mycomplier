@@ -1,8 +1,8 @@
 #include <def.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <systemcall.h>
 #include <string.h>
+#include <systemcall.h>
 void write(long arg)
 {
     return __write(arg);
@@ -96,11 +96,19 @@ long vsprintf(char* dst, char* fmt, va_list ap)
                 char ch = va_arg(ap, int); // char 提升为 int
                 // 宽度填充
                 long pad = 0;
-                if (width > 1) { pad = width - 1; }
+                if (width > 1)
+                {
+                    pad = width - 1;
+                }
                 if (!left_align)
                 {
                     long p = pad;
-                    while (p > 0) { *src++ = ' '; charsnum++; p--; }
+                    while (p > 0)
+                    {
+                        *src++ = ' ';
+                        charsnum++;
+                        p--;
+                    }
                 }
                 *src = ch;
                 charsnum = charsnum + 1;
@@ -108,7 +116,12 @@ long vsprintf(char* dst, char* fmt, va_list ap)
                 if (left_align)
                 {
                     long p = pad;
-                    while (p > 0) { *src++ = ' '; charsnum++; p--; }
+                    while (p > 0)
+                    {
+                        *src++ = ' ';
+                        charsnum++;
+                        p--;
+                    }
                 }
                 fmt = fmt + 1;
             }
@@ -120,11 +133,19 @@ long vsprintf(char* dst, char* fmt, va_list ap)
                 tmpbuf[size] = '\0';
 
                 long pad = 0;
-                if (width > size) { pad = width - size; }
+                if (width > size)
+                {
+                    pad = width - size;
+                }
                 if (!left_align)
                 {
                     long p = pad;
-                    while (p > 0) { *src++ = ' '; charsnum++; p--; }
+                    while (p > 0)
+                    {
+                        *src++ = ' ';
+                        charsnum++;
+                        p--;
+                    }
                 }
                 for (long i = 0; i < size; i++)
                 {
@@ -134,14 +155,19 @@ long vsprintf(char* dst, char* fmt, va_list ap)
                 if (left_align)
                 {
                     long p = pad;
-                    while (p > 0) { *src++ = ' '; charsnum++; p--; }
+                    while (p > 0)
+                    {
+                        *src++ = ' ';
+                        charsnum++;
+                        p--;
+                    }
                 }
                 fmt = fmt + 1;
             }
             else if (*fmt == 's')
             {
                 char* str = va_arg(ap, char*);
-                
+
                 // 内联计算字符串长度，不依赖 strlen
                 // long slen = 0;
                 // char* tmp = str;
@@ -165,7 +191,12 @@ long vsprintf(char* dst, char* fmt, va_list ap)
                 if (!left_align)
                 {
                     long p = pad;
-                    while (p > 0) { *src++ = ' '; charsnum++; p--; }
+                    while (p > 0)
+                    {
+                        *src++ = ' ';
+                        charsnum++;
+                        p--;
+                    }
                 }
                 // 输出字符串内容
                 for (long i = 0; i < outlen; i++)
@@ -177,7 +208,12 @@ long vsprintf(char* dst, char* fmt, va_list ap)
                 if (left_align)
                 {
                     long p = pad;
-                    while (p > 0) { *src++ = ' '; charsnum++; p--; }
+                    while (p > 0)
+                    {
+                        *src++ = ' ';
+                        charsnum++;
+                        p--;
+                    }
                 }
                 fmt = fmt + 1;
             }
@@ -192,11 +228,19 @@ long vsprintf(char* dst, char* fmt, va_list ap)
                     tmpbuf[size] = '\0';
 
                     long pad = 0;
-                    if (width > size) { pad = width - size; }
+                    if (width > size)
+                    {
+                        pad = width - size;
+                    }
                     if (!left_align)
                     {
                         long p = pad;
-                        while (p > 0) { *src++ = ' '; charsnum++; p--; }
+                        while (p > 0)
+                        {
+                            *src++ = ' ';
+                            charsnum++;
+                            p--;
+                        }
                     }
                     for (long i = 0; i < size; i++)
                     {
@@ -206,7 +250,12 @@ long vsprintf(char* dst, char* fmt, va_list ap)
                     if (left_align)
                     {
                         long p = pad;
-                        while (p > 0) { *src++ = ' '; charsnum++; p--; }
+                        while (p > 0)
+                        {
+                            *src++ = ' ';
+                            charsnum++;
+                            p--;
+                        }
                     }
                     fmt = fmt + 1;
                 }

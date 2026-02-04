@@ -1308,25 +1308,33 @@ Type astVisitor::visitAssignmentExpression(ComplierParser::AssignmentExpressionC
 }
 Type astVisitor::visitConditionalExpression(ComplierParser::ConditionalExpressionContext* ctx)
 {
-    if (ctx->logicalOrExpression())
-    {
-        auto lret = (visitLogicalOrExpression(ctx->logicalOrExpression()));
-        return lret;
-    }
+    auto contype = (visitLogicalOrExpression(ctx->logicalOrExpression()));
     if (ctx->expression() && ctx->conditionalExpression())
     {
         int pos = funcnow->funcInfo.asms.size();
         funcnow->funcInfo.asms.push_back("HOLD");
-        (void)(visitExpression(ctx->expression()));
+        auto lrettype = visitExpression(ctx->expression());
         funcnow->funcInfo.asms[pos] =
             ASM{ASM::basic_asm::JZ,
                 "thisfun@" + std::to_string(funcnow->funcInfo.asms.size() + 1)}; // 跳过JMP
         int pos2 = funcnow->funcInfo.asms.size();
         funcnow->funcInfo.asms.push_back("HOLD");
-        (void)(visitConditionalExpression(ctx->conditionalExpression()));
+        auto rrettype = visitConditionalExpression(ctx->conditionalExpression());
         funcnow->funcInfo.asms[pos2] =
             ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(funcnow->funcInfo.asms.size())};
-        return Type{Type::Kind::Basic, Type::BasicType::Char};
+        if (lrettype == rrettype)
+        {
+            return lrettype;
+        }
+        if (lrettype.kind == Type::Kind::Basic && rrettype.kind == Type::Kind::Basic)
+        {
+            return Type{Type::Kind::Basic, Type::BasicType::Long};
+        }
+        THROW_ERR(error::expected_same_type, ctx);
+    }
+    else
+    {
+        return contype;
     }
     throw;
 }
