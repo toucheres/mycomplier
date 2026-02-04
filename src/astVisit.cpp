@@ -1326,7 +1326,8 @@ Type astVisitor::visitConditionalExpression(ComplierParser::ConditionalExpressio
         {
             return lrettype;
         }
-        if (lrettype.kind == Type::Kind::Basic && rrettype.kind == Type::Kind::Basic)
+        if (lrettype.kind != Type::Kind::Struct && rrettype.kind != Type::Kind::Struct &&
+            lrettype.getsize() == rrettype.getsize())
         {
             return Type{Type::Kind::Basic, Type::BasicType::Long};
         }
@@ -1644,7 +1645,7 @@ Type astVisitor::visitAdditiveExpression(ComplierParser::AdditiveExpressionConte
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
             auto res = deduce_binary_type(lret, rret, BinOp::Sub);
-            if (lret.kind == Type::Kind::Pointer || rret.kind == Type::Kind::Pointer)
+            if (lret.kind == Type::Kind::Pointer && rret.kind == Type::Kind::Pointer)
             {
                 // 指针相减
                 funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, lret.subType->getsize()});
