@@ -17,6 +17,7 @@
 [OK][TODO] sizeof(struct)
 [OK][TODO] main(int argn,char**argc)的传参
 [OK][TODO] printf()的%s崩溃
-[TODO] sprintf 有问题
-[TODO] 指针相减
-[TODO] 枚举指定值
+[OK][TODO] sprintf 有问题
+[OK][TODO] 指针相减
+[OKI][TODO] 枚举指定值
+[TODO] 三元表达式
