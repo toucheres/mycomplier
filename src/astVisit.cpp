@@ -2129,8 +2129,8 @@ Type astVisitor::visitPrimaryExpression(ComplierParser::PrimaryExpressionContext
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, "globalvar@" + arrptr->name});
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LEAD});
         // 返回指向字符的指针类型
-        Type t{Type::Kind::Basic, Type::BasicType::Char};
-        t.pushTop(Type{Type::Kind::Pointer, 1});
+        Type t{Type::Kind::Pointer, 1};
+        t.pushTop(Type{Type::Kind::Basic, Type::BasicType::Char});
         return t;
     }
     else

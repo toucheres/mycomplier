@@ -39,7 +39,9 @@ enum class error
     expected_initializerList,
     initializerList_too_long,
     unsurpported_num,
-    unexpected_storageClassSpecifier
+    unexpected_storageClassSpecifier,
+    preprocess_error,
+    unknow,
 };
 
 inline const char* error_name(error e)
@@ -155,3 +157,4 @@ struct compile_error : std::exception
 
 // 无上下文场景
 #define THROW_ERR_NOCTX(code) throw compile_error((code), {}, __FILE__, __LINE__, __func__)
+#define THROW_ERR_INFO(info) throw compile_error((error::unknow), info, __FILE__, __LINE__, __func__)
