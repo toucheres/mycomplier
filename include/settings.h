@@ -54,6 +54,13 @@ namespace app_options {
         true
     };
 
+    inline constexpr Option<bool> preprocess_only{
+        "preprocess_only,preprocess-only",
+        "Preprocess only; do not compile, assemble or link",
+        false,
+        true
+    };
+
     inline constexpr Option<bool> print_asm{
         "printasm,print-asm",
         "print asm during debug/run",
@@ -101,6 +108,7 @@ getsetting(int argc, const char* argv[])
         typed_options::add_option(visible, print_asm);
         typed_options::add_option(visible, print_ret_value);
         typed_options::add_option(visible, disable_std);
+        typed_options::add_option(visible, preprocess_only);
         typed_options::add_option(visible, main_args);
 
         po::options_description hidden("Hidden options");

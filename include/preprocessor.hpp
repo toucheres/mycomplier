@@ -16,9 +16,8 @@ class Preprocessor
     inline static std::vector<std::string> default_include_paths =
         platform::get_default_include_dir_paths();
     std::expected<file, error> deal_line_continuation(file in); // 处理行尾反斜杠续行
-    std::expected<file, error> deal_include(file in);
-    std::expected<file, error> deal_des(file in);
-    std::expected<file, error> deal_def(file in);
+    std::expected<file, error> deal_des(file in);               // 去除注释
+    std::expected<file, error> deal_directives(file in);        // 统一处理 include/define/ifdef 等
 
   public:
     Preprocessor(const std::vector<std::string>& include_paths_ = default_include_paths);

@@ -433,11 +433,9 @@ bool IDdef::operator==(const IDdef& that) const
     return this->type == that.type && this->name == that.name &&
            this->storageClassSpecifier == that.storageClassSpecifier;
 }
-std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths,
-                                                                 bool showASt, int tolerate,
-                                                                 bool showFoldedNames,
-                                                                 bool disableStd,
-                                                                 std::vector<std::string> mainargs)
+std::expected<std::vector<std::string>, error> complier::process(
+    std::vector<std::string> paths, bool showASt, int tolerate, bool showFoldedNames,
+    bool disableStd, std::vector<std::string> mainargs, bool preprocess_only)
 {
     std::vector<OBJ> objs;
     if (!disableStd)
@@ -449,6 +447,10 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
             // 创建输入流
             Preprocessor{}.process(each);
             std::ifstream in(each + ".pre");
+            if (preprocess_only)
+            {
+                continue;
+            }
             std::string input((std::istreambuf_iterator<char>(in)),
                               std::istreambuf_iterator<char>());
             antlr4::ANTLRInputStream inputStream(input);
@@ -479,6 +481,10 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
         obj.name = each;
         // 创建输入流
         Preprocessor{}.process(each);
+        if (preprocess_only)
+        {
+            continue;
+        }
         std::ifstream in(each + ".pre");
         std::string input((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         antlr4::ANTLRInputStream inputStream(input);
@@ -501,6 +507,10 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
         visitor.visitCompilationUnit(tree);
         obj.flush_global_decls();
         objs.push_back(std::move(obj));
+    }
+    if (preprocess_only)
+    {
+        return {};
     }
     linker linker{objs, mainargs};
     return linker.process();

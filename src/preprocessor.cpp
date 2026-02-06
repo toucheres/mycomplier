@@ -92,7 +92,57 @@ static std::optional<MacroDef> parse_macro_define(const std::string& line)
     return macro;
 }
 
-// 展开函数式宏调用
+// 辅助函数：在 text 中从 start_pos 开始查找标识符 name，跳过字符串/字符字面量
+// 返回找到的位置，或 std::string::npos
+static size_t find_identifier(const std::string& text, const std::string& name, size_t start_pos)
+{
+    size_t i = start_pos;
+    while (i < text.size())
+    {
+        // 跳过字符串字面量 "..."
+        if (text[i] == '"')
+        {
+            i++;
+            while (i < text.size() && text[i] != '"')
+            {
+                if (text[i] == '\\' && i + 1 < text.size())
+                    i++; // 跳过转义字符
+                i++;
+            }
+            if (i < text.size())
+                i++; // 跳过闭合引号
+            continue;
+        }
+        // 跳过字符字面量 '...'
+        if (text[i] == '\'')
+        {
+            i++;
+            while (i < text.size() && text[i] != '\'')
+            {
+                if (text[i] == '\\' && i + 1 < text.size())
+                    i++;
+                i++;
+            }
+            if (i < text.size())
+                i++;
+            continue;
+        }
+
+        // 在当前位置尝试匹配标识符
+        if (i + name.size() <= text.size() && text.compare(i, name.size(), name) == 0)
+        {
+            bool start_ok = (i == 0 || !is_ident_char(text[i - 1]));
+            bool end_ok = (i + name.size() >= text.size() ||
+                           !is_ident_char(text[i + name.size()]));
+            if (start_ok && end_ok)
+                return i;
+        }
+        i++;
+    }
+    return std::string::npos;
+}
+
+// 展开函数式宏调用（token 级别，跳过字符串/字符字面量）
 static std::string expand_function_macro(const std::string& text, const MacroDef& macro)
 {
     std::string result = text;
@@ -100,23 +150,16 @@ static std::string expand_function_macro(const std::string& text, const MacroDef
 
     while (search_pos < result.size())
     {
-        // 查找宏名
-        size_t pos = result.find(macro.name, search_pos);
+        // 使用 token 感知的查找
+        size_t pos = find_identifier(result, macro.name, search_pos);
         if (pos == std::string::npos)
             break;
-
-        // 检查单词边界（前）
-        if (pos > 0 && is_ident_char(result[pos - 1]))
-        {
-            search_pos = pos + 1;
-            continue;
-        }
 
         // 检查宏名后是否紧跟 '('
         size_t after_name = pos + macro.name.length();
         if (after_name >= result.size() || result[after_name] != '(')
         {
-            search_pos = pos + 1;
+            search_pos = pos + macro.name.length();
             continue;
         }
 
@@ -181,7 +224,7 @@ static std::string expand_function_macro(const std::string& text, const MacroDef
             continue;
         }
 
-        // 执行参数替换
+        // 执行参数替换（token 级别，跳过字符串字面量）
         std::string replacement = macro.replacement;
         for (size_t pi = 0; pi < macro.params.size(); pi++)
         {
@@ -189,22 +232,10 @@ static std::string expand_function_macro(const std::string& text, const MacroDef
             const std::string& arg = args[pi];
 
             size_t rpos = 0;
-            while ((rpos = replacement.find(param, rpos)) != std::string::npos)
+            while ((rpos = find_identifier(replacement, param, rpos)) != std::string::npos)
             {
-                // 检查单词边界
-                bool start_ok = (rpos == 0 || !is_ident_char(replacement[rpos - 1]));
-                bool end_ok = (rpos + param.length() >= replacement.length() ||
-                               !is_ident_char(replacement[rpos + param.length()]));
-
-                if (start_ok && end_ok)
-                {
-                    replacement.replace(rpos, param.length(), arg);
-                    rpos += arg.length();
-                }
-                else
-                {
-                    rpos++;
-                }
+                replacement.replace(rpos, param.length(), arg);
+                rpos += arg.length();
             }
         }
 
@@ -216,27 +247,16 @@ static std::string expand_function_macro(const std::string& text, const MacroDef
     return result;
 }
 
-// 展开对象式宏
+// 展开对象式宏（token 级别，跳过字符串/字符字面量）
 static std::string expand_object_macro(const std::string& text, const MacroDef& macro)
 {
     std::string result = text;
     size_t pos = 0;
 
-    while ((pos = result.find(macro.name, pos)) != std::string::npos)
+    while ((pos = find_identifier(result, macro.name, pos)) != std::string::npos)
     {
-        bool start_ok = (pos == 0 || !is_ident_char(result[pos - 1]));
-        bool end_ok = (pos + macro.name.length() >= result.length() ||
-                       !is_ident_char(result[pos + macro.name.length()]));
-
-        if (start_ok && end_ok)
-        {
-            result.replace(pos, macro.name.length(), macro.replacement);
-            pos += macro.replacement.length();
-        }
-        else
-        {
-            pos++;
-        }
+        result.replace(pos, macro.name.length(), macro.replacement);
+        pos += macro.replacement.length();
     }
 
     return result;
@@ -320,24 +340,43 @@ std::expected<file, error> Preprocessor::deal_line_continuation(file src)
     return file{result, true};
 }
 
-std::expected<file, error> Preprocessor::deal_include(file src)
+std::expected<file, error> Preprocessor::deal_des(file in)
+{
+    std::string src;
+    in.readalllast(src);
+    std::regex comment_regex(R"(\/\/.*|\/\*[\s\S]*?\*\/)");
+    std::string result = std::regex_replace(src, comment_regex, "");
+    return file{result, true};
+}
+
+// 统一处理所有预处理指令：按出现顺序交替处理 include/define/ifdef 等
+std::expected<file, error> Preprocessor::deal_directives(file src)
 {
     std::string out;
     std::string line;
+    std::vector<MacroDef> defines;
+    bool skip = false;
 
-    // 处理include
     while (src.readline(line))
     {
-        std::smatch match;
-        std::regex preprocessor_regex(R"(^\s*#\s*(\w+)\s*(.*))");
-        auto ret = std::regex_search(line, match, preprocessor_regex);
-        if (ret)
+        // 检查是否是预处理指令
+        std::regex directive_regex(R"(^\s*#\s*(\w+)\s*(.*))");
+        std::smatch dmatch;
+
+        if (std::regex_search(line, dmatch, directive_regex))
         {
-            std::string directive = match[1];
-            std::string arg = match[2];
+            std::string directive = dmatch[1];
+            std::string arg = trim(dmatch[2].str());
+
             if (directive == "include")
             {
-                std::string filename = arg.substr(1, arg.size() - 2);
+                if (skip)
+                    continue;
+
+                // 先对 include 参数进行宏展开（支持 #define FILE "xxx.h" + #include FILE）
+                std::string expanded_arg = expand_all_macros(arg, defines);
+
+                std::string filename = expanded_arg.substr(1, expanded_arg.size() - 2);
                 auto fun_find_file_in_dirs =
                     [](const std::vector<std::string>& dirs, const std::string& filename)
                 {
@@ -356,57 +395,26 @@ std::expected<file, error> Preprocessor::deal_include(file src)
                 {
                     return std::unexpected(error::file_not_exsist);
                 }
-                // 对被 include 的文件也进行续行处理
+                // 对被 include 的文件进行续行处理和注释去除
                 auto included_result = deal_line_continuation(file{path});
                 if (!included_result)
                 {
                     return std::unexpected(included_result.error());
                 }
+                auto included_no_comments = deal_des(included_result.value());
+                if (!included_no_comments)
+                {
+                    return std::unexpected(included_no_comments.error());
+                }
                 std::string f{};
-                included_result.value().readalllast(f);
+                included_no_comments.value().readalllast(f);
+                // 插入到当前读取位置，后续 readline 会继续处理其中的指令
                 src.insert("\n" + f + "\n");
             }
-            else
+            else if (directive == "define")
             {
-                out += line;
-                out += '\n';
-            }
-        }
-        else
-        {
-            out += line;
-            out += '\n';
-        }
-    }
-    return file{out, true};
-}
-std::expected<file, error> Preprocessor::deal_des(file in)
-{
-    std::string src;
-    in.readalllast(src);
-    std::regex comment_regex(R"(\/\/.*|\/\*[\s\S]*?\*\/)");
-    std::string result = std::regex_replace(src, comment_regex, "");
-    return file{result, true};
-}
-std::expected<file, error> Preprocessor::deal_def(file src)
-{
-    std::string out;
-    std::string line;
-    std::vector<MacroDef> defines;
-    bool skip = false;
-
-    while (src.readline(line))
-    {
-        // 检查是否是预处理指令
-        std::regex directive_regex(R"(^\s*#\s*(\w+))");
-        std::smatch dmatch;
-
-        if (std::regex_search(line, dmatch, directive_regex))
-        {
-            std::string directive = dmatch[1];
-
-            if (directive == "define")
-            {
+                if (skip)
+                    continue;
                 auto macro_opt = parse_macro_define(line);
                 if (macro_opt.has_value())
                 {
@@ -416,6 +424,8 @@ std::expected<file, error> Preprocessor::deal_def(file src)
             }
             else if (directive == "undef")
             {
+                if (skip)
+                    continue;
                 // 提取要 undef 的名字
                 std::regex undef_regex(R"(^\s*#\s*undef\s+(\w+))");
                 std::smatch um;
@@ -477,49 +487,40 @@ std::expected<file, error> Preprocessor::deal_def(file src)
     }
     return file{out, true};
 }
+
 Preprocessor::Preprocessor(const std::vector<std::string>& include_paths_)
     : include_paths(include_paths_)
 {
 }
+
 std::expected<bool, error> Preprocessor::process(const std::string& src_path,
                                                  const std::string& out_path)
 {
-    // 1. 首先处理行尾反斜杠续行
+    // 1. 处理行尾反斜杠续行
     auto line_cont_result = deal_line_continuation(file{src_path});
     if (!line_cont_result)
     {
         return std::unexpected(line_cont_result.error());
     }
-    file after_line_continuation = line_cont_result.value();
 
-    // 2. 处理 include
-    auto result = deal_include(after_line_continuation);
+    // 2. 去除注释
+    auto no_comments = deal_des(line_cont_result.value());
+    if (!no_comments)
+    {
+        return std::unexpected(no_comments.error());
+    }
+
+    // 3. 统一处理所有预处理指令（include/define/ifdef 按出现顺序交替处理）
+    auto result = deal_directives(no_comments.value());
     if (!result)
     {
-        // 错误处理
         return std::unexpected(result.error());
     }
-    file without_include = result.value();
 
-    // 3. 处理注释
-    auto res = deal_des(without_include);
-    if (!res)
-    {
-        // 错误处理
-        return std::unexpected(res.error());
-    }
-    file without_include_des = res.value();
-
-    // 4. 处理宏定义
-    auto res2 = deal_def(without_include_des);
-    if (!res2)
-    {
-        // 错误处理
-        return std::unexpected(res.error());
-    }
-    res2.value().writeto(out_path);
+    result.value().writeto(out_path);
     return true;
 }
+
 std::expected<bool, error> Preprocessor::process(const std::string& src_path)
 {
     return this->process(src_path, src_path + ".pre");
