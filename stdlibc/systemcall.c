@@ -2,189 +2,189 @@
 char* __malloc(char in)
 {
     char* ptr;
-    _asm_("IMM -8");
-    _asm_("LEA");
-    _asm_("IMM 16");
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 1");
-    _asm_("DARG 1");
-    _asm_("PUSH");
-    _asm_("SW");
+    asm("IMM -8");
+    asm("LEA");
+    asm("IMM 16");
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 1");
+    asm("DARG 1");
+    asm("PUSH");
+    asm("SW");
     return ptr;
 }
 void __free(char* ptr)
 {
-    _asm_("IMM 16");
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 2");
-    _asm_("POP");
+    asm("IMM 16");
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 2");
+    asm("POP");
     return;
 }
 void __write(char in)
 {
-    _asm_("IMM 16");
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 0");
-    _asm_("POP");
+    asm("IMM 16");
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 0");
+    asm("POP");
     return;
 }
 long __open(char* file, char* mode)
 {
     long ret;
-    _asm_("IMM -8");
-    _asm_("LEA");
-    _asm_("IMM 24"); // mode
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("IMM 16"); // file
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 4");
-    _asm_("DARG 2");
-    _asm_("PUSH");
-    _asm_("SW");
+    asm("IMM -8");
+    asm("LEA");
+    asm("IMM 24"); // mode
+    asm("LEA");
+    asm("LW");
+    asm("IMM 16"); // file
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 4");
+    asm("DARG 2");
+    asm("PUSH");
+    asm("SW");
     return ret;
 }
 
 int __close(long fp)
 {
     int ret;
-    _asm_("IMM -8");
-    _asm_("LEA");
-    _asm_("IMM 16"); // fp
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 5");
-    _asm_("DARG 1");
-    _asm_("PUSH");
-    _asm_("SI");
+    asm("IMM -8");
+    asm("LEA");
+    asm("IMM 16"); // fp
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 5");
+    asm("DARG 1");
+    asm("PUSH");
+    asm("SI");
     return ret;
 }
 
 int __putc(int c, long fp)
 {
     int ret;
-    _asm_("IMM -8");
-    _asm_("LEA");
-    _asm_("IMM 24"); // fp
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("IMM 16"); // c
-    _asm_("LEA");
-    _asm_("LI");
-    _asm_("SYSTEMCALL 6");
-    _asm_("DARG 2");
-    _asm_("PUSH");
-    _asm_("SI");
+    asm("IMM -8");
+    asm("LEA");
+    asm("IMM 24"); // fp
+    asm("LEA");
+    asm("LW");
+    asm("IMM 16"); // c
+    asm("LEA");
+    asm("LI");
+    asm("SYSTEMCALL 6");
+    asm("DARG 2");
+    asm("PUSH");
+    asm("SI");
     return ret;
 }
 
 int __getc(long fp)
 {
     int ret;
-    _asm_("IMM -8");
-    _asm_("LEA");
-    _asm_("IMM 16"); // fp
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 7");
-    _asm_("DARG 1");
-    _asm_("PUSH");
-    _asm_("SI");
+    asm("IMM -8");
+    asm("LEA");
+    asm("IMM 16"); // fp
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 7");
+    asm("DARG 1");
+    asm("PUSH");
+    asm("SI");
     return ret;
 }
 
 long __read(long fp, char* buf, long size)
 {
     long ret;
-    _asm_("IMM -8");
-    _asm_("LEA");
-    _asm_("IMM 32"); // size
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("IMM 24"); // buf
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("IMM 16"); // fp
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 8");
-    _asm_("DARG 3");
-    _asm_("PUSH");
-    _asm_("SW");
+    asm("IMM -8");
+    asm("LEA");
+    asm("IMM 32"); // size
+    asm("LEA");
+    asm("LW");
+    asm("IMM 24"); // buf
+    asm("LEA");
+    asm("LW");
+    asm("IMM 16"); // fp
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 8");
+    asm("DARG 3");
+    asm("PUSH");
+    asm("SW");
     return ret;
 }
 
 long __write_file(long fp, char* buf, long size)
 {
     long ret;
-    _asm_("IMM -8");
-    _asm_("LEA");
-    _asm_("IMM 32"); // size
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("IMM 24"); // buf
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("IMM 16"); // fp
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 9");
-    _asm_("DARG 3");
-    _asm_("PUSH");
-    _asm_("SW");
+    asm("IMM -8");
+    asm("LEA");
+    asm("IMM 32"); // size
+    asm("LEA");
+    asm("LW");
+    asm("IMM 24"); // buf
+    asm("LEA");
+    asm("LW");
+    asm("IMM 16"); // fp
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 9");
+    asm("DARG 3");
+    asm("PUSH");
+    asm("SW");
     return ret;
 }
 void __exit(long code)
 {
-    _asm_("IMM 16"); // code
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("POP");
-    _asm_("EXIT");
+    asm("IMM 16"); // code
+    asm("LEA");
+    asm("LW");
+    asm("POP");
+    asm("EXIT");
 }
 
 char* __memcpy(char* dest, char* src, long n)
 {
     char* ret;
-    _asm_("IMM -8");
-    _asm_("LEA");
-    _asm_("IMM 32"); // n
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("IMM 24"); // src
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("IMM 16"); // dest
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 11");
-    _asm_("DARG 3");
-    _asm_("PUSH");
-    _asm_("SW");
+    asm("IMM -8");
+    asm("LEA");
+    asm("IMM 32"); // n
+    asm("LEA");
+    asm("LW");
+    asm("IMM 24"); // src
+    asm("LEA");
+    asm("LW");
+    asm("IMM 16"); // dest
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 11");
+    asm("DARG 3");
+    asm("PUSH");
+    asm("SW");
     return ret;
 }
 
 char* __memset(char* s, int c, long n)
 {
     char* ret;
-    _asm_("IMM -8");
-    _asm_("LEA");
-    _asm_("IMM 32"); // n
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("IMM 24"); // c
-    _asm_("LEA");
-    _asm_("LI");
-    _asm_("IMM 16"); // s
-    _asm_("LEA");
-    _asm_("LW");
-    _asm_("SYSTEMCALL 12");
-    _asm_("DARG 3");
-    _asm_("PUSH");
-    _asm_("SW");
+    asm("IMM -8");
+    asm("LEA");
+    asm("IMM 32"); // n
+    asm("LEA");
+    asm("LW");
+    asm("IMM 24"); // c
+    asm("LEA");
+    asm("LI");
+    asm("IMM 16"); // s
+    asm("LEA");
+    asm("LW");
+    asm("SYSTEMCALL 12");
+    asm("DARG 3");
+    asm("PUSH");
+    asm("SW");
     return ret;
 }

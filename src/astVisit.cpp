@@ -1072,36 +1072,60 @@ IDdef astVisitor::visitDirectDeclarator(CParser::DirectDeclaratorContext* ctx)
     {
         return var;
     }
-    else if (ctx->Identifier()) // 变量名
+
+    // 基础部分: 标识符或括号括起的 declarator
+    if (ctx->Identifier())
     {
         var.name = ctx->Identifier()->getText();
-        return var;
     }
-    else if (!ctx->LeftParen().empty() && ctx->declarator()) // 函数声明
+    else if (ctx->declarator())
     {
         var = visitDeclarator(ctx->declarator());
-        std::vector<IDdef> args;
-        if (!ctx->parameterTypeList().empty())
+    }
+    else
+    {
+        THROW_ERR(error::unsurpport_directDeclarator, ctx);
+    }
+
+    bool in_array = false;
+    CParser::AssignmentExpressionContext* array_expr = nullptr;
+
+    for (auto* child : ctx->children)
+    {
+        if (auto* param = dynamic_cast<CParser::ParameterTypeListContext*>(child))
         {
-            args = visitParameterTypeList(ctx->parameterTypeList(0));
+            auto args = visitParameterTypeList(param);
+            var.type.pushTop(Type{Type::Kind::Function, args});
         }
-        var.type.pushTop(Type{Type::Kind::Function, args});
-        return var;
+        else if (auto* term = dynamic_cast<antlr4::tree::TerminalNode*>(child))
+        {
+            auto token_type = term->getSymbol()->getType();
+            if (token_type == CLexer::LeftBracket)
+            {
+                in_array = true;
+                array_expr = nullptr;
+            }
+            else if (token_type == CLexer::RightBracket && in_array)
+            {
+                int sz = 0;
+                if (array_expr)
+                {
+                    sz = static_cast<int>(parseConstexpr(array_expr));
+                }
+                var.type.pushTop(Type(Type::Kind::Array, sz));
+                in_array = false;
+            }
+        }
+        else if (in_array)
+        {
+            if (auto* ae = dynamic_cast<CParser::AssignmentExpressionContext*>(child))
+            {
+                array_expr = ae;
+            }
+        }
     }
-    else if (ctx->declarator() && !ctx->LeftBracket().empty() &&
-             !ctx->assignmentExpression().empty()) // base+ 数组
-    {
-        var = visitDeclarator(ctx->declarator());
-        // parseConstexpr 返回 long long, 这里数组维度内部使用 int, 显式窄化避免警告
-        var.type.pushTop(Type(Type::Kind::Array,
-                              static_cast<int>(parseConstexpr(ctx->assignmentExpression(0)))));
-        return var;
-    }
-    else if (ctx->declarator()) // (dec)
-    {
-        return visitDeclarator(ctx->declarator());
-    }
-    THROW_ERR(error::unsurpport_directDeclarator, ctx);
+
+    return var;
 }
 std::vector<IDdef> astVisitor::visitParameterTypeList(CParser::ParameterTypeListContext* ctx)
 {
