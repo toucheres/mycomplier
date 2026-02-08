@@ -174,7 +174,7 @@ struct OBJ;
 struct linker;
 struct exefile;
 // 符号表
-struct SymbolTable
+struct Symbol_Table
 {
     std::unordered_map<std::string, IDdef> globaldef;
     std::unordered_map<std::string, IDdef> globaldecl;
@@ -186,7 +186,7 @@ struct OBJ
     // AST 根节点
     CParser::CompilationUnitContext* program;
     // 符号表
-    SymbolTable symbol_table;
+    Symbol_Table symbol_table;
     DeclRepository decls;
     OBJ() = default;
     OBJ(const OBJ&) = delete;

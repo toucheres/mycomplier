@@ -344,6 +344,10 @@ public:
     return visitChildren(ctx);
   }
 
+  virtual std::any visitAsmADDer(CParser::AsmADDerContext *ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitBlockItem(CParser::BlockItemContext *ctx) override {
     return visitChildren(ctx);
   }

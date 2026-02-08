@@ -691,9 +691,14 @@ blockItemList
     : blockItem+
     ;
 
+asmADDer
+    :   Asm LeftParen StringLiteral RightParen ';'
+    ;
+
 // ISO C: block-item (6.8.3)
 blockItem
-    : {this->IsStatement()}? statement
+    : asmADDer
+    | {this->IsStatement()}? statement
     | {this->IsDeclaration()}? declaration
     ;
 
@@ -750,6 +755,7 @@ translationUnit
 externalDeclaration
     : '__extension__'? (
 	functionDefinition
+	| asmADDer
 	| declaration
 	| ';' // stray ;
 	| asmDefinition // GCC

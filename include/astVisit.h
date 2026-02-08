@@ -90,8 +90,6 @@ struct astVisitor
     Type visitUnaryExpression(CParser::UnaryExpressionContext* ctx);
     Type visitPostfixExpression(CParser::PostfixExpressionContext* ctx);
     Type visitPrimaryExpression(CParser::PrimaryExpressionContext* ctx);
-    std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>>
-    visitDeclarationSpecifiers2(CParser::DeclarationSpecifiers2Context* ctx);
     Type visitAbstractDeclarator(CParser::AbstractDeclaratorContext* ctx);
     Type visitDirectAbstractDeclarator(CParser::DirectAbstractDeclaratorContext* ctx);
     Type visitTypeName(CParser::TypeNameContext* ctx);
@@ -105,6 +103,6 @@ struct astVisitor
     size_t visitArgumentExpressionList(CParser::ArgumentExpressionListContext* ctx);
     void visitIterationStatement(CParser::IterationStatementContext* ctx);
     void visitJumpStatement(CParser::JumpStatementContext* ctx);
-    std::vector<std::pair<std::string, IDdef>> visitStructDeclarationList(
-        CParser::StructDeclarationListContext* ctx);
+    std::vector<std::pair<std::string, IDdef>> visitMemberDeclarationList(
+      CParser::MemberDeclarationListContext* ctx);
 };

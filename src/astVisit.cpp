@@ -1,12 +1,13 @@
 #include "astVisit.h"
 #include "ASM.hpp"
-#include "CParserBaseVisitor.h"
 #include "CLexer.h"
 #include "CParser.h"
+#include "CParserBaseVisitor.h"
 #include "error.hpp"
 #include "tools.hpp"
 #include "type_utils.hpp"
 #include "vm.h"
+#include <algorithm>
 #include <functional>
 #include <tree/TerminalNode.h>
 #include <utility>
@@ -571,7 +572,8 @@ void astVisitor::visitFunctionDefinition(CParser::FunctionDefinitionContext* ctx
         ++arg_index;
     }
     funcnow->funcInfo.asms.push_back("HOLD");
-    visitCompoundStatement(ctx->compoundStatement());
+    if (ctx->functionBody() && ctx->functionBody()->compoundStatement())
+        visitCompoundStatement(ctx->functionBody()->compoundStatement());
     const Type funcrettype = (funcnow->type.subType) ? *funcnow->type.subType : Type{};
     if (funcrettype.kind == Type::Kind::Basic && funcrettype.basic_type == Type::BasicType::Void)
     {
@@ -696,7 +698,7 @@ Type astVisitor::visitTypeSpecifier(CParser::TypeSpecifierContext* ctx)
         if (ctx->structOrUnionSpecifier()->structOrUnion()->getText() == "struct") // struct
         {
             std::string nonameID;
-            if (ctx->structOrUnionSpecifier()->structDeclarationList()) // 同时定义struct
+            if (ctx->structOrUnionSpecifier()->memberDeclarationList()) // 同时定义struct
             {
                 IDdef thisStruct;
                 thisStruct.storageClassSpecifier = Type::StorageClassSpecifier::StructDef;
@@ -706,8 +708,8 @@ Type astVisitor::visitTypeSpecifier(CParser::TypeSpecifierContext* ctx)
                         ? ctx->structOrUnionSpecifier()->Identifier()->getText()
                         : "__nuname_struct_" + std::to_string(structIndex++);
                 thisStruct.type.kind = Type::Kind::Struct;
-                thisStruct.type.structInfo.members = visitStructDeclarationList(
-                    ctx->structOrUnionSpecifier()->structDeclarationList());
+                thisStruct.type.structInfo.members = visitMemberDeclarationList(
+                    ctx->structOrUnionSpecifier()->memberDeclarationList());
                 record_ID_decl(thisStruct);
             }
             auto* st = lookup_ID_decl(ctx->structOrUnionSpecifier()->Identifier()
@@ -832,9 +834,9 @@ Type astVisitor::visitTypeSpecifier(CParser::TypeSpecifierContext* ctx)
     THROW_ERR(error::unsurpport_basictype, ctx);
 }
 
-std::vector<IDdef> astVisitor::visitInitDeclaratorList(
-    CParser::InitDeclaratorListContext* ctx, Type basetype,
-    StorageClassSpecifier storageClassSpecifier)
+std::vector<IDdef> astVisitor::visitInitDeclaratorList(CParser::InitDeclaratorListContext* ctx,
+                                                       Type basetype,
+                                                       StorageClassSpecifier storageClassSpecifier)
 {
     std::vector<IDdef> vars;
     for (auto& each : ctx->initDeclarator())
@@ -1044,10 +1046,14 @@ IDdef astVisitor::visitInitDeclarator(CParser::InitDeclaratorContext* ctx, Type 
 IDdef astVisitor::visitDeclarator(CParser::DeclaratorContext* ctx)
 {
     IDdef var = visitDirectDeclarator(ctx->directDeclarator());
-    if (ctx->pointer()) // 有ptr
+    if (!ctx->pointer().empty()) // 有ptr
     {
-        auto str = ctx->pointer()->getText();
-        int ptr_count = static_cast<int>(std::count(str.begin(), str.end(), '*'));
+        int ptr_count = 0;
+        for (auto p : ctx->pointer())
+        {
+            auto str = p->getText();
+            ptr_count += static_cast<int>(std::count(str.begin(), str.end(), '*'));
+        }
         // 嵌套多层 Pointer
         for (int i = 0; i < ptr_count; i++)
         {
@@ -1071,24 +1077,24 @@ IDdef astVisitor::visitDirectDeclarator(CParser::DirectDeclaratorContext* ctx)
         var.name = ctx->Identifier()->getText();
         return var;
     }
-    else if (ctx->LeftParen() && ctx->directDeclarator()) // 函数声明
+    else if (!ctx->LeftParen().empty() && ctx->declarator()) // 函数声明
     {
-        var = visitDirectDeclarator(ctx->directDeclarator());
+        var = visitDeclarator(ctx->declarator());
         std::vector<IDdef> args;
-        if (ctx->parameterTypeList())
+        if (!ctx->parameterTypeList().empty())
         {
-            args = visitParameterTypeList(ctx->parameterTypeList());
+            args = visitParameterTypeList(ctx->parameterTypeList(0));
         }
         var.type.pushTop(Type{Type::Kind::Function, args});
         return var;
     }
-    else if (ctx->directDeclarator() && ctx->LeftBracket() &&
-             ctx->assignmentExpression()) // base+ 数组
+    else if (ctx->declarator() && !ctx->LeftBracket().empty() &&
+             !ctx->assignmentExpression().empty()) // base+ 数组
     {
-        var = visitDirectDeclarator(ctx->directDeclarator());
+        var = visitDeclarator(ctx->declarator());
         // parseConstexpr 返回 long long, 这里数组维度内部使用 int, 显式窄化避免警告
-        var.type.pushTop(
-            Type(Type::Kind::Array, static_cast<int>(parseConstexpr(ctx->assignmentExpression()))));
+        var.type.pushTop(Type(Type::Kind::Array,
+                              static_cast<int>(parseConstexpr(ctx->assignmentExpression(0)))));
         return var;
     }
     else if (ctx->declarator()) // (dec)
@@ -1136,20 +1142,7 @@ IDdef astVisitor::visitParameterDeclaration(CParser::ParameterDeclarationContext
         }
         basetype = *type;
     }
-    else if (ctx->declarationSpecifiers2()) // 前类型
-    {
-        auto [type, storageClassSpecifier] =
-            visitDeclarationSpecifiers2(ctx->declarationSpecifiers2());
-        if (!type)
-        {
-            THROW_ERR(error ::expected_type, ctx->declarationSpecifiers());
-        }
-        if (storageClassSpecifier)
-        {
-            THROW_ERR(error ::unexpected_storageClassSpecifier, ctx->declarationSpecifiers());
-        }
-        basetype = *type;
-    }
+    // declarationSpecifiers2 removed in updated grammar; handled via declarationSpecifiers
     static long noname_para_index = 0;
     if (ctx->declarator()) // (有名的)数组/函数/指针的组合s
     {
@@ -1240,7 +1233,7 @@ Type astVisitor::visitAssignmentExpression(CParser::AssignmentExpressionContext*
     {
         return visitConditionalExpression(ctx->conditionalExpression());
     }
-    else if (ctx->assignmentOperator())
+    else if (ctx->assignementOperator)
     {
         auto uret = visitUnaryExpression(ctx->unaryExpression());
         if (!stackTopIsLvalue()) // 不是左值
@@ -1248,7 +1241,7 @@ Type astVisitor::visitAssignmentExpression(CParser::AssignmentExpressionContext*
             THROW_ERR(error::expected_lvalue, ctx->unaryExpression());
         }
         madeTopIsLvalueAddr();
-        if (ctx->assignmentOperator()->getText() == "=")
+        if (ctx->assignementOperator->getText() == "=")
         {
             funcnow->funcInfo.asms.push_back(
                 ASM{ASM::basic_asm::COPY}); // 拷贝一份左值地址实现返回值
@@ -1339,37 +1332,7 @@ Type astVisitor::visitConditionalExpression(CParser::ConditionalExpressionContex
     }
     throw;
 }
-// same as visitDeclarationSpecifiers
-std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>> astVisitor::
-    visitDeclarationSpecifiers2(CParser::DeclarationSpecifiers2Context* ctx)
-{
-    std::optional<Type> type;
-    std::optional<StorageClassSpecifier> storageClassSpecifier;
-    // 遍历所有声明说明符
-    for (auto& each : ctx->declarationSpecifier())
-    {
-        // 解析每个声明说明符
-        // [TODO] typeQualifier functionSpecifier alignmentSpecifier
-        Type result = visitDeclarationSpecifier(each);
-        if (result.storageClassSpecifier != StorageClassSpecifier::VarDef)
-        {
-            if (storageClassSpecifier)
-            {
-                THROW_ERR(error::double_StorageClassSpecifier, ctx);
-            }
-            storageClassSpecifier = result.storageClassSpecifier;
-        }
-        else
-        {
-            if (type)
-            {
-                THROW_ERR(error::double_type, ctx);
-            }
-            type = result;
-        }
-    }
-    return {type, storageClassSpecifier};
-}
+// DeclarationSpecifiers2 removed; use visitDeclarationSpecifiers for current grammar
 Type astVisitor::visitLogicalOrExpression(CParser::LogicalOrExpressionContext* ctx)
 {
     // 注意处理多个||
@@ -1467,7 +1430,7 @@ Type astVisitor::visitExclusiveOrExpression(CParser::ExclusiveOrExpressionContex
         return rret;
     };
     return func(std::span<CParser::AndExpressionContext*>(ctx->andExpression().data(),
-                                                                 ctx->andExpression().size()));
+                                                          ctx->andExpression().size()));
 }
 Type astVisitor::visitAndExpression(CParser::AndExpressionContext* ctx)
 {
@@ -1486,15 +1449,14 @@ Type astVisitor::visitAndExpression(CParser::AndExpressionContext* ctx)
         // 返回计算结果类型
         return rret;
     };
-    return func(std::span<CParser::EqualityExpressionContext*>(
-        ctx->equalityExpression().data(), ctx->equalityExpression().size()));
+    return func(std::span<CParser::EqualityExpressionContext*>(ctx->equalityExpression().data(),
+                                                               ctx->equalityExpression().size()));
 }
 Type astVisitor::visitEqualityExpression(CParser::EqualityExpressionContext* ctx)
 {
     // 注意处理多个!= / ==
     std::function<Type(std::span<CParser::RelationalExpressionContext*>, int)> func =
-        [&func, this, ctx](std::span<CParser::RelationalExpressionContext*> in,
-                           int index) -> Type
+        [&func, this, ctx](std::span<CParser::RelationalExpressionContext*> in, int index) -> Type
 
     {
         if (in.size() == 1)
@@ -1551,15 +1513,14 @@ Type astVisitor::visitRelationalExpression(CParser::RelationalExpressionContext*
         return rret;
     };
     return func(std::span<CParser::ShiftExpressionContext*>(ctx->shiftExpression().data(),
-                                                                   ctx->shiftExpression().size()),
+                                                            ctx->shiftExpression().size()),
                 0);
 }
 Type astVisitor::visitShiftExpression(CParser::ShiftExpressionContext* ctx)
 {
     // 注意处理多个<< >>
     std::function<Type(std::span<CParser::AdditiveExpressionContext*>, int)> func =
-        [&func, this, ctx](std::span<CParser::AdditiveExpressionContext*> in,
-                           int index) -> Type
+        [&func, this, ctx](std::span<CParser::AdditiveExpressionContext*> in, int index) -> Type
 
     {
         if (in.size() == 1)
@@ -1579,8 +1540,8 @@ Type astVisitor::visitShiftExpression(CParser::ShiftExpressionContext* ctx)
         // 返回计算结果类型
         return rret;
     };
-    return func(std::span<CParser::AdditiveExpressionContext*>(
-                    ctx->additiveExpression().data(), ctx->additiveExpression().size()),
+    return func(std::span<CParser::AdditiveExpressionContext*>(ctx->additiveExpression().data(),
+                                                               ctx->additiveExpression().size()),
                 0);
 }
 Type astVisitor::visitAdditiveExpression(CParser::AdditiveExpressionContext* ctx)
@@ -1687,7 +1648,7 @@ Type astVisitor::visitMultiplicativeExpression(CParser::MultiplicativeExpression
         return rret;
     };
     return func(std::span<CParser::CastExpressionContext*>(ctx->castExpression().data(),
-                                                                  ctx->castExpression().size()),
+                                                           ctx->castExpression().size()),
                 0);
 }
 Type astVisitor::visitCastExpression(CParser::CastExpressionContext* ctx)
@@ -1727,10 +1688,10 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
         auto pret = (visitPostfixExpression(ctx->postfixExpression()));
         type = pret;
     }
-    else if (ctx->unaryOperator())
+    else if (ctx->unaryOperator)
     {
         // 分支5: unaryOperator castExpression
-        if (ctx->unaryOperator()->getText() == "&")
+        if (ctx->unaryOperator->getText() == "&")
         {
             auto cret = visitCastExpression(ctx->castExpression());
             if (cret.kind == Type::Kind::Function ||
@@ -1756,7 +1717,7 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
                 type = outer;
             }
         }
-        else if (ctx->unaryOperator()->getText() == "*")
+        else if (ctx->unaryOperator->getText() == "*")
         {
             auto cret = (visitCastExpression(ctx->castExpression()));
             if (cret.kind != Type::Kind::Pointer)
@@ -1766,25 +1727,25 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
             type = *cret.subType;
             loadStackTopAddrByType(type);
         }
-        else if (ctx->unaryOperator()->getText() == "+") //+12
+        else if (ctx->unaryOperator->getText() == "+") //+12
         {
             auto cret = (visitCastExpression(ctx->castExpression()));
             type = cret;
         }
-        else if (ctx->unaryOperator()->getText() == "-") //-12
+        else if (ctx->unaryOperator->getText() == "-") //-12
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 0});
             auto cret = (visitCastExpression(ctx->castExpression()));
             type = cret;
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
         }
-        else if (ctx->unaryOperator()->getText() == "~")
+        else if (ctx->unaryOperator->getText() == "~")
         {
             auto cret = (visitCastExpression(ctx->castExpression()));
             type = cret;
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::NOT});
         }
-        else if (ctx->unaryOperator()->getText() == "!")
+        else if (ctx->unaryOperator->getText() == "!")
         {
             auto cret = (visitCastExpression(ctx->castExpression()));
             type = Type{Type::Kind::Basic, Type::BasicType::Int};
@@ -1900,8 +1861,7 @@ Type astVisitor::visitPostfixExpression(CParser::PostfixExpressionContext* ctx)
         if (end == 0)
         {
             auto str = ctx->children[0]->getText();
-            return visitPrimaryExpression(
-                dc<CParser::PrimaryExpressionContext*>(ctx->children[0]));
+            return visitPrimaryExpression(dc<CParser::PrimaryExpressionContext*>(ctx->children[0]));
         }
         auto todo = ctx->children[end - 1];
         if (todo->getText() == "(") // func call
@@ -2069,9 +2029,9 @@ Type astVisitor::visitPrimaryExpression(CParser::PrimaryExpressionContext* ctx)
         auto texts = ctx->Identifier()->getText();
         return load_var_or_func(ctx->Identifier()->getText());
     }
-    else if (ctx->Constant()) // 常量处理
+    else if (ctx->constant()) // 常量处理
     {
-        std::string text = ctx->Constant()->getText();
+        std::string text = ctx->constant()->getText();
 
         // 处理字符常量
         if (isCharacterConstant(text))
@@ -2084,7 +2044,7 @@ Type astVisitor::visitPrimaryExpression(CParser::PrimaryExpressionContext* ctx)
             }
             catch (...)
             {
-                THROW_ERR(error::invalid_constant, ctx->Constant());
+                THROW_ERR(error::invalid_constant, ctx->constant());
             }
         }
         // 处理整型常量
@@ -2098,12 +2058,12 @@ Type astVisitor::visitPrimaryExpression(CParser::PrimaryExpressionContext* ctx)
             }
             catch (...)
             {
-                THROW_ERR(error::invalid_constant, ctx->Constant());
+                THROW_ERR(error::invalid_constant, ctx->constant());
             }
         }
         else // [TODO] 浮点数
         {
-            THROW_ERR(error::unsurpported_num, ctx->Constant());
+            THROW_ERR(error::unsurpported_num, ctx->constant());
         }
     }
     else if (ctx->expression()) // (expr)
@@ -2176,40 +2136,36 @@ std::tuple<std::vector<Type::TypeQualifier>, std::optional<Type>> astVisitor::
                                 std::vector<Type::TypeQualifier> typeQualifier)
 {
     std::optional<Type> base;
-    if (ctx->typeQualifier())
+    for (auto tsq : ctx->typeSpecifierQualifier())
     {
-        auto str = ctx->typeQualifier()->getText();
-        if (str == "const")
+        if (auto tq = tsq->typeQualifier())
         {
-            typeQualifier.push_back(Type::TypeQualifier::Const);
+            auto str = tq->getText();
+            if (str == "const")
+            {
+                typeQualifier.push_back(Type::TypeQualifier::Const);
+            }
+            else if (str == "restrict")
+            {
+                typeQualifier.push_back(Type::TypeQualifier::Restrict);
+            }
+            else if (str == "volatile")
+            {
+                typeQualifier.push_back(Type::TypeQualifier::Volatile);
+            }
+            else if (str == "_Atomic")
+            {
+                typeQualifier.push_back(Type::TypeQualifier::_Atomic);
+            }
         }
-        else if (str == "restrict")
+        else if (auto ts = tsq->typeSpecifier())
         {
-            typeQualifier.push_back(Type::TypeQualifier::Restrict);
+            if (base)
+            {
+                THROW_ERR(error::double_type, ctx);
+            }
+            base = visitTypeSpecifier(ts);
         }
-        else if (str == "volatile")
-        {
-            typeQualifier.push_back(Type::TypeQualifier::Volatile);
-        }
-        else if (str == "_Atomic")
-        {
-            typeQualifier.push_back(Type::TypeQualifier::_Atomic);
-        }
-    }
-    else if (ctx->typeSpecifier())
-    {
-        base = visitTypeSpecifier(ctx->typeSpecifier());
-    }
-
-    if (ctx->specifierQualifierList())
-    {
-        auto [typeQualifiers, type] =
-            visitSpecifierQualifierList(ctx->specifierQualifierList(), typeQualifier);
-        if (type && base_type)
-        {
-            THROW_ERR(error::double_type, ctx);
-        }
-        base = type ? type : base;
     }
     return {typeQualifier, base};
 }
@@ -2484,13 +2440,13 @@ void astVisitor::visitJumpStatement(CParser::JumpStatementContext* ctx)
     }
 }
 
-std::vector<std::pair<std::string, IDdef>> astVisitor::visitStructDeclarationList(
-    CParser::StructDeclarationListContext* ctx)
+std::vector<std::pair<std::string, IDdef>> astVisitor::visitMemberDeclarationList(
+    CParser::MemberDeclarationListContext* ctx)
 {
     long nonameindex = 0;
     std::vector<std::pair<std::string, IDdef>> members;
     std::vector<IDdef> tps;
-    for (auto each : ctx->structDeclaration())
+    for (auto each : ctx->memberDeclaration())
     {
         // [TODO]  目前忽略 const volatile restrict _Atomic
         auto [typeQualifier, basetype] =
@@ -2499,7 +2455,7 @@ std::vector<std::pair<std::string, IDdef>> astVisitor::visitStructDeclarationLis
         {
             THROW_ERR(error::expected_type, ctx);
         }
-        if (!each->structDeclaratorList()) // 成员无名
+        if (!each->memberDeclaratorList()) // 成员无名
         {
             IDdef tpvar;
             tpvar.type = *basetype;
@@ -2510,7 +2466,7 @@ std::vector<std::pair<std::string, IDdef>> astVisitor::visitStructDeclarationLis
         else
         {
             std::vector<IDdef> eachstructDeclarationTypes;
-            for (auto eachstructDeclarator : each->structDeclaratorList()->structDeclarator())
+            for (auto eachstructDeclarator : each->memberDeclaratorList()->memberDeclarator())
             {
 
                 auto declarator = visitDeclarator(eachstructDeclarator->declarator());
@@ -2554,9 +2510,11 @@ Type astVisitor::visitAbstractDeclarator(CParser::AbstractDeclaratorContext* ctx
     }
     if (ctx->pointer())
     {
-        for (int i = 0; i < static_cast<int>(std::count(ctx->pointer()->getText().begin(),
-                                                        ctx->pointer()->getText().end(), '*'));
-             i++)
+        int ptr_count = 0;
+        auto p = ctx->pointer();
+        auto s = p->getText();
+        ptr_count = static_cast<int>(std::count(s.begin(), s.end(), '*'));
+        for (int i = 0; i < ptr_count; i++)
         {
             Type ptr;
             ptr.kind = Type::Kind::Pointer;
@@ -2641,9 +2599,9 @@ long long astVisitor::parseConstexpr(CParser::AssignmentExpressionContext* expr)
             // 常量表达式不允许普通标识符（尚未实现宏常量等）
             throw error::invalid_constant;
         }
-        if (ctx->Constant())
+        if (ctx->constant())
         {
-            const std::string t = ctx->Constant()->getText();
+            const std::string t = ctx->constant()->getText();
             if (isCharacterConstant(t))
                 return parseCharacterConstant(t);
             if (isIntegerConstant(t))
@@ -2696,9 +2654,9 @@ long long astVisitor::parseConstexpr(CParser::AssignmentExpressionContext* expr)
             return evalPostfix(ctx->postfixExpression());
 
         // 处理一元运算符：+ - ~ !
-        if (ctx->unaryOperator() && ctx->castExpression())
+        if (ctx->unaryOperator && ctx->castExpression())
         {
-            const std::string op = ctx->unaryOperator()->getText();
+            const std::string op = ctx->unaryOperator->getText();
             long long v = evalCast(ctx->castExpression());
             if (op == "+")
                 return +v;
@@ -2784,8 +2742,7 @@ long long astVisitor::parseConstexpr(CParser::AssignmentExpressionContext* expr)
         return evalBinaryByChildren(ctx, evalL, evalR, apply);
     };
 
-    evalShift = [&evalBinaryByChildren,
-                 &evalAdd](CParser::ShiftExpressionContext* ctx) -> long long
+    evalShift = [&evalBinaryByChildren, &evalAdd](CParser::ShiftExpressionContext* ctx) -> long long
     {
         auto evalL = [&evalAdd](antlr4::tree::ParseTree* n)
         { return evalAdd(dynamic_cast<CParser::AdditiveExpressionContext*>(n)); };
@@ -2841,8 +2798,7 @@ long long astVisitor::parseConstexpr(CParser::AssignmentExpressionContext* expr)
         return evalBinaryByChildren(ctx, evalL, evalR, apply);
     };
 
-    evalBitAnd = [&evalBinaryByChildren,
-                  &evalEq](CParser::AndExpressionContext* ctx) -> long long
+    evalBitAnd = [&evalBinaryByChildren, &evalEq](CParser::AndExpressionContext* ctx) -> long long
     {
         auto evalL = [&evalEq](antlr4::tree::ParseTree* n)
         { return evalEq(dynamic_cast<CParser::EqualityExpressionContext*>(n)); };
@@ -2999,9 +2955,9 @@ long long astVisitor::parseConstexpr(CParser::ConditionalExpressionContext* expr
             }
             throw error::invalid_constant;
         }
-        if (ctx->Constant())
+        if (ctx->constant())
         {
-            const std::string t = ctx->Constant()->getText();
+            const std::string t = ctx->constant()->getText();
             if (isCharacterConstant(t))
                 return parseCharacterConstant(t);
             if (isIntegerConstant(t))
@@ -3030,10 +2986,10 @@ long long astVisitor::parseConstexpr(CParser::ConditionalExpressionContext* expr
             throw error::invalid_constant;
         if (ctx->postfixExpression())
             return evalPostfix(ctx->postfixExpression());
-        if (ctx->unaryOperator())
+        if (ctx->unaryOperator)
         {
             long long val = evalCast(ctx->castExpression());
-            std::string op = ctx->unaryOperator()->getText();
+            std::string op = ctx->unaryOperator->getText();
             if (op == "+")
                 return val;
             if (op == "-")

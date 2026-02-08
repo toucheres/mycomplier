@@ -263,6 +263,9 @@ public:
   virtual void enterBlockItemList(CParser::BlockItemListContext * /*ctx*/) override { }
   virtual void exitBlockItemList(CParser::BlockItemListContext * /*ctx*/) override { }
 
+  virtual void enterAsmADDer(CParser::AsmADDerContext * /*ctx*/) override { }
+  virtual void exitAsmADDer(CParser::AsmADDerContext * /*ctx*/) override { }
+
   virtual void enterBlockItem(CParser::BlockItemContext * /*ctx*/) override { }
   virtual void exitBlockItem(CParser::BlockItemContext * /*ctx*/) override { }
 

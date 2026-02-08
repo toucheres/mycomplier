@@ -261,6 +261,9 @@ public:
   virtual void enterBlockItemList(CParser::BlockItemListContext *ctx) = 0;
   virtual void exitBlockItemList(CParser::BlockItemListContext *ctx) = 0;
 
+  virtual void enterAsmADDer(CParser::AsmADDerContext *ctx) = 0;
+  virtual void exitAsmADDer(CParser::AsmADDerContext *ctx) = 0;
+
   virtual void enterBlockItem(CParser::BlockItemContext *ctx) = 0;
   virtual void exitBlockItem(CParser::BlockItemContext *ctx) = 0;
 

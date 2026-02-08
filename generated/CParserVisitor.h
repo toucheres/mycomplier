@@ -184,6 +184,8 @@ public:
 
     virtual std::any visitBlockItemList(CParser::BlockItemListContext *context) = 0;
 
+    virtual std::any visitAsmADDer(CParser::AsmADDerContext *context) = 0;
+
     virtual std::any visitBlockItem(CParser::BlockItemContext *context) = 0;
 
     virtual std::any visitExpressionStatement(CParser::ExpressionStatementContext *context) = 0;

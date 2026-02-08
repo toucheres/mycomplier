@@ -72,18 +72,18 @@ public:
     RuleAttributeSpecifier = 71, RuleAttributeList = 72, RuleAttribute = 73, 
     RuleAttributeToken = 74, RuleAttributeArgumentClause = 75, RuleBalancedTokenSequence = 76, 
     RuleBalancedToken = 77, RuleStatement = 78, RuleLabeledStatement = 79, 
-    RuleCompoundStatement = 80, RuleBlockItemList = 81, RuleBlockItem = 82, 
-    RuleExpressionStatement = 83, RuleSelectionStatement = 84, RuleIterationStatement = 85, 
-    RuleForCondition = 86, RuleForDeclaration = 87, RuleForExpression = 88, 
-    RuleJumpStatement = 89, RuleTranslationUnit = 90, RuleExternalDeclaration = 91, 
-    RuleFunctionDefinition = 92, RuleDeclarationList = 93, RuleFunctionBody = 94, 
-    RuleIdentifierList = 95, RuleGnuArrayDesignator = 96, RuleGnuIdentifier = 97, 
-    RuleAsmArgument = 98, RuleAsmClobbers = 99, RuleAsmDefinition = 100, 
-    RuleToplevelAsmArgument = 101, RuleAsmOperand = 102, RuleAsmOperands = 103, 
-    RuleAsmQualifier = 104, RuleAsmQualifierList = 105, RuleAsmStatement = 106, 
-    RuleAsmStringLiteral = 107, RuleGccDeclaratorExtension = 108, RuleGnuAttribute = 109, 
-    RuleGnuAttributeList = 110, RuleGnuAttributes = 111, RuleGnuSingleAttribute = 112, 
-    RuleSimpleAsmExpr = 113, RuleVcSpecificModifer = 114
+    RuleCompoundStatement = 80, RuleBlockItemList = 81, RuleAsmADDer = 82, 
+    RuleBlockItem = 83, RuleExpressionStatement = 84, RuleSelectionStatement = 85, 
+    RuleIterationStatement = 86, RuleForCondition = 87, RuleForDeclaration = 88, 
+    RuleForExpression = 89, RuleJumpStatement = 90, RuleTranslationUnit = 91, 
+    RuleExternalDeclaration = 92, RuleFunctionDefinition = 93, RuleDeclarationList = 94, 
+    RuleFunctionBody = 95, RuleIdentifierList = 96, RuleGnuArrayDesignator = 97, 
+    RuleGnuIdentifier = 98, RuleAsmArgument = 99, RuleAsmClobbers = 100, 
+    RuleAsmDefinition = 101, RuleToplevelAsmArgument = 102, RuleAsmOperand = 103, 
+    RuleAsmOperands = 104, RuleAsmQualifier = 105, RuleAsmQualifierList = 106, 
+    RuleAsmStatement = 107, RuleAsmStringLiteral = 108, RuleGccDeclaratorExtension = 109, 
+    RuleGnuAttribute = 110, RuleGnuAttributeList = 111, RuleGnuAttributes = 112, 
+    RuleGnuSingleAttribute = 113, RuleSimpleAsmExpr = 114, RuleVcSpecificModifer = 115
   };
 
   explicit CParser(antlr4::TokenStream *input);
@@ -185,6 +185,7 @@ public:
   class LabeledStatementContext;
   class CompoundStatementContext;
   class BlockItemListContext;
+  class AsmADDerContext;
   class BlockItemContext;
   class ExpressionStatementContext;
   class SelectionStatementContext;
@@ -1858,10 +1859,30 @@ public:
 
   BlockItemListContext* blockItemList();
 
+  class  AsmADDerContext : public antlr4::ParserRuleContext {
+  public:
+    AsmADDerContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *Asm();
+    antlr4::tree::TerminalNode *LeftParen();
+    antlr4::tree::TerminalNode *StringLiteral();
+    antlr4::tree::TerminalNode *RightParen();
+    antlr4::tree::TerminalNode *Semi();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+
+    virtual std::any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  AsmADDerContext* asmADDer();
+
   class  BlockItemContext : public antlr4::ParserRuleContext {
   public:
     BlockItemContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
+    AsmADDerContext *asmADDer();
     StatementContext *statement();
     DeclarationContext *declaration();
 
@@ -2032,6 +2053,7 @@ public:
     ExternalDeclarationContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     FunctionDefinitionContext *functionDefinition();
+    AsmADDerContext *asmADDer();
     DeclarationContext *declaration();
     antlr4::tree::TerminalNode *Semi();
     AsmDefinitionContext *asmDefinition();
