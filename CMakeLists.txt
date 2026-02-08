@@ -37,6 +37,7 @@ find_package(antlr4-runtime CONFIG QUIET)
 include_directories(
   ${CMAKE_SOURCE_DIR}/include
   ${CMAKE_SOURCE_DIR}/generated
+  ${CMAKE_SOURCE_DIR}/grammar/Cpp
   ${ANTLR4_INCLUDE_DIR}
 )
 
@@ -53,8 +54,11 @@ endif()
 set(ANTLR_GENERATED_DIR ${CMAKE_SOURCE_DIR}/generated)
 file(MAKE_DIRECTORY ${ANTLR_GENERATED_DIR})
 
-# 定义语法文件
-set(GRAMMAR_FILE ${CMAKE_SOURCE_DIR}/grammar/Complier.g4)
+# 定义语法文件（分为 lexer 与 parser）
+set(GRAMMAR_FILES
+  ${CMAKE_SOURCE_DIR}/grammar/CLexer.g4
+  ${CMAKE_SOURCE_DIR}/grammar/CParser.g4
+)
 
 # 在生成源文件前先复制 ANTLR4 头文件到生成目录
 # 这是最关键的修改 - 使用 file(COPY) 代替符号链接
@@ -68,42 +72,44 @@ add_custom_command(
 # 生成 ANTLR4 解析器代码的自定义命令
 add_custom_command(
   OUTPUT
-    ${ANTLR_GENERATED_DIR}/ComplierLexer.cpp
-    ${ANTLR_GENERATED_DIR}/ComplierParser.cpp
-    ${ANTLR_GENERATED_DIR}/ComplierBaseVisitor.cpp
-    ${ANTLR_GENERATED_DIR}/ComplierVisitor.cpp
+    ${ANTLR_GENERATED_DIR}/CLexer.cpp
+    ${ANTLR_GENERATED_DIR}/CParser.cpp
+    ${ANTLR_GENERATED_DIR}/CParserBaseVisitor.cpp
+    ${ANTLR_GENERATED_DIR}/CParserVisitor.cpp
   COMMAND 
-    ${ANTLR_EXECUTABLE} -Dlanguage=Cpp -visitor -no-listener -o ${ANTLR_GENERATED_DIR} ${GRAMMAR_FILE}
+    ${ANTLR_EXECUTABLE} -Dlanguage=Cpp -visitor -listener -o ${ANTLR_GENERATED_DIR} ${GRAMMAR_FILES}
   DEPENDS 
-    ${GRAMMAR_FILE}
+    ${GRAMMAR_FILES}
     ${ANTLR_GENERATED_DIR}/antlr4-runtime.h
   COMMENT 
-    "Generating parser from ${GRAMMAR_FILE}"
+    "Generating parser from ${GRAMMAR_FILES}"
 )
 
-# 将生成的目录添加到包含路径
-# 这里不需要重复，因为已经在前面添加了
-
-# Add third-party libraries
-add_subdirectory(${CMAKE_SOURCE_DIR}/3rd/cpp-peglib)
 
 # 自动收集 src 下所有源文件
 file(GLOB_RECURSE SRC_FILES "${CMAKE_SOURCE_DIR}/src/*")
 
+# grammar Cpp 支撑源文件（CLexerBase/CParserBase/SymbolTable）
+set(CPP_GRAMMAR_SOURCES
+  ${CMAKE_SOURCE_DIR}/grammar/Cpp/CLexerBase.cpp
+  ${CMAKE_SOURCE_DIR}/grammar/Cpp/CParserBase.cpp
+  ${CMAKE_SOURCE_DIR}/grammar/Cpp/SymbolTable.cpp
+)
+
 # 添加生成的 ANTLR4 源文件
 set(PARSER_SOURCES
-  ${ANTLR_GENERATED_DIR}/ComplierLexer.cpp
-  ${ANTLR_GENERATED_DIR}/ComplierParser.cpp
-  ${ANTLR_GENERATED_DIR}/ComplierBaseVisitor.cpp
-  ${ANTLR_GENERATED_DIR}/ComplierVisitor.cpp
+  ${ANTLR_GENERATED_DIR}/CLexer.cpp
+  ${ANTLR_GENERATED_DIR}/CParser.cpp
+  ${ANTLR_GENERATED_DIR}/CParserBaseVisitor.cpp
+  ${ANTLR_GENERATED_DIR}/CParserVisitor.cpp
 )
 
 # 创建可执行文件，包括源文件和生成的解析器代码
-add_executable(mycomplier ${SRC_FILES} ${PARSER_SOURCES})
+add_executable(mycomplier ${SRC_FILES} ${CPP_GRAMMAR_SOURCES} ${PARSER_SOURCES})
 
 # 链接 ANTLR4 运行时
 if(antlr4-runtime_FOUND)
-  target_link_libraries(mycomplier PRIVATE peglib antlr4-runtime)
+  target_link_libraries(mycomplier PRIVATE antlr4-runtime)
 else()
   # 如果找不到 find_package，则手动查找并链接
   find_library(ANTLR4_RUNTIME_LIB
@@ -115,7 +121,7 @@ else()
     message(FATAL_ERROR "ANTLR4 runtime library not found")
   endif()
   
-  target_link_libraries(mycomplier PRIVATE peglib ${ANTLR4_RUNTIME_LIB})
+  target_link_libraries(mycomplier PRIVATE ${ANTLR4_RUNTIME_LIB})
 endif()
 find_package(Boost REQUIRED COMPONENTS program_options)
 target_link_libraries(mycomplier PRIVATE Boost::program_options)

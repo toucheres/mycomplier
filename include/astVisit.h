@@ -1,7 +1,7 @@
 #pragma once
-#include "ComplierBaseVisitor.h"
-#include "ComplierLexer.h"
-#include "ComplierParser.h"
+#include "CParserBaseVisitor.h"
+#include "CLexer.h"
+#include "CParser.h"
 #include "error.hpp"
 #include "obj.h"
 #include <antlr4-runtime/antlr4-runtime.h>
@@ -24,8 +24,8 @@ struct astVisitor
     // "__global_init" + name
     // 辅助函数
     // Type baseType; // just for args, wait to modifiy
-    long long parseConstexpr(ComplierParser::AssignmentExpressionContext* expr);
-    long long parseConstexpr(ComplierParser::ConditionalExpressionContext* expr);
+    long long parseConstexpr(CParser::AssignmentExpressionContext* expr);
+    long long parseConstexpr(CParser::ConditionalExpressionContext* expr);
     int parseIntegerConstant(const std::string& text);
     int parseCharacterConstant(const std::string& text);
     bool isIntegerConstant(const std::string& text);
@@ -37,11 +37,11 @@ struct astVisitor
     void saveStackTopAddrValueByType(Type type);
     void loadStackTopAddrBySize(size_t size);
     void SaveStackTopValueToAddr(size_t size);
-    std::vector<IDdef> lowerDeclaration(ComplierParser::DeclarationSpecifiersContext* specs,
-                                        ComplierParser::InitDeclaratorListContext* initList);
+    std::vector<IDdef> lowerDeclaration(CParser::DeclarationSpecifiersContext* specs,
+                                        CParser::InitDeclaratorListContext* initList);
     std::tuple<IDdef*, std::string> madeConstString(std::vector<antlr4::tree::TerminalNode*> toks);
     std::optional<std::vector<int>> decodeStringLiteral(
-        ComplierParser::AssignmentExpressionContext* expr);
+        CParser::AssignmentExpressionContext* expr);
     std::optional<Type> tryVisitType(std::function<Type()> expr);
     // varDef* madeConstString(std::string origin);
 
@@ -49,62 +49,62 @@ struct astVisitor
     // std::vector<Type> addDeclarations(std::vector<Type> vars);
     astVisitor(std::string name, OBJ& obj);
     OBJ& obj;
-    void visitAsmADDer(ComplierParser::AsmADDerContext* ctx);
+    void visitAsmADDer(CParser::AsmADDerContext* ctx);
     // void visitByTypeIndex(antlr4::ParserRuleContext* ctx);
-    void visitCompilationUnit(ComplierParser::CompilationUnitContext* ctx);
-    void visitTranslationUnit(ComplierParser::TranslationUnitContext* ctx);
-    std::vector<IDdef> visitDeclaration(ComplierParser::DeclarationContext* ctx);
-    void visitFunctionDefinition(ComplierParser::FunctionDefinitionContext* ctx);
-    void visitExternalDeclaration(ComplierParser::ExternalDeclarationContext* ctx);
+    void visitCompilationUnit(CParser::CompilationUnitContext* ctx);
+    void visitTranslationUnit(CParser::TranslationUnitContext* ctx);
+    std::vector<IDdef> visitDeclaration(CParser::DeclarationContext* ctx);
+    void visitFunctionDefinition(CParser::FunctionDefinitionContext* ctx);
+    void visitExternalDeclaration(CParser::ExternalDeclarationContext* ctx);
     std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>>
-    visitDeclarationSpecifiers(ComplierParser::DeclarationSpecifiersContext* ctx);
-    Type visitDeclarationSpecifier(ComplierParser::DeclarationSpecifierContext* ctx);
-    Type visitTypeSpecifier(ComplierParser::TypeSpecifierContext* ctx);
-    std::vector<IDdef> visitInitDeclaratorList(ComplierParser::InitDeclaratorListContext* ctx,
+    visitDeclarationSpecifiers(CParser::DeclarationSpecifiersContext* ctx);
+    Type visitDeclarationSpecifier(CParser::DeclarationSpecifierContext* ctx);
+    Type visitTypeSpecifier(CParser::TypeSpecifierContext* ctx);
+    std::vector<IDdef> visitInitDeclaratorList(CParser::InitDeclaratorListContext* ctx,
                                                Type basetype,
                                                StorageClassSpecifier storageClassSpecifier);
-    // Type visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx);
-    IDdef visitInitDeclarator(ComplierParser::InitDeclaratorContext* ctx, Type basetype,
+    // Type visitInitDeclarator(CParser::InitDeclaratorContext* ctx);
+    IDdef visitInitDeclarator(CParser::InitDeclaratorContext* ctx, Type basetype,
                               StorageClassSpecifier storageClassSpecifier);
-    IDdef visitDeclarator(ComplierParser::DeclaratorContext* ctx);
-    IDdef visitDirectDeclarator(ComplierParser::DirectDeclaratorContext* ctx);
-    std::vector<IDdef> visitParameterList(ComplierParser::ParameterListContext* ctx);
-    IDdef visitParameterDeclaration(ComplierParser::ParameterDeclarationContext* ctx);
-    void visitBlockItemList(ComplierParser::BlockItemListContext* ctx);
-    void visitStatement(ComplierParser::StatementContext* ctx);
-    void visitExpressionStatement(ComplierParser::ExpressionStatementContext* ctx);
-    Type visitExpression(ComplierParser::ExpressionContext* ctx);
-    Type visitAssignmentExpression(ComplierParser::AssignmentExpressionContext* ctx);
-    Type visitConditionalExpression(ComplierParser::ConditionalExpressionContext* ctx);
-    Type visitLogicalOrExpression(ComplierParser::LogicalOrExpressionContext* ctx);
-    Type visitLogicalAndExpression(ComplierParser::LogicalAndExpressionContext* ctx);
-    Type visitInclusiveOrExpression(ComplierParser::InclusiveOrExpressionContext* ctx);
-    Type visitExclusiveOrExpression(ComplierParser::ExclusiveOrExpressionContext* ctx);
-    Type visitAndExpression(ComplierParser::AndExpressionContext* ctx);
-    Type visitEqualityExpression(ComplierParser::EqualityExpressionContext* ctx);
-    Type visitRelationalExpression(ComplierParser::RelationalExpressionContext* ctx);
-    Type visitShiftExpression(ComplierParser::ShiftExpressionContext* ctx);
-    Type visitAdditiveExpression(ComplierParser::AdditiveExpressionContext* ctx);
-    Type visitMultiplicativeExpression(ComplierParser::MultiplicativeExpressionContext* ctx);
-    Type visitCastExpression(ComplierParser::CastExpressionContext* ctx);
-    Type visitUnaryExpression(ComplierParser::UnaryExpressionContext* ctx);
-    Type visitPostfixExpression(ComplierParser::PostfixExpressionContext* ctx);
-    Type visitPrimaryExpression(ComplierParser::PrimaryExpressionContext* ctx);
+    IDdef visitDeclarator(CParser::DeclaratorContext* ctx);
+    IDdef visitDirectDeclarator(CParser::DirectDeclaratorContext* ctx);
+    std::vector<IDdef> visitParameterList(CParser::ParameterListContext* ctx);
+    IDdef visitParameterDeclaration(CParser::ParameterDeclarationContext* ctx);
+    void visitBlockItemList(CParser::BlockItemListContext* ctx);
+    void visitStatement(CParser::StatementContext* ctx);
+    void visitExpressionStatement(CParser::ExpressionStatementContext* ctx);
+    Type visitExpression(CParser::ExpressionContext* ctx);
+    Type visitAssignmentExpression(CParser::AssignmentExpressionContext* ctx);
+    Type visitConditionalExpression(CParser::ConditionalExpressionContext* ctx);
+    Type visitLogicalOrExpression(CParser::LogicalOrExpressionContext* ctx);
+    Type visitLogicalAndExpression(CParser::LogicalAndExpressionContext* ctx);
+    Type visitInclusiveOrExpression(CParser::InclusiveOrExpressionContext* ctx);
+    Type visitExclusiveOrExpression(CParser::ExclusiveOrExpressionContext* ctx);
+    Type visitAndExpression(CParser::AndExpressionContext* ctx);
+    Type visitEqualityExpression(CParser::EqualityExpressionContext* ctx);
+    Type visitRelationalExpression(CParser::RelationalExpressionContext* ctx);
+    Type visitShiftExpression(CParser::ShiftExpressionContext* ctx);
+    Type visitAdditiveExpression(CParser::AdditiveExpressionContext* ctx);
+    Type visitMultiplicativeExpression(CParser::MultiplicativeExpressionContext* ctx);
+    Type visitCastExpression(CParser::CastExpressionContext* ctx);
+    Type visitUnaryExpression(CParser::UnaryExpressionContext* ctx);
+    Type visitPostfixExpression(CParser::PostfixExpressionContext* ctx);
+    Type visitPrimaryExpression(CParser::PrimaryExpressionContext* ctx);
     std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>>
-    visitDeclarationSpecifiers2(ComplierParser::DeclarationSpecifiers2Context* ctx);
-    Type visitAbstractDeclarator(ComplierParser::AbstractDeclaratorContext* ctx);
-    Type visitDirectAbstractDeclarator(ComplierParser::DirectAbstractDeclaratorContext* ctx);
-    Type visitTypeName(ComplierParser::TypeNameContext* ctx);
-    void visitBlockItem(ComplierParser::BlockItemContext* ctx);
-    std::vector<IDdef> visitParameterTypeList(ComplierParser::ParameterTypeListContext* ctx);
-    void visitCompoundStatement(ComplierParser::CompoundStatementContext* ctx);
+    visitDeclarationSpecifiers2(CParser::DeclarationSpecifiers2Context* ctx);
+    Type visitAbstractDeclarator(CParser::AbstractDeclaratorContext* ctx);
+    Type visitDirectAbstractDeclarator(CParser::DirectAbstractDeclaratorContext* ctx);
+    Type visitTypeName(CParser::TypeNameContext* ctx);
+    void visitBlockItem(CParser::BlockItemContext* ctx);
+    std::vector<IDdef> visitParameterTypeList(CParser::ParameterTypeListContext* ctx);
+    void visitCompoundStatement(CParser::CompoundStatementContext* ctx);
     std::tuple<std::vector<Type::TypeQualifier>, std::optional<Type>> visitSpecifierQualifierList(
-        ComplierParser::SpecifierQualifierListContext* ctx,
+        CParser::SpecifierQualifierListContext* ctx,
         std::vector<Type::TypeQualifier> typeQualifiers = std::vector<Type::TypeQualifier>{});
-    void visitSelectionStatement(ComplierParser::SelectionStatementContext* ctx);
-    size_t visitArgumentExpressionList(ComplierParser::ArgumentExpressionListContext* ctx);
-    void visitIterationStatement(ComplierParser::IterationStatementContext* ctx);
-    void visitJumpStatement(ComplierParser::JumpStatementContext* ctx);
+    void visitSelectionStatement(CParser::SelectionStatementContext* ctx);
+    size_t visitArgumentExpressionList(CParser::ArgumentExpressionListContext* ctx);
+    void visitIterationStatement(CParser::IterationStatementContext* ctx);
+    void visitJumpStatement(CParser::JumpStatementContext* ctx);
     std::vector<std::pair<std::string, IDdef>> visitStructDeclarationList(
-        ComplierParser::StructDeclarationListContext* ctx);
+        CParser::StructDeclarationListContext* ctx);
 };

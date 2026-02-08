@@ -1,8 +1,8 @@
 #include "complier.hpp"
 #include "ASM.hpp"
-#include "ComplierBaseVisitor.h"
-#include "ComplierLexer.h"
-#include "ComplierParser.h"
+#include "CParserBaseVisitor.h"
+#include "CLexer.h"
+#include "CParser.h"
 #include "obj.h"
 #include "preprocessor.hpp"
 #include "tools.hpp"
@@ -455,12 +455,12 @@ std::expected<std::vector<std::string>, error> complier::process(
                               std::istreambuf_iterator<char>());
             antlr4::ANTLRInputStream inputStream(input);
             // 创建词法分析器
-            ComplierLexer lexer(&inputStream);
+            CLexer lexer(&inputStream);
             antlr4::CommonTokenStream tokens(&lexer);
             // 创建自定义语法分析器
-            ComplierParser parser(&tokens);
+            CParser parser(&tokens);
             // 使用正确的入口规则
-            ComplierParser::CompilationUnitContext* tree = parser.compilationUnit();
+            CParser::CompilationUnitContext* tree = parser.compilationUnit();
             // fordebug
             if (showASt)
             {
@@ -489,12 +489,12 @@ std::expected<std::vector<std::string>, error> complier::process(
         std::string input((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         antlr4::ANTLRInputStream inputStream(input);
         // 创建词法分析器
-        ComplierLexer lexer(&inputStream);
+        CLexer lexer(&inputStream);
         antlr4::CommonTokenStream tokens(&lexer);
         // 创建自定义语法分析器
-        ComplierParser parser(&tokens);
+        CParser parser(&tokens);
         // 使用正确的入口规则
-        ComplierParser::CompilationUnitContext* tree = parser.compilationUnit();
+        CParser::CompilationUnitContext* tree = parser.compilationUnit();
         // fordebug
         if (showASt)
         {
@@ -541,8 +541,8 @@ void complier::printAST(antlr4::tree::ParseTree* tree, int tolerate, bool showFo
             size_t idx = ctx->getRuleIndex();
             try
             {
-                ComplierParser::initialize();
-                ComplierParser parser(nullptr);
+                CParser::initialize();
+                CParser parser(nullptr);
                 const auto& names = parser.getRuleNames();
                 if (idx < names.size())
                     name = names[idx];
@@ -589,8 +589,8 @@ void complier::printAST(antlr4::tree::ParseTree* tree, int tolerate, bool showFo
             size_t idx = ctx->getRuleIndex();
             try
             {
-                ComplierParser::initialize();
-                ComplierParser parser(nullptr);
+                CParser::initialize();
+                CParser parser(nullptr);
                 const auto& names = parser.getRuleNames();
                 if (idx < names.size())
                 {
@@ -701,8 +701,8 @@ void complier::printAST(antlr4::tree::ParseTree* tree, int tolerate, bool showFo
                             if (auto ctx = dynamic_cast<antlr4::ParserRuleContext*>(chain_nodes[j]))
                             {
                                 size_t idx = ctx->getRuleIndex();
-                                ComplierParser::initialize();
-                                ComplierParser parser(nullptr);
+                                CParser::initialize();
+                                CParser parser(nullptr);
                                 const auto& names = parser.getRuleNames();
                                 if (idx < names.size())
                                     foldedPath += names[idx];

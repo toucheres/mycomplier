@@ -19,5 +19,5 @@
 [OK][TODO] printf()的%s崩溃
 [OK][TODO] sprintf 有问题
 [OK][TODO] 指针相减
-[OKI][TODO] 枚举指定值
-[TODO] 三元表达式
+[OK][TODO] 枚举指定值
+[OK][TODO] 三元表达式

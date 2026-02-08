@@ -1,6 +1,6 @@
 #pragma once
-#include "ComplierBaseVisitor.h"
-#include "ComplierVisitor.h"
+#include "CParserBaseVisitor.h"
+#include "CParserVisitor.h"
 #include <copyed_ptr.hpp>
 #include <expected>
 #include <map>
@@ -184,7 +184,7 @@ struct OBJ
 {
     std::string name;
     // AST 根节点
-    ComplierParser::CompilationUnitContext* program;
+    CParser::CompilationUnitContext* program;
     // 符号表
     SymbolTable symbol_table;
     DeclRepository decls;

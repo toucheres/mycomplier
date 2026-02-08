@@ -69,8 +69,13 @@ char* fgets(char* buf, int n, FILE* fp);
 size_t fread(void* ptr, size_t size_of_elements, size_t number_of_elements, FILE* a_file);
 
 size_t fwrite(void* ptr, size_t size_of_elements, size_t number_of_elements, FILE* a_file);
+typedef struct mystruct
+{
+    int aaa;
+} mystruct_t;
 int main()
 {
-    printf("xxx");
-    return 0;
+    mystruct_t test;
+    test.aaa = 12;
+    return printf("test.aaa = %d\n", test.aaa);
 }

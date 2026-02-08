@@ -1,6 +1,11 @@
-#include <stdio.h> // sdsdwdw
+#include <stdio.h>
+typedef struct mystruct
+{
+    int aaa;
+} mystruct_t;
 int main()
 {
-    printf("xxx");
-    return 0;
+    mystruct_t test;
+    test.aaa = 12;
+    return printf("test.aaa = %d\n", test.aaa);
 }
