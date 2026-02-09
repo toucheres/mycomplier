@@ -1,8 +1,7 @@
-#include <stdio.h>
 int main()
 {
-    char* arr = "test1"
-                "test2\n";
-    printf(arr);
+    int* a;
+    int b;
+    a = &b;
     return 0;
 }

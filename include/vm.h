@@ -62,8 +62,6 @@ struct VM
     };
     VM(const std::vector<std::string>& asms);
     bool enable_debug = true;
-    bool print_asm = false;
-    bool print_ret_value = false;
     std::deque<std::string> debug_buffer{10000000};
     VCPU vcpu;
     std::optional<int64_t> run();

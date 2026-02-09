@@ -1,4 +1,5 @@
 #include "complier.hpp"
+#include "settings.h"
 #include "ASM.hpp"
 #include "CParserBaseVisitor.h"
 #include "CLexer.h"
@@ -437,6 +438,18 @@ std::expected<std::vector<std::string>, error> complier::process(
     std::vector<std::string> paths, bool showASt, int tolerate, bool showFoldedNames,
     bool disableStd, std::vector<std::string> mainargs, bool preprocess_only)
 {
+    // override incoming params by reading singleton settings to centralize runtime config
+    using namespace app_options;
+    auto& tvm = settings::tvm();
+    showASt = tvm.get(app_options::show_ast).or_(false);
+    tolerate = tvm.get(app_options::tolerate).or_(4);
+    showFoldedNames = tvm.get(app_options::show_folded_names).or_(false);
+    disableStd = tvm.get(app_options::disable_std).or_(false);
+    preprocess_only = tvm.get(app_options::preprocess_only).or_(false);
+    try {
+        mainargs = tvm.get_direct(main_args);
+    } catch (...) { mainargs = {}; }
+
     std::vector<OBJ> objs;
     if (!disableStd)
     {
@@ -465,7 +478,7 @@ std::expected<std::vector<std::string>, error> complier::process(
             if (showASt)
             {
                 std::cout << each << ": \n";
-                printAST(tree, tolerate, showFoldedNames);
+                printAST(tree);
                 std::cout << "\n";
             }
             // 创建和使用自定义访问器
@@ -499,7 +512,7 @@ std::expected<std::vector<std::string>, error> complier::process(
         if (showASt)
         {
             std::cout << each << ": \n";
-            printAST(tree, tolerate, showFoldedNames);
+            printAST(tree);
             std::cout << "\n";
         }
         // 创建和使用自定义访问器
@@ -516,8 +529,14 @@ std::expected<std::vector<std::string>, error> complier::process(
     return linker.process();
 }
 
-void complier::printAST(antlr4::tree::ParseTree* tree, int tolerate, bool showFoldedNames)
+void complier::printAST(antlr4::tree::ParseTree* tree)
 {
+    // read config from settings singleton
+    using namespace app_options;
+    auto& tvm = settings::tvm();
+    int tolerate = tvm.get(app_options::tolerate).or_(4);
+    bool showFoldedNames = tvm.get(app_options::show_folded_names).or_(false);
+
     // 使用递归打印 ASCII 树，在支持的终端上为终端文本加高亮
     bool use_color = false;
 #if defined(__unix__) || defined(__APPLE__)
@@ -762,4 +781,23 @@ void complier::printAST(antlr4::tree::ParseTree* tree, int tolerate, bool showFo
     };
 
     inner(inner, tree, "", true, 1, 0, false);
+}
+
+// 新的重载：从 settings 单例读取运行时选项并调用完整实现
+std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths)
+{
+    using namespace app_options;
+    auto& tvm = settings::tvm();
+    bool showASt = tvm.get(app_options::show_ast).or_(false);
+    int tolerate = tvm.get(app_options::tolerate).or_(4);
+    bool showFoldedNames = tvm.get(app_options::show_folded_names).or_(false);
+    bool disableStd = tvm.get(app_options::disable_std).or_(false);
+    bool preprocess_only = tvm.get(app_options::preprocess_only).or_(false);
+    std::vector<std::string> mainargs;
+    try {
+        mainargs = tvm.get_direct(main_args);
+    } catch (...) {
+        mainargs = {};
+    }
+    return process(std::move(paths), showASt, tolerate, showFoldedNames, disableStd, mainargs, preprocess_only);
 }

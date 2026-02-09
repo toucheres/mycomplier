@@ -1,4 +1,5 @@
 #include "vm.h"
+#include "settings.h"
 
 #ifdef __linux__
 #include <csignal>
@@ -62,6 +63,13 @@ namespace
 #endif
 VM::VM(const std::vector<std::string>& asms)
 {
+    // initialize runtime debug/print flags from global settings if available
+    try {
+        auto& tvm = settings::tvm();
+        enable_debug = tvm.get(app_options::enable_debug).or_(false);
+    } catch (...) {
+        // if settings not initialized, keep defaults
+    }
     vcpu.asms = asms;
     vcpu.systemcall_table[VM::systemcall::WRITE] = [](VCPU& thiscpu)
     {
@@ -175,7 +183,6 @@ catch (...)
 void VM::debug()
 {
     std::ostringstream out;
-    if (print_asm)
         out << "next ins: " << vcpu.asms[vcpu.ip] << '\n';
     out << "ip: " << vcpu.ip << '\n';
     out << "bp: " << vcpu.bp << '\n';

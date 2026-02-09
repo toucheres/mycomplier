@@ -1,137 +1,131 @@
 #pragma once
+#include "typed_options.hpp"
 #include <boost/program_options.hpp>
 #include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
-#include "typed_options.hpp"
 
 // 业务相关的选项定义（完整信息：名称、描述、默认值、隐式值）
-namespace app_options {
+namespace app_options
+{
     using namespace typed_options;
-    
-    inline constexpr Option<bool> help{
-        "help",
-        "produce help message"
-    };
 
-    inline constexpr Option<double> compression{
-        "compression",
-        "set compression level"
-    };
+    inline constexpr Option<bool> help{"help", "produce help message"};
+
+    inline constexpr Option<double> compression{"compression", "set compression level"};
 
     inline constexpr Option<bool> show_ast{
-        "showASt,show-ast",
-        "show AST",
-        false,  // default_value
-        true    // implicit_value
+        "showASt,show-ast", "show AST",
+        false, // default_value
+        true   // implicit_value
     };
 
     inline constexpr Option<int> tolerate{
-        "tolerate",
-        "tolerance for AST printing",
-        4       // default_value
+        "tolerate", "tolerance for AST printing",
+        4 // default_value
     };
 
-    inline constexpr Option<bool> show_folded_names{
-        "showFoldedNames,show-folded-names",
-        "show folded names in AST",
-        false,
-        true
-    };
+    inline constexpr Option<bool> show_folded_names{"showFoldedNames,show-folded-names",
+                                                    "show folded names in AST", false, true};
 
-    inline constexpr Option<bool> enable_debug{
-        "enable_debug,enable-debug",
-        "enable VM debug",
-        false,
-        true
-    };
-    
-    inline constexpr Option<bool> disable_std{
-        "disable_std,disable-std",
-        "disable stdlib",
-        false,
-        true
-    };
+    inline constexpr Option<bool> enable_debug{"enable_debug,enable-debug", "enable VM debug",
+                                               false, true};
+
+    inline constexpr Option<bool> disable_std{"disable_std,disable-std", "disable stdlib", false,
+                                              true};
 
     inline constexpr Option<bool> preprocess_only{
-        "preprocess_only,preprocess-only",
-        "Preprocess only; do not compile, assemble or link",
-        false,
-        true
-    };
+        "preprocess_only,preprocess-only", "Preprocess only; do not compile, assemble or link",
+        false, true};
 
-    inline constexpr Option<bool> print_asm{
-        "printasm,print-asm",
-        "print asm during debug/run",
-        false,
-        true
-    };
+    inline constexpr Option<bool> print_asm{"printasm,print-asm", "print asm during debug/run",
+                                            false, true};
 
-    inline constexpr Option<bool> print_ret_value{
-        "printretvalue,print-ret-value",
-        "print return value after run",
-        false,
-        true
-    };
+    inline constexpr Option<bool> print_ret_value{"printretvalue,print-ret-value",
+                                                  "print return value after run", false, true};
 
-    inline constexpr Option<std::vector<std::string>> input_files{
-        "input-files",
-        "input files"
-    };
+    inline constexpr Option<std::vector<std::string>> input_files{"input-files", "input files"};
 
     inline constexpr Option<std::vector<std::string>> main_args{
-        "main-args",
-        "arguments to pass to the compiled program's main function"
-    };
-}
+        "main-args", "arguments to pass to the compiled program's main function"};
+} // namespace app_options
 
-std::optional<
-    std::pair<boost::program_options::variables_map, boost::program_options::options_description>>
-getsetting(int argc, const char* argv[])
+// 全局单例访问：将解析后的 options 存为全局 TypedVariablesMap
+namespace settings
 {
-    namespace po = boost::program_options;
-    try
+    inline std::unique_ptr<boost::program_options::variables_map> g_vm;
+    inline std::unique_ptr<typed_options::TypedVariablesMap> g_tvm;
+    inline std::optional<std::pair<boost::program_options::variables_map,
+                                   boost::program_options::options_description>>
+    getsetting(int argc, const char* argv[])
     {
-        po::variables_map cli;
+        namespace po = boost::program_options;
+        try
+        {
+            po::variables_map cli;
 
-        po::options_description visible("Allowed options");
-        
-        // 使用 app_options 中的定义来构建选项（自动应用所有配置）
-        using namespace app_options;
-        typed_options::add_option(visible, help);
-        typed_options::add_option(visible, compression);
-        typed_options::add_option(visible, show_ast);
-        typed_options::add_option(visible, tolerate);
-        typed_options::add_option(visible, show_folded_names);
-        typed_options::add_option(visible, enable_debug);
-        typed_options::add_option(visible, print_asm);
-        typed_options::add_option(visible, print_ret_value);
-        typed_options::add_option(visible, disable_std);
-        typed_options::add_option(visible, preprocess_only);
-        typed_options::add_option(visible, main_args);
+            po::options_description visible("Allowed options");
 
-        po::options_description hidden("Hidden options");
-        typed_options::add_option(hidden, input_files);
+            // 使用 app_options 中的定义来构建选项（自动应用所有配置）
+            using namespace app_options;
+            typed_options::add_option(visible, help);
+            typed_options::add_option(visible, compression);
+            typed_options::add_option(visible, show_ast);
+            typed_options::add_option(visible, tolerate);
+            typed_options::add_option(visible, show_folded_names);
+            typed_options::add_option(visible, enable_debug);
+            typed_options::add_option(visible, print_asm);
+            typed_options::add_option(visible, print_ret_value);
+            typed_options::add_option(visible, disable_std);
+            typed_options::add_option(visible, preprocess_only);
+            typed_options::add_option(visible, main_args);
 
-        po::options_description all;
-        all.add(visible).add(hidden);
+            po::options_description hidden("Hidden options");
+            typed_options::add_option(hidden, input_files);
 
-        po::positional_options_description pos;
-        pos.add("input-files", -1); // -1 表示接受无限个
+            po::options_description all;
+            all.add(visible).add(hidden);
 
-        po::store(po::command_line_parser(argc, argv).options(all).positional(pos).run(), cli);
-        po::notify(cli);
-        return std::pair{cli, visible};
+            po::positional_options_description pos;
+            pos.add("input-files", -1); // -1 表示接受无限个
+
+            po::store(po::command_line_parser(argc, argv).options(all).positional(pos).run(), cli);
+            po::notify(cli);
+            return std::pair{cli, visible};
+        }
+        catch (std::exception& e)
+        {
+            std::cerr << "error: " << e.what() << "\n";
+            return std::nullopt;
+        }
+        catch (...)
+        {
+            std::cerr << "Exception of unknown type!\n";
+            return std::nullopt;
+        }
     }
-    catch (std::exception& e)
+
+    // 初始化并解析命令行，返回解析结果（variables_map + visible options_description）
+    // 同时设置全局单例（若解析成功）
+    inline std::optional<std::pair<boost::program_options::variables_map,
+                                   boost::program_options::options_description>>
+    init_settings(int argc, const char* argv[])
     {
-        std::cerr << "error: " << e.what() << "\n";
-        return std::nullopt;
+        auto op = getsetting(argc, argv);
+        if (!op)
+            return std::nullopt;
+        auto [vm, desc] = *op;
+        g_vm = std::make_unique<boost::program_options::variables_map>(std::move(vm));
+        g_tvm = std::make_unique<typed_options::TypedVariablesMap>(*g_vm);
+        return std::pair{*g_vm, desc};
     }
-    catch (...)
+
+    // 获取单例（必须先调用 init_settings）
+    inline typed_options::TypedVariablesMap& tvm()
     {
-        std::cerr << "Exception of unknown type!\n";
-        return std::nullopt;
+        if (!g_tvm)
+            throw std::runtime_error("settings::tvm() called before init_settings");
+        return *g_tvm;
     }
-}
+} // namespace settings

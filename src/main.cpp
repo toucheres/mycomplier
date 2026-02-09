@@ -10,7 +10,7 @@ namespace po = boost::program_options;
 using namespace typed_options;
 int main(int argc, const char* argv[])
 {
-    auto opcli = getsetting(argc, argv);
+    auto opcli = settings::init_settings(argc, argv);
     if (!opcli)
     {
         return -1;
@@ -25,32 +25,21 @@ int main(int argc, const char* argv[])
         // 创建类型安全的包装器
         TypedVariablesMap tvm(cli);
         using namespace app_options;
-
-        // 使用链式调用 get().or_try().or_()，编译期类型检查
-        bool showASt = tvm.get(show_ast).or_(false);
-        int tolerate = tvm.get(app_options::tolerate).or_(4);
-        bool showFoldedNames = tvm.get(show_folded_names).or_(false);
-        bool enable_debug = tvm.get(app_options::enable_debug).or_(false);
-        bool printasm = tvm.get(print_asm).or_(false);
-        bool printretvalue = tvm.get(print_ret_value).or_(false);
-        bool disablestd = tvm.get(disable_std).or_(false);
-        bool preprocessonly = tvm.get(preprocess_only).or_(false);
         std::vector<std::string> mainargs = tvm.get(main_args).or_(std::vector<std::string>{});
-        if (enable_debug)
+        if (tvm.get(app_options::enable_debug))
         {
             // 禁用 stdout 缓冲，确保崩溃时输出不丢失
             std::cout << std::unitbuf;
             std::setvbuf(stdout, nullptr, _IONBF, 0);
         }
-        auto ret = complier::process(tvm.get_direct(input_files), showASt, tolerate,
-                                     showFoldedNames, disablestd, mainargs,preprocessonly);
+        auto ret = complier::process(tvm.get_direct(input_files));
         if (!ret)
         {
             std::cout << "error\n";
         }
         else
         {
-            if (printasm)
+            if (tvm.get(print_asm))
             {
                 for (int i = 0; i < ret.value().size(); i++)
                 {
@@ -59,13 +48,11 @@ int main(int argc, const char* argv[])
             }
         }
         VM vm{ret.value()};
-        vm.enable_debug = enable_debug;
-        vm.print_asm = printasm;
-        vm.print_ret_value = printretvalue;
+        vm.enable_debug = tvm.get(app_options::enable_debug);
         auto retval = vm.run();
         if (retval)
         {
-            if (vm.print_ret_value)
+            if (tvm.get(print_ret_value))
                 std::cout << "ret: " << retval.value() << " = " << "0x" << std::hex
                           << retval.value() << '\n';
             return retval.value();

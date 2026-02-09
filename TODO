@@ -22,3 +22,4 @@
 [OK][TODO] 枚举指定值
 [OK][TODO] 三元表达式
 [OK][TODO]sizeof(xxx)不起作用
+[TODO] 常量去特殊化, Type携带constexpr(及其val)属性

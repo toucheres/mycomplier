@@ -80,11 +80,12 @@ struct linker
 struct complier
 {
     static std::expected<std::vector<std::string>, error> process(
-        std::vector<std::string> paths, bool showASt = false, int tolerate = INT_MAX,
-        bool showFoldedNames = false, bool disableStd = false,
-        std::vector<std::string> mainargs = std::vector<std::string>{},bool preprocess_only = false);
-
+        std::vector<std::string> paths);
   private:
-    static void printAST(antlr4::tree::ParseTree* tree, int tolerate = INT_MAX,
-                         bool showFoldedNames = false);
+    static void printAST(antlr4::tree::ParseTree* tree);
+    static std::expected<std::vector<std::string>, error> process(
+        std::vector<std::string> paths, bool showASt, int tolerate,
+        bool showFoldedNames, bool disableStd,
+        std::vector<std::string> mainargs,
+        bool preprocess_only);
 };

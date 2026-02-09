@@ -59,18 +59,18 @@ struct Type
     enum class Kind
     {
         Undefined, // 初始
-        // ID,           // id (计划移除)
         Basic,    // 基本类型
         Pointer,  // 指针类型
         Array,    // 数组类型
         Function, // 函数类型
-        // StorageClass, // 存储类 (计划移除)
         Struct // 结构体
+        // [TODO] Union
     };
     // 兼容旧代码的别名，后续移除
     using StorageClassSpecifier = ::StorageClassSpecifier;
     enum class TypeQualifier
     {
+        None,
         Const,
         Restrict,
         Volatile,
@@ -91,9 +91,9 @@ struct Type
     BasicType basic_type; // avilable when kind == Basic
     value_ptr<Type> subType;
     std::vector<IDdef> args;
+
     int arr_num = -1; // 仅用于 Array 类型，表示数组长度；Pointer 通过 subType 层数表示
     size_t alignas_num = 8;
-    // TODO: remove after callers stop encoding storage on Type
     StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::VarDef;
     // size_t getAlignas() const;
     Type& getTop();
