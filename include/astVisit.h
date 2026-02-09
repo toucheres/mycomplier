@@ -93,6 +93,7 @@ struct astVisitor
     Type visitAbstractDeclarator(CParser::AbstractDeclaratorContext* ctx);
     Type visitDirectAbstractDeclarator(CParser::DirectAbstractDeclaratorContext* ctx);
     Type visitTypeName(CParser::TypeNameContext* ctx);
+    Type visitTypeofSpecifier(CParser::TypeofSpecifierContext* ctx);
     void visitBlockItem(CParser::BlockItemContext* ctx);
     std::vector<IDdef> visitParameterTypeList(CParser::ParameterTypeListContext* ctx);
     void visitCompoundStatement(CParser::CompoundStatementContext* ctx);

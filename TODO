@@ -21,3 +21,4 @@
 [OK][TODO] 指针相减
 [OK][TODO] 枚举指定值
 [OK][TODO] 三元表达式
+[OK][TODO]sizeof(xxx)不起作用

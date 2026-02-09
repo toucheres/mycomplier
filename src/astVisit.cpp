@@ -683,6 +683,10 @@ Type astVisitor::visitDeclarationSpecifier(CParser::DeclarationSpecifierContext*
 Type astVisitor::visitTypeSpecifier(CParser::TypeSpecifierContext* ctx)
 {
     Type rettype;
+    if (ctx->typeofSpecifier()) // typeof(xxx)
+    {
+        return visitTypeofSpecifier(ctx->typeofSpecifier());
+    }
     if (ctx->typedefName()) // 是类型别名
     {
         if (auto* tp =
@@ -1695,16 +1699,8 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
 {
     Type type;
     auto sizenow = funcnow->funcInfo.asms.size();
-
-    // 新语法结构:
-    // unaryExpression: ('++' | '--')* (
-    //     { isSizeofWithTypeName() }? ('sizeof' | '_Alignof') '(' typeName ')'   // 分支1
-    //   | 'sizeof' unaryExpression                                               // 分支2
-    //   | '_Alignof' '(' typeName ')'                                            // 分支3
-    //   | postfixExpression                                                      // 分支4
-    //   | unaryOperator castExpression                                           // 分支5
-    //   | '&&' Identifier                                                        // 分支6
-    // )
+    bool typeNameusesizeof = false;
+    bool typeNameuseAlignof = false;
 
     if (ctx->postfixExpression())
     {
@@ -1777,53 +1773,47 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::CMP});
         }
     }
-    else if (ctx->typeName())
+    else if (ctx->typeName() || ctx->unaryExpression())
     {
-        // 分支1或分支3: sizeof(typeName) 或 _Alignof(typeName)
-        auto cret = visitTypeName(ctx->typeName());
-
-        // 检查是 sizeof 还是 _Alignof
-        bool is_sizeof = false;
-        bool is_alignof = false;
-        for (auto child : ctx->children)
+        // ('sizeof' | Alignof)('(' typeName ')' | unaryExpression)
+        for (auto it = ctx->children.rbegin(); it != ctx->children.rend(); it++)
         {
-            std::string text = child->getText();
+            std::string text = (*it)->getText();
             if (text == "sizeof")
             {
-                is_sizeof = true;
+                typeNameusesizeof = true;
+                typeNameuseAlignof = false;
                 break;
             }
             else if (text == "_Alignof")
             {
-                is_alignof = true;
+                typeNameusesizeof = false;
+                typeNameuseAlignof = true;
                 break;
             }
         }
-
-        if (is_sizeof)
+        if (typeNameusesizeof)
         {
+            Type cret;
+            if (ctx->typeName())
+            {
+                cret = visitTypeName(ctx->typeName());
+            }
+            else if (ctx->unaryExpression())
+            {
+                cret = *tryVisitType([this, ctx]()
+                                     { return visitUnaryExpression(ctx->unaryExpression()); });
+            }
+            else
+            {
+                throw;
+            }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, cret.getsize()});
             type = Type{Type::Kind::Basic, Type::BasicType::Long};
         }
-        else if (is_alignof)
-        {
-            // [TODO] _Alignof 实现 - 目前简化为8字节对齐
-            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 8});
-            type = Type{Type::Kind::Basic, Type::BasicType::Long};
-        }
-    }
-    else if (ctx->unaryExpression())
-    {
-        // 分支2: 'sizeof' unaryExpression
-        // sizeof 后面跟表达式，如 sizeof x, sizeof *p, sizeof (var)
-        auto inner_type = visitUnaryExpression(ctx->unaryExpression());
-        // sizeof 无副作用，回退生成的 asm
-        funcnow->funcInfo.asms.resize(sizenow);
-        funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, inner_type.getsize()});
-        type = Type{Type::Kind::Basic, Type::BasicType::Long};
     }
 
-    // 处理前缀 ++ 和 --
+    // 处理前缀 ++ , -- , sizeof
     for (int i = ctx->children.size() - 1; i >= 0; i--)
     {
         std::string child_text = ctx->children[i]->getText();
@@ -1872,6 +1862,17 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
             saveStackTopAddrValueByType(type);
             loadStackTopAddrByType(type);
+        }
+        else if (child_text == "sizeof")
+        {
+            if (typeNameusesizeof)
+            {
+                typeNameusesizeof = false; // 消耗一次sizeof
+                continue;
+            }
+            funcnow->funcInfo.asms.resize(sizenow);
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, type.getsize()});
+            type = Type{Type::Kind::Basic, Type::BasicType::Long};
         }
     }
     return type;
@@ -2136,6 +2137,21 @@ Type astVisitor::visitTypeName(CParser::TypeNameContext* ctx)
         return tp;
     }
     return *basetype;
+}
+
+Type astVisitor::visitTypeofSpecifier(CParser::TypeofSpecifierContext* ctx)
+{
+    if (ctx->typeofSpecifierArgument()->expression())
+    {
+        return *tryVisitType(
+            [this, ctx]()
+            { return visitExpression(ctx->typeofSpecifierArgument()->expression()); });
+    }
+    else if (ctx->typeofSpecifierArgument()->typeName())
+    {
+        return visitTypeName(ctx->typeofSpecifierArgument()->typeName());
+    }
+    throw;
 }
 
 void astVisitor::visitBlockItem(CParser::BlockItemContext* ctx)

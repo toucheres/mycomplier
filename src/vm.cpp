@@ -32,7 +32,7 @@ namespace
         std::cerr << "\n=== FATAL SIGNAL: " << sig_name << " ===" << std::endl;
         if (g_current_vm)
         {
-            g_current_vm->dump_debug_buffer(128);
+            g_current_vm->dump_debug_buffer(1024);
         }
         // 恢复默认处理并重新触发信号，让程序正常终止
         signal(sig, SIG_DFL);
