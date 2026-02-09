@@ -1,5 +1,8 @@
 #include <stdio.h>
 int main()
 {
-    return sizeof(typeof(12));
+    char* arr = "test1"
+                "test2\n";
+    printf(arr);
+    return 0;
 }

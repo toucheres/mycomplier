@@ -71,5 +71,8 @@ size_t fread(void* ptr, size_t size_of_elements, size_t number_of_elements, FILE
 size_t fwrite(void* ptr, size_t size_of_elements, size_t number_of_elements, FILE* a_file);
 int main()
 {
-    return sizeof(typeof(12));
+    char* arr = "test1"
+                "test2\n";
+    printf(arr);
+    return 0;
 }

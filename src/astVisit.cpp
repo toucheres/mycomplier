@@ -170,133 +170,158 @@ std::tuple<IDdef*, std::string> astVisitor::madeConstString(
     for (auto tok : toks)
     {
         std::string s = tok->getText();
-        // skip prefix like u8, U, L, u
         size_t p = 0;
-        while (p < s.size() && (std::isalpha((unsigned char)s[p]) || s[p] == '8'))
-            p++;
+        auto skip_space = [&](void) {
+            while (p < s.size() && (s[p] == ' ' || s[p] == '\t' || s[p] == '\n' || s[p] == '\r'))
+                p++;
+        };
 
-        // raw string literal: R"delim(... )delim"
-        if (p + 1 < s.size() && s[p] == 'R' && s[p + 1] == '"')
+        while (p < s.size())
         {
-            size_t q = p + 2; // start of delimiter
-            size_t delim_end = s.find('(', q);
-            if (delim_end != std::string::npos)
+            skip_space();
+            if (p >= s.size())
+                break;
+
+            // parse optional encoding prefix: u8 | u | U | L
+            size_t q = p;
+            if (q + 1 < s.size() && s[q] == 'u' && s[q + 1] == '8')
+                q += 2;
+            else if (s[q] == 'u' || s[q] == 'U' || s[q] == 'L')
+                q += 1;
+
+            // raw string literal: R"delim(... )delim"
+            if (q + 1 < s.size() && s[q] == 'R' && s[q + 1] == '"')
             {
-                std::string delim = s.substr(q, delim_end - q);
-                size_t content_start = delim_end + 1;
-                std::string close = std::string(")") + delim + '"';
-                size_t close_pos = s.find(close, content_start);
-                if (close_pos != std::string::npos)
+                size_t delim_start = q + 2;
+                size_t delim_end = s.find('(', delim_start);
+                if (delim_end != std::string::npos)
                 {
-                    chars_after_transed.append(s, content_start, close_pos - content_start);
+                    std::string delim = s.substr(delim_start, delim_end - delim_start);
+                    size_t content_start = delim_end + 1;
+                    std::string close = std::string(")") + delim + '"';
+                    size_t close_pos = s.find(close, content_start);
+                    if (close_pos != std::string::npos)
+                    {
+                        chars_after_transed.append(s, content_start, close_pos - content_start);
+                        p = close_pos + close.size();
+                        continue;
+                    }
                 }
+                // malformed raw literal: bail out of this token
+                break;
             }
-            continue;
-        }
 
-        // normal string literal: "..."
-        if (p < s.size() && s[p] == '"')
-        {
-            size_t k = p + 1;
-            while (k < s.size())
+            // normal string literal: "..."
+            if (q < s.size() && s[q] == '"')
             {
-                char c = s[k];
-                if (c == '"')
-                    break;
-                if (c == '\\' && k + 1 < s.size())
+                size_t k = q + 1;
+                while (k < s.size())
                 {
-                    char esc = s[k + 1];
-                    switch (esc)
+                    char c = s[k];
+                    if (c == '"')
                     {
-                    case 'n':
-                        chars_after_transed.push_back('\n');
-                        k += 2;
-                        break;
-                    case 't':
-                        chars_after_transed.push_back('\t');
-                        k += 2;
-                        break;
-                    case 'r':
-                        chars_after_transed.push_back('\r');
-                        k += 2;
-                        break;
-                    case '\\':
-                        chars_after_transed.push_back('\\');
-                        k += 2;
-                        break;
-                    case '\'':
-                        chars_after_transed.push_back('\'');
-                        k += 2;
-                        break;
-                    case '"':
-                        chars_after_transed.push_back('"');
-                        k += 2;
-                        break;
-                    case 'a':
-                        chars_after_transed.push_back('\a');
-                        k += 2;
-                        break;
-                    case 'b':
-                        chars_after_transed.push_back('\b');
-                        k += 2;
-                        break;
-                    case 'f':
-                        chars_after_transed.push_back('\f');
-                        k += 2;
-                        break;
-                    case 'v':
-                        chars_after_transed.push_back('\v');
-                        k += 2;
-                        break;
-                    case '?':
-                        chars_after_transed.push_back('?');
-                        k += 2;
-                        break;
-                    case 'x':
-                    {
-                        // hex escape: \xhh...
-                        k += 2;
-                        int val = 0;
-                        bool any = false;
-                        while (k < s.size() && std::isxdigit((unsigned char)s[k]))
-                        {
-                            val = val * 16 + hexval(s[k]);
-                            k++;
-                            any = true;
-                        }
-                        if (any)
-                            chars_after_transed.push_back(static_cast<char>(val));
+                        p = k + 1;
                         break;
                     }
-                    default:
-                        if (esc >= '0' && esc <= '7')
+                    if (c == '\\' && k + 1 < s.size())
+                    {
+                        char esc = s[k + 1];
+                        switch (esc)
                         {
-                            // octal escape: up to 3 digits
-                            int val = esc - '0';
+                        case 'n':
+                            chars_after_transed.push_back('\n');
                             k += 2;
-                            int cnt = 1;
-                            while (cnt < 3 && k < s.size() && s[k] >= '0' && s[k] <= '7')
+                            break;
+                        case 't':
+                            chars_after_transed.push_back('\t');
+                            k += 2;
+                            break;
+                        case 'r':
+                            chars_after_transed.push_back('\r');
+                            k += 2;
+                            break;
+                        case '\\':
+                            chars_after_transed.push_back('\\');
+                            k += 2;
+                            break;
+                        case '\'':
+                            chars_after_transed.push_back('\'');
+                            k += 2;
+                            break;
+                        case '"':
+                            chars_after_transed.push_back('"');
+                            k += 2;
+                            break;
+                        case 'a':
+                            chars_after_transed.push_back('\a');
+                            k += 2;
+                            break;
+                        case 'b':
+                            chars_after_transed.push_back('\b');
+                            k += 2;
+                            break;
+                        case 'f':
+                            chars_after_transed.push_back('\f');
+                            k += 2;
+                            break;
+                        case 'v':
+                            chars_after_transed.push_back('\v');
+                            k += 2;
+                            break;
+                        case '?':
+                            chars_after_transed.push_back('?');
+                            k += 2;
+                            break;
+                        case 'x':
+                        {
+                            k += 2;
+                            int val = 0;
+                            bool any = false;
+                            while (k < s.size() && std::isxdigit((unsigned char)s[k]))
                             {
-                                val = val * 8 + (s[k] - '0');
+                                val = val * 16 + hexval(s[k]);
                                 k++;
-                                cnt++;
+                                any = true;
                             }
-                            chars_after_transed.push_back(static_cast<char>(val));
+                            if (any)
+                                chars_after_transed.push_back(static_cast<char>(val));
+                            break;
                         }
-                        else
-                        {
-                            // unknown escape, keep raw following char
-                            chars_after_transed.push_back(esc);
-                            k += 2;
+                        default:
+                            if (esc >= '0' && esc <= '7')
+                            {
+                                int val = esc - '0';
+                                k += 2;
+                                int cnt = 1;
+                                while (cnt < 3 && k < s.size() && s[k] >= '0' && s[k] <= '7')
+                                {
+                                    val = val * 8 + (s[k] - '0');
+                                    k++;
+                                    cnt++;
+                                }
+                                chars_after_transed.push_back(static_cast<char>(val));
+                            }
+                            else
+                            {
+                                chars_after_transed.push_back(esc);
+                                k += 2;
+                            }
                         }
                     }
+                    else
+                    {
+                        chars_after_transed.push_back(c);
+                        k++;
+                    }
                 }
-                else
-                {
-                    chars_after_transed.push_back(c);
-                    k++;
-                }
+                // if loop ended without finding closing quote, break to avoid infinite loop
+                if (k >= s.size() && (k == 0 || s[k - 1] != '"'))
+                    break;
+                continue;
             }
+
+            // unknown sequence -> avoid infinite loop
+            break;
         }
     }
 
