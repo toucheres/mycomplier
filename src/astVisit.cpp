@@ -527,20 +527,13 @@ std::optional<std::vector<int>> astVisitor::decodeStringLiteral(
     return result;
 }
 
-std::optional<Type> astVisitor::tryVisitType(std::function<Type()> expr)
+Type astVisitor::tryVisitType(std::function<Type()> expr)
 {
     auto start = funcnow->funcInfo.asms.size();
     //[TODO] 目前回退了funasms, 应回退obj状态
     // auto objcopy = obj;
-    std::optional<Type> rettype;
-    try
-    {
-        rettype = expr();
-    }
-    catch (...)
-    {
-        funcnow->funcInfo.asms.resize(start);
-    }
+    Type rettype;
+    rettype = expr();
     funcnow->funcInfo.asms.resize(start);
     return rettype;
 }
@@ -821,7 +814,13 @@ Type astVisitor::visitTypeSpecifier(CParser::TypeSpecifierContext* ctx)
                 {
                     auto tesxts = enumerator->getText();
                     enumValue =
-                        parseConstexpr(enumerator->constantExpression()->conditionalExpression());
+                        tryVisitType(
+                            [this, enumerator]
+                            {
+                                return visitConditionalExpression(
+                                    enumerator->constantExpression()->conditionalExpression());
+                            })
+                            .constexprVal.value();
                 }
 
                 // 将枚举常量注册为整型常量
@@ -1177,7 +1176,14 @@ IDdef astVisitor::visitDirectDeclarator(CParser::DirectDeclaratorContext* ctx)
                 int sz = 0;
                 if (array_expr)
                 {
-                    sz = static_cast<int>(parseConstexpr(array_expr));
+                    auto ret = tryVisitType([this, array_expr]
+                                            { return visitAssignmentExpression(array_expr); })
+                                   .constexprVal;
+                    if (!ret)
+                    {
+                        THROW_ERR(error::expected_constexpr, ctx);
+                    }
+                    sz = *ret;
                 }
                 var.type.pushTop(Type(Type::Kind::Array, sz));
                 in_array = false;
@@ -1312,7 +1318,7 @@ Type astVisitor::visitExpression(CParser::ExpressionContext* ctx)
 {
     for (int i = 0; i < ctx->assignmentExpression().size(); i++)
     {
-        auto ret = (visitAssignmentExpression(ctx->assignmentExpression()[i]));
+        auto ret = visitAssignmentExpression(ctx->assignmentExpression()[i]);
         if (i != ctx->assignmentExpression().size() - 1)
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::POP});
@@ -1411,16 +1417,25 @@ Type astVisitor::visitConditionalExpression(CParser::ConditionalExpressionContex
         int pos2 = funcnow->funcInfo.asms.size();
         funcnow->funcInfo.asms.push_back("HOLD");
         auto rrettype = visitConditionalExpression(ctx->conditionalExpression());
+        std::optional<long long> expr = std::nullopt;
+        if (contype.constexprVal && lrettype.constexprVal && rrettype.constexprVal)
+        {
+            expr = *contype.constexprVal ? *lrettype.constexprVal : *rrettype.constexprVal;
+        }
         funcnow->funcInfo.asms[pos2] =
             ASM{ASM::basic_asm::JMP, "thisfun@" + std::to_string(funcnow->funcInfo.asms.size())};
         if (lrettype == rrettype)
         {
-            return lrettype;
+            Type tp = lrettype;
+            tp.constexprVal = expr;
+            return tp;
         }
         if (lrettype.kind != Type::Kind::Struct && rrettype.kind != Type::Kind::Struct &&
             lrettype.getsize() == rrettype.getsize())
         {
-            return Type{Type::Kind::Basic, Type::BasicType::Long};
+            Type tp{Type::Kind::Basic, Type::BasicType::Long};
+            tp.constexprVal = expr;
+            return tp;
         }
         THROW_ERR(error::expected_same_type, ctx);
     }
@@ -1439,9 +1454,9 @@ Type astVisitor::visitLogicalOrExpression(CParser::LogicalOrExpressionContext* c
     {
         if (in.size() == 1)
         {
-            return (visitLogicalAndExpression(in[0]));
+            return visitLogicalAndExpression(in[0]);
         }
-        auto lret = (visitLogicalAndExpression(in[0]));
+        auto lret = visitLogicalAndExpression(in[0]);
         // 保存当前位置，用于生成条件跳转指令
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY}); // 短路的jz/jnz会消耗栈顶
         int pos = funcnow->funcInfo.asms.size();
@@ -1455,7 +1470,12 @@ Type astVisitor::visitLogicalOrExpression(CParser::LogicalOrExpressionContext* c
         funcnow->funcInfo.asms[pos] =
             ASM{ASM::basic_asm::JNZ, "thisfun@" + std::to_string(funcnow->funcInfo.asms.size())};
         // 返回计算结果类型
-        return rret; // 语义上应该是整型，保持右值类型沿用
+        Type tp = rret;
+        if (lret.constexprVal && rret.constexprVal)
+        {
+            tp.constexprVal = *lret.constexprVal || *rret.constexprVal;
+        }
+        return tp; // 语义上应该是整型，保持右值类型沿用
     };
     return func(std::span<CParser::LogicalAndExpressionContext*>(
         ctx->logicalAndExpression().data(), ctx->logicalAndExpression().size()));
@@ -1469,9 +1489,9 @@ Type astVisitor::visitLogicalAndExpression(CParser::LogicalAndExpressionContext*
     {
         if (in.size() == 1)
         {
-            return (visitInclusiveOrExpression(in[0]));
+            return visitInclusiveOrExpression(in[0]);
         }
-        auto lret = (visitInclusiveOrExpression(in[0]));
+        auto lret = visitInclusiveOrExpression(in[0]);
         // 保存当前位置，用于生成条件跳转指令
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::COPY}); // 短路的jz/jnz会消耗栈顶
         int pos = funcnow->funcInfo.asms.size();
@@ -1485,7 +1505,12 @@ Type astVisitor::visitLogicalAndExpression(CParser::LogicalAndExpressionContext*
         funcnow->funcInfo.asms[pos] =
             ASM{ASM::basic_asm::JZ, "thisfun@" + std::to_string(funcnow->funcInfo.asms.size())};
         // 返回计算结果类型
-        return rret;
+        Type tp = rret;
+        if (lret.constexprVal && rret.constexprVal)
+        {
+            tp.constexprVal = *lret.constexprVal && *rret.constexprVal;
+        }
+        return tp;
     };
     return func(std::span<CParser::InclusiveOrExpressionContext*>(
         ctx->inclusiveOrExpression().data(), ctx->inclusiveOrExpression().size()));
@@ -1499,13 +1524,18 @@ Type astVisitor::visitInclusiveOrExpression(CParser::InclusiveOrExpressionContex
     {
         if (in.size() == 1)
         {
-            return (visitExclusiveOrExpression(in[0]));
+            return visitExclusiveOrExpression(in[0]);
         }
-        auto lret = (visitExclusiveOrExpression(in[0]));
+        auto lret = visitExclusiveOrExpression(in[0]);
         auto rret = func(in.subspan(1, in.size() - 1));
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::OR});
         // 返回计算结果类型
-        return rret;
+        Type tp = rret;
+        if (lret.constexprVal && rret.constexprVal)
+        {
+            tp.constexprVal = *lret.constexprVal | *rret.constexprVal;
+        }
+        return tp;
     };
     return func(std::span<CParser::ExclusiveOrExpressionContext*>(
         ctx->exclusiveOrExpression().data(), ctx->exclusiveOrExpression().size()));
@@ -1525,7 +1555,12 @@ Type astVisitor::visitExclusiveOrExpression(CParser::ExclusiveOrExpressionContex
         auto rret = func(in.subspan(1, in.size() - 1));
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::XOR});
         // 返回计算结果类型
-        return rret;
+        Type tp = rret;
+        if (lret.constexprVal && rret.constexprVal)
+        {
+            tp.constexprVal = *lret.constexprVal ^ *rret.constexprVal;
+        }
+        return tp;
     };
     return func(std::span<CParser::AndExpressionContext*>(ctx->andExpression().data(),
                                                           ctx->andExpression().size()));
@@ -1545,7 +1580,12 @@ Type astVisitor::visitAndExpression(CParser::AndExpressionContext* ctx)
         auto rret = func(in.subspan(1, in.size() - 1));
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::XOR});
         // 返回计算结果类型
-        return rret;
+        Type tp = rret;
+        if (lret.constexprVal && rret.constexprVal)
+        {
+            tp.constexprVal = *lret.constexprVal & *rret.constexprVal;
+        }
+        return tp;
     };
     return func(std::span<CParser::EqualityExpressionContext*>(ctx->equalityExpression().data(),
                                                                ctx->equalityExpression().size()));
@@ -1559,20 +1599,29 @@ Type astVisitor::visitEqualityExpression(CParser::EqualityExpressionContext* ctx
     {
         if (in.size() == 1)
         {
-            return (visitRelationalExpression(in[0]));
+            return visitRelationalExpression(in[0]);
         }
-        auto lret = (visitRelationalExpression(in[0]));
+        auto lret = visitRelationalExpression(in[0]);
         auto rret = func(in.subspan(1, in.size() - 1), index + 1);
+        Type tp = rret;
         if (ctx->children[index * 2 + 1]->getText() == "==")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::CMP});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal == *rret.constexprVal;
+            }
         }
         else if (ctx->children[index * 2 + 1]->getText() == "!=")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::CMPN});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal != *rret.constexprVal;
+            }
         }
         // 返回计算结果类型
-        return rret;
+        return tp;
     };
     return func(std::span<CParser::RelationalExpressionContext*>(
                     ctx->relationalExpression().data(), ctx->relationalExpression().size()),
@@ -1587,28 +1636,45 @@ Type astVisitor::visitRelationalExpression(CParser::RelationalExpressionContext*
     {
         if (in.size() == 1)
         {
-            return (visitShiftExpression(in[0]));
+            return visitShiftExpression(in[0]);
         }
-        auto lret = (visitShiftExpression(in[0]));
+        auto lret = visitShiftExpression(in[0]);
         auto rret = func(in.subspan(1, in.size() - 1), index + 1);
+        Type tp = rret;
         if (ctx->children[index * 2 + 1]->getText() == "<")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SMALL});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal < *rret.constexprVal;
+            }
         }
         else if (ctx->children[index * 2 + 1]->getText() == ">")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::BIG});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal > *rret.constexprVal;
+            }
         }
         else if (ctx->children[index * 2 + 1]->getText() == "<=")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SMALLE});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal <= *rret.constexprVal;
+            }
         }
         else if (ctx->children[index * 2 + 1]->getText() == ">=")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::BIGE});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal >= *rret.constexprVal;
+            }
         }
         // 返回计算结果类型
-        return rret;
+        return tp;
     };
     return func(std::span<CParser::ShiftExpressionContext*>(ctx->shiftExpression().data(),
                                                             ctx->shiftExpression().size()),
@@ -1623,20 +1689,29 @@ Type astVisitor::visitShiftExpression(CParser::ShiftExpressionContext* ctx)
     {
         if (in.size() == 1)
         {
-            return (visitAdditiveExpression(in[0]));
+            return visitAdditiveExpression(in[0]);
         }
-        auto lret = (visitAdditiveExpression(in[0]));
+        auto lret = visitAdditiveExpression(in[0]);
         auto rret = func(in.subspan(1, in.size() - 1), index + 1);
+        Type tp = rret;
         if (ctx->children[index * 2 + 1]->getText() == "<<")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LSHIFT});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal << *rret.constexprVal;
+            }
         }
         else if (ctx->children[index * 2 + 1]->getText() == ">>")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::RSHIFT});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal >> *rret.constexprVal;
+            }
         }
         // 返回计算结果类型
-        return rret;
+        return tp;
     };
     return func(std::span<CParser::AdditiveExpressionContext*>(ctx->additiveExpression().data(),
                                                                ctx->additiveExpression().size()),
@@ -1650,11 +1725,11 @@ Type astVisitor::visitAdditiveExpression(CParser::AdditiveExpressionContext* ctx
     {
         if (in.size() == 1)
         {
-            return (visitMultiplicativeExpression(in[0]));
+            return visitMultiplicativeExpression(in[0]);
         }
         std::string op_token = ctx->children[index * 2 + 1]->getText();
         auto posnow = funcnow->funcInfo.asms.size();
-        auto lret = (visitMultiplicativeExpression(in[0]));
+        auto lret = visitMultiplicativeExpression(in[0]);
         auto rret = func(in.subspan(1, in.size() - 1), index + 1);
         funcnow->funcInfo.asms.resize(posnow); // 之前只是为了拿到类型
         if (lret.kind == Type::Kind::Struct || rret.kind == Type::Kind::Struct)
@@ -1698,17 +1773,31 @@ Type astVisitor::visitAdditiveExpression(CParser::AdditiveExpressionContext* ctx
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::ADD});
             auto res = deduce_binary_type(lret, rret, BinOp::Add);
+            // 考虑指针常量? [TODO]
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                res.constexprVal = *lret.constexprVal + *rret.constexprVal;
+            }
             return res;
         }
         else if (op_token == "-")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
             auto res = deduce_binary_type(lret, rret, BinOp::Sub);
+            // 考虑指针常量? [TODO]
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                res.constexprVal = *lret.constexprVal - *rret.constexprVal;
+            }
             if (lret.kind == Type::Kind::Pointer && rret.kind == Type::Kind::Pointer)
             {
                 // 指针相减
                 funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, lret.subType->getsize()});
                 funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::DIV});
+                if (res.constexprVal)
+                {
+                    *res.constexprVal /= lret.subType->getsize();
+                }
             }
             return res;
         }
@@ -1730,20 +1819,33 @@ Type astVisitor::visitMultiplicativeExpression(CParser::MultiplicativeExpression
         }
         auto lret = (visitCastExpression(in[0]));
         auto rret = func(in.subspan(1, in.size() - 1), index + 1);
+        Type tp = rret;
         if (ctx->children[index * 2 + 1]->getText() == "*")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::MUL});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal * *rret.constexprVal;
+            }
         }
         else if (ctx->children[index * 2 + 1]->getText() == "/")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::DIV});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal / *rret.constexprVal;
+            }
         }
         else if (ctx->children[index * 2 + 1]->getText() == "%")
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::MOD});
+            if (lret.constexprVal && rret.constexprVal)
+            {
+                tp.constexprVal = *lret.constexprVal % *rret.constexprVal;
+            }
         }
         // 返回计算结果类型
-        return rret;
+        return tp;
     };
     return func(std::span<CParser::CastExpressionContext*>(ctx->castExpression().data(),
                                                            ctx->castExpression().size()),
@@ -1756,11 +1858,13 @@ Type astVisitor::visitCastExpression(CParser::CastExpressionContext* ctx)
         auto cret = visitCastExpression(ctx->castExpression());
         // [TODO] visitTypeName
         auto tret = visitTypeName(ctx->typeName());
+        tret.constexprVal = cret.constexprVal;
         return tret;
     }
-
-    return visitUnaryExpression(ctx->unaryExpression());
-
+    if (ctx->unaryExpression())
+    {
+        return visitUnaryExpression(ctx->unaryExpression());
+    }
     //[TODO] DigitSequence 何意义?
     throw;
 }
@@ -1783,6 +1887,7 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
         // 分支5: unaryOperator castExpression
         if (ctx->unaryOperator->getText() == "&")
         {
+            // 必不可能是constexpr
             auto cret = visitCastExpression(ctx->castExpression());
             if (cret.kind == Type::Kind::Function ||
                 cret.kind == Type::Kind::Array) // arr/function无LC/LI/LW,取地址与值相同，无需处理
@@ -1809,7 +1914,8 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
         }
         else if (ctx->unaryOperator->getText() == "*")
         {
-            auto cret = (visitCastExpression(ctx->castExpression()));
+            // 必不可能是constexpr
+            auto cret = visitCastExpression(ctx->castExpression());
             if (cret.kind != Type::Kind::Pointer)
             {
                 THROW_ERR(error::expected_ptr, ctx->castExpression());
@@ -1819,26 +1925,38 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
         }
         else if (ctx->unaryOperator->getText() == "+") //+12
         {
-            auto cret = (visitCastExpression(ctx->castExpression()));
+            auto cret = visitCastExpression(ctx->castExpression());
             type = cret;
         }
         else if (ctx->unaryOperator->getText() == "-") //-12
         {
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 0});
-            auto cret = (visitCastExpression(ctx->castExpression()));
+            auto cret = visitCastExpression(ctx->castExpression());
             type = cret;
+            if (type.constexprVal)
+            {
+                type.constexprVal = -(*type.constexprVal);
+            }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::SUB});
         }
         else if (ctx->unaryOperator->getText() == "~")
         {
-            auto cret = (visitCastExpression(ctx->castExpression()));
+            auto cret = visitCastExpression(ctx->castExpression());
             type = cret;
+            if (type.constexprVal)
+            {
+                type.constexprVal = ~(*type.constexprVal);
+            }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::NOT});
         }
         else if (ctx->unaryOperator->getText() == "!")
         {
-            auto cret = (visitCastExpression(ctx->castExpression()));
+            auto cret = visitCastExpression(ctx->castExpression());
             type = Type{Type::Kind::Basic, Type::BasicType::Int};
+            if (type.constexprVal)
+            {
+                type.constexprVal = !(*type.constexprVal);
+            }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, 0});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::CMP});
         }
@@ -1862,24 +1980,31 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
                 break;
             }
         }
+        Type cret;
+        if (ctx->typeName())
+        {
+            cret = visitTypeName(ctx->typeName());
+        }
+        else if (ctx->unaryExpression())
+        {
+            cret =
+                tryVisitType([this, ctx] { return visitUnaryExpression(ctx->unaryExpression()); });
+        }
+        else
+        {
+            throw;
+        }
         if (typeNameusesizeof)
         {
-            Type cret;
-            if (ctx->typeName())
-            {
-                cret = visitTypeName(ctx->typeName());
-            }
-            else if (ctx->unaryExpression())
-            {
-                cret = *tryVisitType([this, ctx]()
-                                     { return visitUnaryExpression(ctx->unaryExpression()); });
-            }
-            else
-            {
-                throw;
-            }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, cret.getsize()});
             type = Type{Type::Kind::Basic, Type::BasicType::Long};
+            type.constexprVal = cret.getsize();
+        }
+        else if (typeNameuseAlignof) // TODO 补全 Align 实现
+        {
+            funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, VCPU::size_word});
+            type = Type{Type::Kind::Basic, Type::BasicType::Long};
+            type.constexprVal = VCPU::size_word;
         }
     }
 
@@ -1889,6 +2014,7 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
         std::string child_text = ctx->children[i]->getText();
         if (child_text == "++")
         {
+            // 必不可能是constexp
             if (stackTopIsLvalue())
             {
                 madeTopIsLvalueAddr();
@@ -1912,6 +2038,7 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
         }
         else if (child_text == "--")
         {
+            // 必不可能是constexp
             if (stackTopIsLvalue())
             {
                 madeTopIsLvalueAddr();
@@ -1943,6 +2070,7 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
             funcnow->funcInfo.asms.resize(sizenow);
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, type.getsize()});
             type = Type{Type::Kind::Basic, Type::BasicType::Long};
+            type.constexprVal = type.getsize();
         }
     }
     return type;
@@ -1961,6 +2089,7 @@ Type astVisitor::visitPostfixExpression(CParser::PostfixExpressionContext* ctx)
         auto todo = ctx->children[end - 1];
         if (todo->getText() == "(") // func call
         {
+            // 必不可能是constexp
             size_t args_words = 0;
 
             if (ctx->children[end]->getText() != ")") // 有expressionlist
@@ -1970,14 +2099,14 @@ Type astVisitor::visitPostfixExpression(CParser::PostfixExpressionContext* ctx)
             }
             auto funtype = tryVisitType([this, &func, end]() { return func(0, end - 1); });
             // 返回值为struct
-            if (funtype && (*funtype).subType->kind == Type::Kind::Struct)
+            if (funtype.subType->kind == Type::Kind::Struct)
             {
                 // args_words +=
                 //     ((*funtype).subType->getsize() + VCPU::size_word - 1) / VCPU::size_word;
                 args_words += 1; // 传入指针
                 // 创建局部变量传入指针
                 IDdef struct_ret;
-                struct_ret.type = (*funtype).subType;
+                struct_ret.type = funtype.subType;
                 struct_ret.kind = IDdef::Kind::Local;
                 static size_t index = 0;
                 struct_ret.name = "__struct_ret" + index++;
@@ -2010,15 +2139,16 @@ Type astVisitor::visitPostfixExpression(CParser::PostfixExpressionContext* ctx)
             funcnow->funcInfo.asms.push_back(
                 ASM{ASM::basic_asm::DARG, static_cast<int>(args_words)});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::PUSH});
-            if (funtype && (*funtype).subType->kind == Type::Kind::Struct)
+            if (funtype.subType->kind == Type::Kind::Struct)
             {
                 funcnow->funcInfo.asms.push_back(
-                    ASM{ASM::basic_asm::LODS, (*funtype).subType->getsize()});
+                    ASM{ASM::basic_asm::LODS, funtype.subType->getsize()});
             }
             return rettype;
         }
         else if (todo->getText() == "[") // arr[] ptr[]
         {
+            // 必不可能是constexp
             auto paret = func(0, end - 1);
             Type eleType;
             if (paret.kind == Type::Kind::Pointer && paret.subType)
@@ -2038,6 +2168,7 @@ Type astVisitor::visitPostfixExpression(CParser::PostfixExpressionContext* ctx)
         }
         else if (todo->getText() == "++" || todo->getText() == "--")
         {
+            // 必不可能是constexp
             // 后置 ++/--: 返回原值，变量自增/自减
             auto valType = func(0, end - 1);
             if (!stackTopIsLvalue())
@@ -2069,6 +2200,7 @@ Type astVisitor::visitPostfixExpression(CParser::PostfixExpressionContext* ctx)
         }
         else if (todo->getText() == ".") // 结构体直接成员访问运算符
         {
+            // 必不可能是constexp
             auto type = func(0, end - 1);
             auto membername = ctx->Identifier()[idindex--]->getText();
             if (type.kind != Type::Kind::Struct)
@@ -2092,6 +2224,7 @@ Type astVisitor::visitPostfixExpression(CParser::PostfixExpressionContext* ctx)
         }
         else if (todo->getText() == "->") //[TODO] 结构体间接成员访问运算符
         {
+            // 必不可能是constexp
             auto type = func(0, end - 1);
             auto membername = ctx->Identifier()[idindex--]->getText();
             if (type.kind != Type::Kind::Pointer || type.subType->kind != Type::Kind::Struct)
@@ -2135,7 +2268,9 @@ Type astVisitor::visitPrimaryExpression(CParser::PrimaryExpressionContext* ctx)
             {
                 int value = parseCharacterConstant(text);
                 funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, value});
-                return Type{Type::Kind::Basic, Type::BasicType::Char};
+                Type rettype{Type::Kind::Basic, Type::BasicType::Char};
+                rettype.constexprVal = value;
+                return rettype;
             }
             catch (...)
             {
@@ -2149,7 +2284,9 @@ Type astVisitor::visitPrimaryExpression(CParser::PrimaryExpressionContext* ctx)
             {
                 int value = parseIntegerConstant(text);
                 funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, value});
-                return Type{Type::Kind::Basic, Type::BasicType::Int};
+                Type rettype{Type::Kind::Basic, Type::BasicType::Int};
+                rettype.constexprVal = value;
+                return rettype;
             }
             catch (...)
             {
@@ -2213,7 +2350,7 @@ Type astVisitor::visitTypeofSpecifier(CParser::TypeofSpecifierContext* ctx)
 {
     if (ctx->typeofSpecifierArgument()->expression())
     {
-        return *tryVisitType(
+        return tryVisitType(
             [this, ctx]()
             { return visitExpression(ctx->typeofSpecifierArgument()->expression()); });
     }
@@ -2650,7 +2787,10 @@ Type astVisitor::visitDirectAbstractDeclarator(CParser::DirectAbstractDeclarator
     {
         // parseConstexpr 返回 long long, 这里数组维度内部使用 int, 显式窄化避免警告
         basetype.pushTop(
-            Type(Type::Kind::Array, static_cast<int>(parseConstexpr(ctx->assignmentExpression()))));
+            Type(Type::Kind::Array,
+                 *tryVisitType([this, ctx]
+                               { return visitAssignmentExpression(ctx->assignmentExpression()); })
+                      .constexprVal));
         return basetype;
     }
     else if (ctx->LeftParen()) // func
@@ -2666,690 +2806,6 @@ Type astVisitor::visitDirectAbstractDeclarator(CParser::DirectAbstractDeclarator
     THROW_ERR(error::unsurpport_abstractDeclarator, ctx);
 }
 
-long long astVisitor::parseConstexpr(CParser::AssignmentExpressionContext* expr)
-{
-    // 递归下降求值，仅用于编译期整型常量表达式（如数组维度）
-    // 支持：括号、整型/字符常量、单目 + - ~
-    // !、*,/,%、+,-、<<,>>、<,<=,>,>=、==,!=、&,^,|、&&,||、?:、逗号表达式
-    // 不支持：标识符、函数调用、下标、sizeof/_Alignof、赋值类运算等
-
-    // 前置声明一组局部 lambda，互相递归
-    std::function<long long(CParser::PrimaryExpressionContext*)> evalPrimary;
-    std::function<long long(CParser::PostfixExpressionContext*)> evalPostfix;
-    std::function<long long(CParser::UnaryExpressionContext*)> evalUnary;
-    std::function<long long(CParser::CastExpressionContext*)> evalCast;
-    std::function<long long(CParser::MultiplicativeExpressionContext*)> evalMul;
-    std::function<long long(CParser::AdditiveExpressionContext*)> evalAdd;
-    std::function<long long(CParser::ShiftExpressionContext*)> evalShift;
-    std::function<long long(CParser::RelationalExpressionContext*)> evalRel;
-    std::function<long long(CParser::EqualityExpressionContext*)> evalEq;
-    std::function<long long(CParser::AndExpressionContext*)> evalBitAnd;
-    std::function<long long(CParser::ExclusiveOrExpressionContext*)> evalBitXor;
-    std::function<long long(CParser::InclusiveOrExpressionContext*)> evalBitOr;
-    std::function<long long(CParser::LogicalAndExpressionContext*)> evalLogAnd;
-    std::function<long long(CParser::LogicalOrExpressionContext*)> evalLogOr;
-    std::function<long long(CParser::ExpressionContext*)> evalExpr;
-    std::function<long long(CParser::ConditionalExpressionContext*)> evalCond;
-    std::function<long long(CParser::AssignmentExpressionContext*)> evalAssign;
-
-    auto truth = [](long long v) -> long long { return v != 0 ? 1LL : 0LL; };
-
-    evalPrimary = [this, &evalExpr](CParser::PrimaryExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        if (ctx->Identifier())
-        {
-            // 检查是否是枚举常量
-            if (auto* enumConst =
-                    lookup_ID_decl(ctx->Identifier()->getText(), StorageClassSpecifier::EnumConst))
-            {
-                return enumConst->addr;
-            }
-            // 常量表达式不允许普通标识符（尚未实现宏常量等）
-            throw error::invalid_constant;
-        }
-        if (ctx->constant())
-        {
-            const std::string t = ctx->constant()->getText();
-            if (isCharacterConstant(t))
-                return parseCharacterConstant(t);
-            if (isIntegerConstant(t))
-                return parseIntegerConstant(t);
-            throw error::invalid_constant;
-        }
-        if (ctx->expression())
-        {
-            // 括号表达式
-            return evalExpr(ctx->expression());
-        }
-        // 其他扩展（如__builtin等）不支持
-        throw error::invalid_constant;
-    };
-
-    evalPostfix = [&evalPrimary](CParser::PostfixExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        // 仅接受“纯 primary”的情况；带 [], (), ., ->, ++/-- 等均不支持
-        if (ctx->primaryExpression() && ctx->children.size() == 1)
-            return evalPrimary(ctx->primaryExpression());
-        // GNU 扩展、聚合初始化等均不在常量表达式支持范围
-        throw error::invalid_constant;
-    };
-
-    evalCast = [&evalCast, &evalUnary](CParser::CastExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        // 若为显式类型转换 '(' typeName ')' castExpression -> 忽略类型，直接求右侧值
-        if (ctx->castExpression())
-            return evalCast(ctx->castExpression());
-        // 其余分支：unary 或 DigitSequence（for 场景）
-        if (ctx->unaryExpression())
-            return evalUnary(ctx->unaryExpression());
-        if (ctx->DigitSequence())
-        {
-            // 纯数字序列，十进制
-            return std::stoll(ctx->DigitSequence()->getText(), nullptr, 10);
-        }
-        throw error::invalid_constant;
-    };
-
-    evalUnary = [&evalPostfix, &evalCast](CParser::UnaryExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        if (ctx->postfixExpression())
-            return evalPostfix(ctx->postfixExpression());
-
-        // 处理一元运算符：+ - ~ !
-        if (ctx->unaryOperator && ctx->castExpression())
-        {
-            const std::string op = ctx->unaryOperator->getText();
-            long long v = evalCast(ctx->castExpression());
-            if (op == "+")
-                return +v;
-            if (op == "-")
-                return -v;
-            if (op == "~")
-                return ~v;
-            if (op == "!")
-                return (v == 0) ? 1LL : 0LL;
-            throw error::invalid_constant;
-        }
-
-        // sizeof/_Alignof等未实现
-        throw error::invalid_constant;
-    };
-
-    auto evalBinaryByChildren =
-        [](antlr4::ParserRuleContext* ctx, auto evalLhs,
-           const std::function<long long(antlr4::tree::ParseTree*)>& evalRhs,
-           const std::function<long long(long long, const std::string&, long long)>& apply)
-        -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        const auto& kids = ctx->children;
-        if (kids.empty())
-            throw error::invalid_constant;
-
-        // 第一个子节点是一个子表达式上下文
-        long long acc = evalLhs(kids[0]);
-        // 之后按 [op, rhs, op, rhs, ...] 交替
-        for (size_t i = 1; i + 1 < kids.size(); i += 2)
-        {
-            std::string op = kids[i]->getText();
-            long long rhs = evalRhs(kids[i + 1]);
-            acc = apply(acc, op, rhs);
-        }
-        return acc;
-    };
-
-    // 以下 evalXxx 采用 children 轮询的通用策略，避免依赖 ANTLR 生成的 vector API 差异
-    evalMul = [&evalBinaryByChildren,
-               &evalCast](CParser::MultiplicativeExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalCast](antlr4::tree::ParseTree* n)
-        { return evalCast(dynamic_cast<CParser::CastExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [](long long a, const std::string& op, long long b) -> long long
-        {
-            if (op == "*")
-                return a * b;
-            if (op == "/")
-            {
-                if (b == 0)
-                    throw error::invalid_constant;
-                return a / b;
-            }
-            if (op == "%")
-            {
-                if (b == 0)
-                    throw error::invalid_constant;
-                return a % b;
-            }
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalAdd = [&evalBinaryByChildren,
-               &evalMul](CParser::AdditiveExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalMul](antlr4::tree::ParseTree* n)
-        { return evalMul(dynamic_cast<CParser::MultiplicativeExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [](long long a, const std::string& op, long long b) -> long long
-        {
-            if (op == "+")
-                return a + b;
-            if (op == "-")
-                return a - b;
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalShift = [&evalBinaryByChildren, &evalAdd](CParser::ShiftExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalAdd](antlr4::tree::ParseTree* n)
-        { return evalAdd(dynamic_cast<CParser::AdditiveExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [](long long a, const std::string& op, long long b) -> long long
-        {
-            if (b < 0)
-                throw error::invalid_constant;
-            if (op == "<<")
-                return a << b;
-            if (op == ">>")
-                return a >> b;
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalRel = [&evalBinaryByChildren, &evalShift,
-               &truth](CParser::RelationalExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalShift](antlr4::tree::ParseTree* n)
-        { return evalShift(dynamic_cast<CParser::ShiftExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [&truth](long long a, const std::string& op, long long b) -> long long
-        {
-            if (op == "<")
-                return truth(a < b);
-            if (op == "<=")
-                return truth(a <= b);
-            if (op == ">")
-                return truth(a > b);
-            if (op == ">=")
-                return truth(a >= b);
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalEq = [&evalBinaryByChildren, &evalRel,
-              &truth](CParser::EqualityExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalRel](antlr4::tree::ParseTree* n)
-        { return evalRel(dynamic_cast<CParser::RelationalExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [&truth](long long a, const std::string& op, long long b) -> long long
-        {
-            if (op == "==")
-                return truth(a == b);
-            if (op == "!=")
-                return truth(a != b);
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalBitAnd = [&evalBinaryByChildren, &evalEq](CParser::AndExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalEq](antlr4::tree::ParseTree* n)
-        { return evalEq(dynamic_cast<CParser::EqualityExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [](long long a, const std::string& op, long long b) -> long long
-        {
-            if (op == "&")
-                return a & b;
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalBitXor = [&evalBinaryByChildren,
-                  &evalBitAnd](CParser::ExclusiveOrExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalBitAnd](antlr4::tree::ParseTree* n)
-        { return evalBitAnd(dynamic_cast<CParser::AndExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [](long long a, const std::string& op, long long b) -> long long
-        {
-            if (op == "^")
-                return a ^ b;
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalBitOr = [&evalBinaryByChildren,
-                 &evalBitXor](CParser::InclusiveOrExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalBitXor](antlr4::tree::ParseTree* n)
-        { return evalBitXor(dynamic_cast<CParser::ExclusiveOrExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [](long long a, const std::string& op, long long b) -> long long
-        {
-            if (op == "|")
-                return a | b;
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalLogAnd = [&evalBinaryByChildren, &evalBitOr,
-                  &truth](CParser::LogicalAndExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalBitOr](antlr4::tree::ParseTree* n)
-        { return evalBitOr(dynamic_cast<CParser::InclusiveOrExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [&truth](long long a, const std::string& op, long long b) -> long long
-        {
-            if (op == "&&")
-                return truth(truth(a) && truth(b));
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalLogOr = [&evalBinaryByChildren, &evalLogAnd,
-                 &truth](CParser::LogicalOrExpressionContext* ctx) -> long long
-    {
-        auto evalL = [&evalLogAnd](antlr4::tree::ParseTree* n)
-        { return evalLogAnd(dynamic_cast<CParser::LogicalAndExpressionContext*>(n)); };
-        auto evalR = evalL;
-        auto apply = [&truth](long long a, const std::string& op, long long b) -> long long
-        {
-            if (op == "||")
-                return truth(truth(a) || truth(b));
-            throw error::invalid_constant;
-        };
-        return evalBinaryByChildren(ctx, evalL, evalR, apply);
-    };
-
-    evalExpr = [this](CParser::ExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        // 逗号表达式的值为最后一个 assignmentExpression
-        long long val = 0;
-        for (auto* ae : ctx->assignmentExpression())
-        {
-            // 递归调用 parseConstexpr 以复用逻辑
-            val = this->parseConstexpr(ae);
-        }
-        return val;
-    };
-
-    evalCond = [&evalLogOr, &evalExpr, &evalCond,
-                &truth](CParser::ConditionalExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        long long c = evalLogOr(ctx->logicalOrExpression());
-        if (ctx->expression() && ctx->conditionalExpression())
-        {
-            if (truth(c))
-                return evalExpr(ctx->expression());
-            else
-                return evalCond(ctx->conditionalExpression());
-        }
-        return c;
-    };
-
-    evalAssign = [&evalCond](CParser::AssignmentExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        if (ctx->conditionalExpression())
-            return evalCond(ctx->conditionalExpression());
-        // 赋值类表达式不属于常量表达式
-        throw error::invalid_constant;
-    };
-
-    return evalAssign(expr);
-};
-
-long long astVisitor::parseConstexpr(CParser::ConditionalExpressionContext* expr)
-{
-    // 创建一个临时的 AssignmentExpressionContext 来复用已有逻辑
-    // 由于 AssignmentExpression 的第一个分支就是 conditionalExpression
-    // 这里直接递归调用内部的求值逻辑
-
-    // 重新实现一个简化版本，直接求值 ConditionalExpression
-    std::function<long long(CParser::PrimaryExpressionContext*)> evalPrimary;
-    std::function<long long(CParser::PostfixExpressionContext*)> evalPostfix;
-    std::function<long long(CParser::UnaryExpressionContext*)> evalUnary;
-    std::function<long long(CParser::CastExpressionContext*)> evalCast;
-    std::function<long long(CParser::MultiplicativeExpressionContext*)> evalMul;
-    std::function<long long(CParser::AdditiveExpressionContext*)> evalAdd;
-    std::function<long long(CParser::ShiftExpressionContext*)> evalShift;
-    std::function<long long(CParser::RelationalExpressionContext*)> evalRel;
-    std::function<long long(CParser::EqualityExpressionContext*)> evalEq;
-    std::function<long long(CParser::AndExpressionContext*)> evalBitAnd;
-    std::function<long long(CParser::ExclusiveOrExpressionContext*)> evalBitXor;
-    std::function<long long(CParser::InclusiveOrExpressionContext*)> evalBitOr;
-    std::function<long long(CParser::LogicalAndExpressionContext*)> evalLogAnd;
-    std::function<long long(CParser::LogicalOrExpressionContext*)> evalLogOr;
-    std::function<long long(CParser::ExpressionContext*)> evalExpr;
-    std::function<long long(CParser::ConditionalExpressionContext*)> evalCond;
-
-    auto truth = [](long long v) -> long long { return v != 0 ? 1LL : 0LL; };
-
-    evalPrimary = [this, &evalExpr](CParser::PrimaryExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        if (ctx->Identifier())
-        {
-            // 检查是否是枚举常量
-            if (auto* enumConst =
-                    lookup_ID_decl(ctx->Identifier()->getText(), StorageClassSpecifier::EnumConst))
-            {
-                return enumConst->addr;
-            }
-            throw error::invalid_constant;
-        }
-        if (ctx->constant())
-        {
-            const std::string t = ctx->constant()->getText();
-            if (isCharacterConstant(t))
-                return parseCharacterConstant(t);
-            if (isIntegerConstant(t))
-                return parseIntegerConstant(t);
-            throw error::invalid_constant;
-        }
-        if (ctx->expression())
-        {
-            return evalExpr(ctx->expression());
-        }
-        throw error::invalid_constant;
-    };
-
-    evalPostfix = [&evalPrimary](CParser::PostfixExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        if (ctx->primaryExpression() && ctx->children.size() == 1)
-            return evalPrimary(ctx->primaryExpression());
-        throw error::invalid_constant;
-    };
-
-    evalUnary = [&evalPostfix, &evalCast](CParser::UnaryExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        if (ctx->postfixExpression())
-            return evalPostfix(ctx->postfixExpression());
-        if (ctx->unaryOperator)
-        {
-            long long val = evalCast(ctx->castExpression());
-            std::string op = ctx->unaryOperator->getText();
-            if (op == "+")
-                return val;
-            if (op == "-")
-                return -val;
-            if (op == "~")
-                return ~val;
-            if (op == "!")
-                return val == 0 ? 1LL : 0LL;
-        }
-        throw error::invalid_constant;
-    };
-
-    evalCast = [&evalCast, &evalUnary](CParser::CastExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        if (ctx->castExpression())
-            return evalCast(ctx->castExpression());
-        if (ctx->unaryExpression())
-            return evalUnary(ctx->unaryExpression());
-        if (ctx->DigitSequence())
-            return std::stoll(ctx->DigitSequence()->getText(), nullptr, 10);
-        throw error::invalid_constant;
-    };
-
-    evalMul = [&evalCast](CParser::MultiplicativeExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto casts = ctx->castExpression();
-        long long result = evalCast(casts[0]);
-        size_t idx = 1;
-        for (size_t i = 1; i < ctx->children.size(); i += 2)
-        {
-            std::string op = ctx->children[i]->getText();
-            long long rhs = evalCast(casts[idx++]);
-            if (op == "*")
-                result *= rhs;
-            else if (op == "/")
-                result /= rhs;
-            else if (op == "%")
-                result %= rhs;
-        }
-        return result;
-    };
-
-    evalAdd = [&evalMul](CParser::AdditiveExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto muls = ctx->multiplicativeExpression();
-        long long result = evalMul(muls[0]);
-        size_t idx = 1;
-        for (size_t i = 1; i < ctx->children.size(); i += 2)
-        {
-            std::string op = ctx->children[i]->getText();
-            long long rhs = evalMul(muls[idx++]);
-            if (op == "+")
-                result += rhs;
-            else if (op == "-")
-                result -= rhs;
-        }
-        return result;
-    };
-
-    evalShift = [&evalAdd](CParser::ShiftExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto adds = ctx->additiveExpression();
-        long long result = evalAdd(adds[0]);
-        size_t idx = 1;
-        for (size_t i = 1; i < ctx->children.size(); i += 2)
-        {
-            std::string op = ctx->children[i]->getText();
-            long long rhs = evalAdd(adds[idx++]);
-            if (op == "<<")
-                result <<= rhs;
-            else if (op == ">>")
-                result >>= rhs;
-        }
-        return result;
-    };
-
-    evalRel = [&evalShift](CParser::RelationalExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto shifts = ctx->shiftExpression();
-        long long result = evalShift(shifts[0]);
-        size_t idx = 1;
-        for (size_t i = 1; i < ctx->children.size(); i += 2)
-        {
-            std::string op = ctx->children[i]->getText();
-            long long rhs = evalShift(shifts[idx++]);
-            if (op == "<")
-                result = result < rhs ? 1LL : 0LL;
-            else if (op == ">")
-                result = result > rhs ? 1LL : 0LL;
-            else if (op == "<=")
-                result = result <= rhs ? 1LL : 0LL;
-            else if (op == ">=")
-                result = result >= rhs ? 1LL : 0LL;
-        }
-        return result;
-    };
-
-    evalEq = [&evalRel](CParser::EqualityExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto rels = ctx->relationalExpression();
-        long long result = evalRel(rels[0]);
-        size_t idx = 1;
-        for (size_t i = 1; i < ctx->children.size(); i += 2)
-        {
-            std::string op = ctx->children[i]->getText();
-            long long rhs = evalRel(rels[idx++]);
-            if (op == "==")
-                result = result == rhs ? 1LL : 0LL;
-            else if (op == "!=")
-                result = result != rhs ? 1LL : 0LL;
-        }
-        return result;
-    };
-
-    evalBitAnd = [&evalEq](CParser::AndExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto eqs = ctx->equalityExpression();
-        long long result = evalEq(eqs[0]);
-        for (size_t i = 1; i < eqs.size(); ++i)
-            result &= evalEq(eqs[i]);
-        return result;
-    };
-
-    evalBitXor = [&evalBitAnd](CParser::ExclusiveOrExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto ands = ctx->andExpression();
-        long long result = evalBitAnd(ands[0]);
-        for (size_t i = 1; i < ands.size(); ++i)
-            result ^= evalBitAnd(ands[i]);
-        return result;
-    };
-
-    evalBitOr = [&evalBitXor](CParser::InclusiveOrExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto xors = ctx->exclusiveOrExpression();
-        long long result = evalBitXor(xors[0]);
-        for (size_t i = 1; i < xors.size(); ++i)
-            result |= evalBitXor(xors[i]);
-        return result;
-    };
-
-    evalLogAnd = [&evalBitOr, &truth](CParser::LogicalAndExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto ors = ctx->inclusiveOrExpression();
-        if (ors.size() == 1)
-        {
-            return evalBitOr(ors[0]);
-        }
-        for (auto* o : ors)
-            if (!truth(evalBitOr(o)))
-                return 0LL;
-        return 1LL;
-    };
-
-    evalLogOr = [&evalLogAnd, &truth](CParser::LogicalOrExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto ands = ctx->logicalAndExpression();
-        if (ands.size() == 1)
-        {
-            return evalLogAnd(ands[0]);
-        }
-        for (auto* a : ands)
-            if (truth(evalLogAnd(a)))
-                return 1LL;
-        return 0LL;
-    };
-
-    evalExpr = [&evalCond](CParser::ExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        auto assigns = ctx->assignmentExpression();
-        long long result = 0;
-        for (auto* a : assigns)
-        {
-            if (a->conditionalExpression())
-                result = evalCond(a->conditionalExpression());
-            else
-                throw error::invalid_constant;
-        }
-        return result;
-    };
-
-    evalCond = [&evalLogOr, &evalExpr,
-                &evalCond](CParser::ConditionalExpressionContext* ctx) -> long long
-    {
-        if (!ctx)
-            throw error::invalid_constant;
-        long long c = evalLogOr(ctx->logicalOrExpression());
-        if (ctx->expression())
-        {
-            if (c)
-                return evalExpr(ctx->expression());
-            else
-                return evalCond(ctx->conditionalExpression());
-        }
-        return c;
-    };
-
-    return evalCond(expr);
-}
-
-// [TODO] addDeclarations 由 visitDeclartion -> lowerdecl完成 该函数废弃
-// [[deprecated("addDeclarations 由 visitDeclartion -> lowerdecl完成 该函数废弃")]]
-// std::vector<Type> astVisitor::addDeclarations(std::vector<Type> vars)
-// {
-//     for (auto& each : vars)
-//     {
-//         auto storage = StorageClassSpecifier::VarDef;
-//         if (each.storageClassSpecifier != StorageClassSpecifier::VarDef)
-//         {
-//             storage = each.storageClassSpecifier;
-//             if (storage == StorageClassSpecifier::Typedef)
-//             {
-//                 auto tp = each;
-//                 IDdef def;
-//                 def.name = each.id;
-//                 def.type = tp.popTop();
-//                 def.storageClassSpecifier = StorageClassSpecifier::Typedef;
-//                 record_ID_decl(def.name, def.type, def.storageClassSpecifier, nullptr);
-//                 continue;
-//             }
-//         }
-//         IDdef* func_ctx = (funcnow != gfuncptr) ? funcnow : nullptr;
-//         record_ID_decl(each.id, each, storage, func_ctx);
-//     }
-//     return vars;
-// }
 astVisitor::astVisitor(std::string name, OBJ& ob) : obj(ob)
 {
     const std::string init_name = "__global_init" + name;
@@ -3441,45 +2897,6 @@ void astVisitor::visitAsmADDer(CParser::AsmADDerContext* ctx)
     funcnow->funcInfo.asms.push_back(content);
     return;
 }
-// void astVisitor::visitByTypeIndex(antlr4::ParserRuleContext* ctx)
-// {
-//     switch (ctx->getRuleIndex())
-//     {
-//     case CParser::RuleCompilationUnit:
-//         return visitCompilationUnit(
-//             dynamic_cast<CParser::CParser::CompilationUnitContext*>(ctx));
-//         break;
-//     case CParser::RuleTranslationUnit:
-//         return visitTranslationUnit(
-//             dynamic_cast<CParser::CParser::TranslationUnitContext*>(ctx));
-//         break;
-//     case CParser::RuleExternalDeclaration:
-//         return visitExternalDeclaration(
-//             dynamic_cast<CParser::ExternalDeclarationContext*>(ctx));
-//         break;
-//     case CParser::RuleDeclaration:
-//         return visitDeclaration(
-//             dynamic_cast<CParser::CParser::DeclarationContext*>(ctx));
-//         break;
-//     case CParser::RuleFunctionDefinition:
-//         return visitFunctionDefinition(
-//             dynamic_cast<CParser::FunctionDefinitionContext*>(ctx));
-//         break;
-//     case CParser::RuleDeclarator:
-//         // 处理声明符，包括数组和函数指针等
-//         // 这里暂不实现
-//         break;
-//     case CParser::RuleDirectDeclarator:
-//         // 处理直接声明符，包括数组维度等
-//         // 这里暂不实现
-//         break;
-//     // 更多类型的处理...
-//     default:
-//         // 对于未明确处理的节点类型，返回默认值
-//     }
-
-//     // 默认返回成功
-// }
 // 处理整型常量，支持十进制、十六进制、八进制格式
 int astVisitor::parseIntegerConstant(const std::string& text)
 {
@@ -3622,7 +3039,9 @@ Type astVisitor::load_var_or_func(std::string name)
     {
         // 枚举常量作为立即数加载
         funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, enumConst->addr});
-        return enumConst->type;
+        Type rettype = enumConst->type;
+        rettype.constexprVal = enumConst->addr;
+        return rettype;
     }
 
     if (auto* id = lookup_ID_decl(name))

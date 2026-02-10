@@ -24,8 +24,8 @@ struct astVisitor
     // "__global_init" + name
     // 辅助函数
     // Type baseType; // just for args, wait to modifiy
-    long long parseConstexpr(CParser::AssignmentExpressionContext* expr);
-    long long parseConstexpr(CParser::ConditionalExpressionContext* expr);
+    // long long parseConstexpr(CParser::AssignmentExpressionContext* expr);
+    // long long parseConstexpr(CParser::ConditionalExpressionContext* expr);
     int parseIntegerConstant(const std::string& text);
     int parseCharacterConstant(const std::string& text);
     bool isIntegerConstant(const std::string& text);
@@ -41,7 +41,7 @@ struct astVisitor
                                         CParser::InitDeclaratorListContext* initList);
     std::tuple<IDdef*, std::string> madeConstString(std::vector<antlr4::tree::TerminalNode*> toks);
     std::optional<std::vector<int>> decodeStringLiteral(CParser::AssignmentExpressionContext* expr);
-    std::optional<Type> tryVisitType(std::function<Type()> expr);
+    Type tryVisitType(std::function<Type()> expr);
     // varDef* madeConstString(std::string origin);
 
   public:

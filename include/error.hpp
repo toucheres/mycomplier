@@ -35,6 +35,7 @@ enum class error
     expected_func_or_funcptr,
     expected_ptr,
     expected_type,
+    expected_constexpr,
     expected_same_type,
     expected_initializerList,
     initializerList_too_long,
