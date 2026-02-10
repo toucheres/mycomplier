@@ -132,7 +132,7 @@ std::vector<IDdef> astVisitor::lowerDeclaration(CParser::DeclarationSpecifiersCo
     std::vector<IDdef> vars;
     if (specs) // 前类型
     {
-        auto [type, storageClassSpecifier] = visitDeclarationSpecifiers(specs);
+        auto [type, storageClassSpecifier, typeQualifiers] = visitDeclarationSpecifiers(specs);
         if (!type)
         {
             THROW_ERR(error::expected_type, specs);
@@ -140,6 +140,10 @@ std::vector<IDdef> astVisitor::lowerDeclaration(CParser::DeclarationSpecifiersCo
         else
         {
             basetype = *type;
+        }
+        for (auto each : typeQualifiers)
+        {
+            basetype.typeQualifiers[each] = true;
         }
         storageClassType =
             storageClassSpecifier ? *storageClassSpecifier : StorageClassSpecifier::VarDef;
@@ -171,7 +175,8 @@ std::tuple<IDdef*, std::string> astVisitor::madeConstString(
     {
         std::string s = tok->getText();
         size_t p = 0;
-        auto skip_space = [&](void) {
+        auto skip_space = [&](void)
+        {
             while (p < s.size() && (s[p] == ' ' || s[p] == '\t' || s[p] == '\n' || s[p] == '\r'))
                 p++;
         };
@@ -550,9 +555,14 @@ void astVisitor::visitFunctionDefinition(CParser::FunctionDefinitionContext* ctx
     StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::VarDef;
     if (ctx->declarationSpecifiers()) // 返回类型
     {
-        auto [rettype, storageClass] = visitDeclarationSpecifiers(ctx->declarationSpecifiers());
+        auto [rettype, storageClass, typeQualifiers] =
+            visitDeclarationSpecifiers(ctx->declarationSpecifiers());
         if (!rettype)
             THROW_ERR(error::expected_type, ctx);
+        if (typeQualifiers.size())
+        {
+            THROW_ERR(error::unexpected_typeQualifiers, ctx);
+        }
         storageClassSpecifier = storageClass ? *storageClass : storageClassSpecifier;
         functionType.type.pushTop(*rettype);
     }
@@ -643,37 +653,45 @@ void astVisitor::visitExternalDeclaration(CParser::ExternalDeclarationContext* c
     }
     return;
 }
-std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>> astVisitor::
-    visitDeclarationSpecifiers(CParser::DeclarationSpecifiersContext* ctx)
+std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>,
+           std::vector<Type::TypeQualifier>>
+astVisitor::visitDeclarationSpecifiers(CParser::DeclarationSpecifiersContext* ctx)
 {
     std::optional<Type> type;
     std::optional<StorageClassSpecifier> storageC;
+    std::vector<Type::TypeQualifier> typeQualifiers;
     // 遍历所有声明说明符
     for (auto& each : ctx->declarationSpecifier())
     {
         // 解析每个声明说明符
-        // [TODO] typeQualifier functionSpecifier alignmentSpecifier
-        Type result = visitDeclarationSpecifier(each);
-        if (result.storageClassSpecifier != StorageClassSpecifier::VarDef)
-        {
-            if (storageC)
-            {
-                THROW_ERR(error::double_StorageClassSpecifier, ctx);
-            }
-            storageC = result.storageClassSpecifier;
-        }
-        else
+        // [TODO] functionSpecifier alignmentSpecifier
+        std::variant<Type, Type::StorageClassSpecifier, Type::TypeQualifier> result =
+            visitDeclarationSpecifier(each);
+        if (result.index() == 0) // Type
         {
             if (type)
             {
                 THROW_ERR(error::double_type, ctx);
             }
-            type = result;
+            type = std::get<0>(result);
+        }
+        else if (result.index() == 1) // StorageClassSpecifier
+        {
+            if (storageC)
+            {
+                THROW_ERR(error::double_StorageClassSpecifier, ctx);
+            }
+            storageC = std::get<1>(result);
+        }
+        else if (result.index() == 2) // TypeQualifier
+        {
+            typeQualifiers.push_back(std::get<2>(result));
         }
     }
-    return {type, storageC};
+    return {type, storageC, typeQualifiers};
 }
-Type astVisitor::visitDeclarationSpecifier(CParser::DeclarationSpecifierContext* ctx)
+std::variant<Type, Type::StorageClassSpecifier, Type::TypeQualifier> astVisitor::
+    visitDeclarationSpecifier(CParser::DeclarationSpecifierContext* ctx)
 {
     // 检查是否为类型说明符
     if (ctx->typeSpecifier())
@@ -683,25 +701,45 @@ Type astVisitor::visitDeclarationSpecifier(CParser::DeclarationSpecifierContext*
     }
     else if (ctx->storageClassSpecifier()) // typedef / extern
     {
-        Type tp{};
-        tp.kind = Type::Kind::Undefined;
         if (ctx->getText() == "typedef")
         {
-            tp.storageClassSpecifier = StorageClassSpecifier::Typedef;
+            return StorageClassSpecifier::Typedef;
         }
         else if (ctx->getText() == "static")
         {
-            tp.storageClassSpecifier = StorageClassSpecifier::Static;
+            return StorageClassSpecifier::Static;
         }
         else if (ctx->getText() == "extern")
         {
-            tp.storageClassSpecifier = StorageClassSpecifier::Extern;
+            return StorageClassSpecifier::Extern;
         }
         else
         {
             THROW_ERR(error::unsurpport_StorageClassSpecifier, ctx);
         }
-        return tp;
+    }
+    else if (ctx->typeQualifier())
+    {
+        if (ctx->getText() == "const")
+        {
+            return Type::TypeQualifier::Const;
+        }
+        else if (ctx->getText() == "_Atomic")
+        {
+            return Type::TypeQualifier::_Atomic;
+        }
+        else if (ctx->getText() == "volatile")
+        {
+            return Type::TypeQualifier::Volatile;
+        }
+        else if (ctx->getText() == "restrict")
+        {
+            return Type::TypeQualifier::Restrict;
+        }
+        else
+        {
+            THROW_ERR(error::unsurpport_StorageClassSpecifier, ctx);
+        }
     }
     THROW_ERR(error::unsurpport_DeclarationSpecifier, ctx);
 }
@@ -1183,7 +1221,7 @@ IDdef astVisitor::visitParameterDeclaration(CParser::ParameterDeclarationContext
     Type basetype;
     if (ctx->declarationSpecifiers()) // 前类型
     {
-        auto [type, storageClassSpecifier] =
+        auto [type, storageClassSpecifier, typeQualifiers] =
             visitDeclarationSpecifiers(ctx->declarationSpecifiers());
         if (!type)
         {
@@ -1192,6 +1230,13 @@ IDdef astVisitor::visitParameterDeclaration(CParser::ParameterDeclarationContext
         if (storageClassSpecifier)
         {
             THROW_ERR(error ::unexpected_storageClassSpecifier, ctx->declarationSpecifiers());
+        }
+        if (typeQualifiers.size())
+        {
+            for (auto each : typeQualifiers)
+            {
+                (*type).typeQualifiers[each] = true;
+            }
         }
         basetype = *type;
     }

@@ -40,6 +40,7 @@ enum class error
     initializerList_too_long,
     unsurpported_num,
     unexpected_storageClassSpecifier,
+    unexpected_typeQualifiers,
     preprocess_error,
     unknow,
 };
@@ -104,8 +105,8 @@ struct compile_error : std::exception
     std::string func;          // 抛出位置: 函数
     std::string message_cache; // 缓存 what() 返回值
 
-    compile_error(error c, std::string ctx = {}, const char* file_in = nullptr,
-                  int line_in = 0, const char* func_in = nullptr)
+    compile_error(error c, std::string ctx = {}, const char* file_in = nullptr, int line_in = 0,
+                  const char* func_in = nullptr)
         : code(c), ctx_text(std::move(ctx)), file(file_in ? file_in : ""), line(line_in),
           func(func_in ? func_in : "")
     {
@@ -157,4 +158,5 @@ struct compile_error : std::exception
 
 // 无上下文场景
 #define THROW_ERR_NOCTX(code) throw compile_error((code), {}, __FILE__, __LINE__, __func__)
-#define THROW_ERR_INFO(info) throw compile_error((error::unknow), info, __FILE__, __LINE__, __func__)
+#define THROW_ERR_INFO(info)                                                                       \
+    throw compile_error((error::unknow), info, __FILE__, __LINE__, __func__)

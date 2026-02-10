@@ -1,7 +1,7 @@
 #pragma once
-#include "CParserBaseVisitor.h"
 #include "CLexer.h"
 #include "CParser.h"
+#include "CParserBaseVisitor.h"
 #include "error.hpp"
 #include "obj.h"
 #include <antlr4-runtime/antlr4-runtime.h>
@@ -40,8 +40,7 @@ struct astVisitor
     std::vector<IDdef> lowerDeclaration(CParser::DeclarationSpecifiersContext* specs,
                                         CParser::InitDeclaratorListContext* initList);
     std::tuple<IDdef*, std::string> madeConstString(std::vector<antlr4::tree::TerminalNode*> toks);
-    std::optional<std::vector<int>> decodeStringLiteral(
-        CParser::AssignmentExpressionContext* expr);
+    std::optional<std::vector<int>> decodeStringLiteral(CParser::AssignmentExpressionContext* expr);
     std::optional<Type> tryVisitType(std::function<Type()> expr);
     // varDef* madeConstString(std::string origin);
 
@@ -56,9 +55,12 @@ struct astVisitor
     std::vector<IDdef> visitDeclaration(CParser::DeclarationContext* ctx);
     void visitFunctionDefinition(CParser::FunctionDefinitionContext* ctx);
     void visitExternalDeclaration(CParser::ExternalDeclarationContext* ctx);
-    std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>>
+    std::tuple<std::optional<Type>, std::optional<StorageClassSpecifier>,
+               std::vector<Type::TypeQualifier>>
     visitDeclarationSpecifiers(CParser::DeclarationSpecifiersContext* ctx);
-    Type visitDeclarationSpecifier(CParser::DeclarationSpecifierContext* ctx);
+    // Type visitDeclarationSpecifier(CParser::DeclarationSpecifierContext* ctx);
+    std::variant<Type, Type::StorageClassSpecifier, Type::TypeQualifier> visitDeclarationSpecifier(
+        CParser::DeclarationSpecifierContext* ctx);
     Type visitTypeSpecifier(CParser::TypeSpecifierContext* ctx);
     std::vector<IDdef> visitInitDeclaratorList(CParser::InitDeclaratorListContext* ctx,
                                                Type basetype,
@@ -105,5 +107,5 @@ struct astVisitor
     void visitIterationStatement(CParser::IterationStatementContext* ctx);
     void visitJumpStatement(CParser::JumpStatementContext* ctx);
     std::vector<std::pair<std::string, IDdef>> visitMemberDeclarationList(
-      CParser::MemberDeclarationListContext* ctx);
+        CParser::MemberDeclarationListContext* ctx);
 };

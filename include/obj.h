@@ -31,7 +31,7 @@ enum class StorageClassSpecifier
 {
     VarDef, // func var均视为var
     StructDef,
-    EnumDef,  // enum 类型定义
+    EnumDef,   // enum 类型定义
     EnumConst, // enum 常量
     Typedef,
     Extern,
@@ -59,18 +59,17 @@ struct Type
     enum class Kind
     {
         Undefined, // 初始
-        Basic,    // 基本类型
-        Pointer,  // 指针类型
-        Array,    // 数组类型
-        Function, // 函数类型
-        Struct // 结构体
+        Basic,     // 基本类型
+        Pointer,   // 指针类型
+        Array,     // 数组类型
+        Function,  // 函数类型
+        Struct     // 结构体
         // [TODO] Union
     };
     // 兼容旧代码的别名，后续移除
     using StorageClassSpecifier = ::StorageClassSpecifier;
     enum class TypeQualifier
     {
-        None,
         Const,
         Restrict,
         Volatile,
@@ -79,7 +78,7 @@ struct Type
     Type() = default;
     Type(const Type&) = default;
     Type(Kind kind, BasicType arg);           // for basic
-    Type(Kind kind, int arg);                 // for arr ,ptr
+    Type(Kind kind, int arg);                 // for arr
     Type(Kind kind, std::string arg);         // for id
     Type(Kind kind, std::vector<IDdef> args); // for function
     Kind kind = Kind::Undefined;
@@ -91,7 +90,9 @@ struct Type
     BasicType basic_type; // avilable when kind == Basic
     value_ptr<Type> subType;
     std::vector<IDdef> args;
-
+    std::unordered_map<TypeQualifier, bool> typeQualifiers;
+    // c编译期常量: 字面量、enum 常量; const int a = 12; a不是常量, 所以只需考虑数
+    std::optional<long long> constexprVal = std::nullopt;
     int arr_num = -1; // 仅用于 Array 类型，表示数组长度；Pointer 通过 subType 层数表示
     size_t alignas_num = 8;
     StorageClassSpecifier storageClassSpecifier = StorageClassSpecifier::VarDef;
@@ -102,11 +103,6 @@ struct Type
     std::string to_string() const;
     size_t getsize() const;
     bool operator==(const Type& other) const;
-    // 兼容旧逻辑的占位：当前类型系统已去除 Kind::ID，直接返回自身
-    // Type whthoutID() const
-    // {
-    //     return *this;
-    // }
 };
 struct IDdef
 {
@@ -157,7 +153,7 @@ struct DeclRepository
     // tree_scoped_map<std::string, IDdef, Label, ScopeMeta> func_decls;// 与var_decls一起管理
     tree_scoped_map<std::string, IDdef, Label, ScopeMeta> typedef_decls;
     tree_scoped_map<std::string, IDdef, Label, ScopeMeta> struct_decls;
-    tree_scoped_map<std::string, IDdef, Label, ScopeMeta> enum_decls;    // enum 类型定义
+    tree_scoped_map<std::string, IDdef, Label, ScopeMeta> enum_decls;       // enum 类型定义
     tree_scoped_map<std::string, IDdef, Label, ScopeMeta> enum_const_decls; // enum 常量
 
     size_t static_label_counter = 0;
