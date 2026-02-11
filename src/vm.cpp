@@ -214,8 +214,9 @@ void VM::debug()
     }
     else
     {
+        // [TODO] 单条日志过大
         debug_buffer.push_back(info);
-        if (debug_buffer.size() > 10240)
+        if (debug_buffer.size() > 1023)
         {
             debug_buffer.pop_front();
         }

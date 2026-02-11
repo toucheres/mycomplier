@@ -160,15 +160,114 @@ std::tuple<IDdef*, std::string> astVisitor::madeConstString(
 {
     std::string chars_after_transed;
 
-    auto hexval = [](char c) -> int
+    auto decode_normal = [&](const std::string& s, size_t k, std::string& out,
+                             size_t& newpos) -> bool
     {
-        if (c >= '0' && c <= '9')
-            return c - '0';
-        if (c >= 'a' && c <= 'f')
-            return 10 + (c - 'a');
-        if (c >= 'A' && c <= 'F')
-            return 10 + (c - 'A');
-        return 0;
+        // assume s[k] == '"'
+        size_t i = k + 1;
+        while (i < s.size())
+        {
+            char c = s[i];
+            if (c == '"')
+            {
+                newpos = i + 1;
+                return true;
+            }
+            if (c == '\\' && i + 1 < s.size())
+            {
+                char esc = s[i + 1];
+                switch (esc)
+                {
+                case 'n':
+                    out.push_back('\n');
+                    i += 2;
+                    break;
+                case 't':
+                    out.push_back('\t');
+                    i += 2;
+                    break;
+                case 'r':
+                    out.push_back('\r');
+                    i += 2;
+                    break;
+                case '\\':
+                    out.push_back('\\');
+                    i += 2;
+                    break;
+                case '\'':
+                    out.push_back('\'');
+                    i += 2;
+                    break;
+                case '"':
+                    out.push_back('"');
+                    i += 2;
+                    break;
+                case 'a':
+                    out.push_back('\a');
+                    i += 2;
+                    break;
+                case 'b':
+                    out.push_back('\b');
+                    i += 2;
+                    break;
+                case 'f':
+                    out.push_back('\f');
+                    i += 2;
+                    break;
+                case 'v':
+                    out.push_back('\v');
+                    i += 2;
+                    break;
+                case '?':
+                    out.push_back('?');
+                    i += 2;
+                    break;
+                case 'x':
+                {
+                    i += 2;
+                    int val = 0;
+                    bool any = false;
+                    while (i < s.size() && std::isxdigit((unsigned char)s[i]))
+                    {
+                        val = val * 16 +
+                              (std::isdigit(s[i])
+                                   ? s[i] - '0'
+                                   : (std::islower(s[i]) ? s[i] - 'a' + 10 : s[i] - 'A' + 10));
+                        i++;
+                        any = true;
+                    }
+                    if (any)
+                        out.push_back(static_cast<char>(val));
+                    break;
+                }
+                default:
+                    if (esc >= '0' && esc <= '7')
+                    {
+                        int val = esc - '0';
+                        i += 2;
+                        int cnt = 1;
+                        while (cnt < 3 && i < s.size() && s[i] >= '0' && s[i] <= '7')
+                        {
+                            val = val * 8 + (s[i] - '0');
+                            i++;
+                            cnt++;
+                        }
+                        out.push_back(static_cast<char>(val));
+                    }
+                    else
+                    {
+                        out.push_back(esc);
+                        i += 2;
+                    }
+                }
+            }
+            else
+            {
+                out.push_back(c);
+                i++;
+            }
+        }
+        return false;
     };
 
     for (auto tok : toks)
@@ -216,112 +315,13 @@ std::tuple<IDdef*, std::string> astVisitor::madeConstString(
                 break;
             }
 
-            // normal string literal: "..."
+            // normal string literal: '"..."'
             if (q < s.size() && s[q] == '"')
             {
-                size_t k = q + 1;
-                while (k < s.size())
-                {
-                    char c = s[k];
-                    if (c == '"')
-                    {
-                        p = k + 1;
-                        break;
-                    }
-                    if (c == '\\' && k + 1 < s.size())
-                    {
-                        char esc = s[k + 1];
-                        switch (esc)
-                        {
-                        case 'n':
-                            chars_after_transed.push_back('\n');
-                            k += 2;
-                            break;
-                        case 't':
-                            chars_after_transed.push_back('\t');
-                            k += 2;
-                            break;
-                        case 'r':
-                            chars_after_transed.push_back('\r');
-                            k += 2;
-                            break;
-                        case '\\':
-                            chars_after_transed.push_back('\\');
-                            k += 2;
-                            break;
-                        case '\'':
-                            chars_after_transed.push_back('\'');
-                            k += 2;
-                            break;
-                        case '"':
-                            chars_after_transed.push_back('"');
-                            k += 2;
-                            break;
-                        case 'a':
-                            chars_after_transed.push_back('\a');
-                            k += 2;
-                            break;
-                        case 'b':
-                            chars_after_transed.push_back('\b');
-                            k += 2;
-                            break;
-                        case 'f':
-                            chars_after_transed.push_back('\f');
-                            k += 2;
-                            break;
-                        case 'v':
-                            chars_after_transed.push_back('\v');
-                            k += 2;
-                            break;
-                        case '?':
-                            chars_after_transed.push_back('?');
-                            k += 2;
-                            break;
-                        case 'x':
-                        {
-                            k += 2;
-                            int val = 0;
-                            bool any = false;
-                            while (k < s.size() && std::isxdigit((unsigned char)s[k]))
-                            {
-                                val = val * 16 + hexval(s[k]);
-                                k++;
-                                any = true;
-                            }
-                            if (any)
-                                chars_after_transed.push_back(static_cast<char>(val));
-                            break;
-                        }
-                        default:
-                            if (esc >= '0' && esc <= '7')
-                            {
-                                int val = esc - '0';
-                                k += 2;
-                                int cnt = 1;
-                                while (cnt < 3 && k < s.size() && s[k] >= '0' && s[k] <= '7')
-                                {
-                                    val = val * 8 + (s[k] - '0');
-                                    k++;
-                                    cnt++;
-                                }
-                                chars_after_transed.push_back(static_cast<char>(val));
-                            }
-                            else
-                            {
-                                chars_after_transed.push_back(esc);
-                                k += 2;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        chars_after_transed.push_back(c);
-                        k++;
-                    }
-                }
-                // if loop ended without finding closing quote, break to avoid infinite loop
-                if (k >= s.size() && (k == 0 || s[k - 1] != '"'))
+                size_t newpos = 0;
+                if (!decode_normal(s, q, chars_after_transed, newpos))
                     break;
+                p = newpos;
                 continue;
             }
 
@@ -375,154 +375,27 @@ std::optional<std::vector<int>> astVisitor::decodeStringLiteral(
     {
         return std::nullopt;
     }
-    auto hexValue = [](char ch) -> int
-    {
-        if (ch >= '0' && ch <= '9')
-        {
-            return ch - '0';
-        }
-        if (ch >= 'a' && ch <= 'f')
-        {
-            return ch - 'a' + 10;
-        }
-        if (ch >= 'A' && ch <= 'F')
-        {
-            return ch - 'A' + 10;
-        }
-        return -1;
-    };
     size_t pos = 0;
     std::vector<int> result;
     while (pos < text.size())
     {
-        if (text.compare(pos, 2, "u8") == 0 && pos + 2 < text.size() && text[pos + 2] == '"')
-        {
-            pos += 2;
-        }
-        else if ((text[pos] == 'u' || text[pos] == 'U' || text[pos] == 'L') &&
-                 pos + 1 < text.size() && text[pos + 1] == '"')
-        {
-            pos += 1;
-        }
-        if (pos >= text.size() || text[pos] != '"')
-        {
-            return std::nullopt;
-        }
-        pos++;
-        while (pos < text.size() && text[pos] != '"')
-        {
-            if (text[pos] == '\\')
-            {
-                pos++;
-                if (pos >= text.size())
-                {
-                    return std::nullopt;
-                }
-                char esc = text[pos];
-                switch (esc)
-                {
-                case 'n':
-                    result.push_back('\n');
-                    pos++;
-                    break;
-                case 't':
-                    result.push_back('\t');
-                    pos++;
-                    break;
-                case 'r':
-                    result.push_back('\r');
-                    pos++;
-                    break;
-                case 'a':
-                    result.push_back('\a');
-                    pos++;
-                    break;
-                case 'b':
-                    result.push_back('\b');
-                    pos++;
-                    break;
-                case 'f':
-                    result.push_back('\f');
-                    pos++;
-                    break;
-                case 'v':
-                    result.push_back('\v');
-                    pos++;
-                    break;
-                case '\\':
-                    result.push_back('\\');
-                    pos++;
-                    break;
-                case '\'':
-                    result.push_back('\'');
-                    pos++;
-                    break;
-                case '"':
-                    result.push_back('"');
-                    pos++;
-                    break;
-                case 'x':
-                {
-                    pos++;
-                    int value = 0;
-                    bool hasDigit = false;
-                    while (pos < text.size())
-                    {
-                        int hv = hexValue(text[pos]);
-                        if (hv < 0)
-                        {
-                            break;
-                        }
-                        hasDigit = true;
-                        value = (value << 4) + hv;
-                        pos++;
-                    }
-                    if (!hasDigit)
-                    {
-                        return std::nullopt;
-                    }
-                    result.push_back(value & 0xFF);
-                    break;
-                }
-                case '0':
-                case '1':
-                case '2':
-                case '3':
-                case '4':
-                case '5':
-                case '6':
-                case '7':
-                {
-                    int value = esc - '0';
-                    pos++;
-                    int count = 1;
-                    while (count < 3 && pos < text.size() && text[pos] >= '0' && text[pos] <= '7')
-                    {
-                        value = value * 8 + (text[pos] - '0');
-                        pos++;
-                        count++;
-                    }
-                    result.push_back(value & 0xFF);
-                    break;
-                }
-                default:
-                    result.push_back(static_cast<unsigned char>(esc));
-                    pos++;
-                    break;
-                }
-            }
-            else
-            {
-                result.push_back(static_cast<unsigned char>(text[pos]));
-                pos++;
-            }
-        }
+        // skip whitespace between adjacent tokens
+        while (pos < text.size() &&
+               (text[pos] == ' ' || text[pos] == '\t' || text[pos] == '\n' || text[pos] == '\r'))
+            pos++;
         if (pos >= text.size())
+            break;
+        std::string chunk;
+        size_t start = pos;
+        if (!decode_string_token_text(text, pos, chunk))
         {
             return std::nullopt;
         }
-        pos++;
+        for (unsigned char c : chunk)
+            result.push_back(static_cast<int>(c));
     }
+    if (result.empty())
+        return std::nullopt;
     result.push_back(0);
     return result;
 }
@@ -1748,7 +1621,7 @@ Type astVisitor::visitAdditiveExpression(CParser::AdditiveExpressionContext* ctx
              rret.basic_type == Type::BasicType::Long))
         {
             // 左指针右整形
-            auto lret = (visitMultiplicativeExpression(in[0]));
+            auto lret = visitMultiplicativeExpression(in[0]);
             auto rret = func(in.subspan(1, in.size() - 1), index + 1);
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, lret.subType->getsize()});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::MUL});
@@ -1759,14 +1632,14 @@ Type astVisitor::visitAdditiveExpression(CParser::AdditiveExpressionContext* ctx
                   lret.basic_type == Type::BasicType::Long))
         {
             // 左整形右指针
-            auto lret = (visitMultiplicativeExpression(in[0]));
+            auto lret = visitMultiplicativeExpression(in[0]);
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, rret.subType->getsize()});
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::MUL});
             auto rret = func(in.subspan(1, in.size() - 1), index + 1);
         }
         else // 其他基础2类型不做特殊处理
         {
-            auto lret = (visitMultiplicativeExpression(in[0]));
+            auto lret = visitMultiplicativeExpression(in[0]);
             auto rret = func(in.subspan(1, in.size() - 1), index + 1);
         }
         if (op_token == "+")
@@ -1879,7 +1752,7 @@ Type astVisitor::visitUnaryExpression(CParser::UnaryExpressionContext* ctx)
     if (ctx->postfixExpression())
     {
         // 分支4: postfixExpression
-        auto pret = (visitPostfixExpression(ctx->postfixExpression()));
+        auto pret = visitPostfixExpression(ctx->postfixExpression());
         type = pret;
     }
     else if (ctx->unaryOperator)
@@ -2115,12 +1988,6 @@ Type astVisitor::visitPostfixExpression(CParser::PostfixExpressionContext* ctx)
                 funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LEA, def->addr});
             }
             auto funcaddr = func(0, end - 1); // 解析函数地址
-            // funcaddr.removeID();
-            // if (funcaddr.kind == Type::Kind::ID)
-            // {
-            //     auto tp = *funcaddr.subType;
-            //     funcaddr = tp;
-            // }
             funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::CALL});
             Type rettype = funcaddr;
             if (funcaddr.kind == Type::Kind::Pointer && funcaddr.subType &&
@@ -2818,83 +2685,17 @@ astVisitor::astVisitor(std::string name, OBJ& ob) : obj(ob)
 }
 void astVisitor::visitAsmADDer(CParser::AsmADDerContext* ctx)
 {
-    auto str = ctx->StringLiteral()->getText();
     std::string text = ctx->StringLiteral()->getText();
     std::string content;
-    size_t first_quote = text.find('"');
-    size_t last_quote = text.rfind('"');
-    if (first_quote != std::string::npos && last_quote != std::string::npos &&
-        last_quote > first_quote)
+    size_t pos = 0;
+    if (decode_string_token_text(text, pos, content))
     {
-        std::string raw = text.substr(first_quote + 1, last_quote - first_quote - 1);
-        content.reserve(raw.size());
-        for (size_t i = 0; i < raw.size(); ++i)
-        {
-            char c = raw[i];
-            if (c == '\\' && i + 1 < raw.size())
-            {
-                char esc = raw[++i];
-                if (esc == 'n')
-                    content.push_back('\n');
-                else if (esc == 't')
-                    content.push_back('\t');
-                else if (esc == 'r')
-                    content.push_back('\r');
-                else if (esc == '\\')
-                    content.push_back('\\');
-                else if (esc == '\'')
-                    content.push_back('\'');
-                else if (esc == '\"')
-                    content.push_back('\"');
-                else if (esc == '0')
-                    content.push_back('\0');
-                else if (esc == 'x') // hex escape: \xhh...
-                {
-                    int val = 0;
-                    int cnt = 0;
-                    while (i + 1 < raw.size() &&
-                           std::isxdigit(static_cast<unsigned char>(raw[i + 1])) && cnt < 2)
-                    {
-                        ++i;
-                        char hx = raw[i];
-                        val = val * 16 +
-                              (std::isdigit(static_cast<unsigned char>(hx))
-                                   ? hx - '0'
-                                   : (std::toupper(static_cast<unsigned char>(hx)) - 'A' + 10));
-                        ++cnt;
-                    }
-                    content.push_back(static_cast<char>(val));
-                }
-                else if (esc >= '0' && esc <= '7') // octal \nnn
-                {
-                    int val = esc - '0';
-                    int cnt = 1;
-                    while (i + 1 < raw.size() && raw[i + 1] >= '0' && raw[i + 1] <= '7' && cnt < 3)
-                    {
-                        ++i;
-                        val = val * 8 + (raw[i] - '0');
-                        ++cnt;
-                    }
-                    content.push_back(static_cast<char>(val));
-                }
-                else
-                {
-                    // unknown escape, keep the character itself
-                    content.push_back(esc);
-                }
-            }
-            else
-            {
-                content.push_back(c);
-            }
-        }
+        funcnow->funcInfo.asms.push_back(content);
     }
     else
     {
-        // Fallback: no surrounding quotes found, use the raw token
-        content = text;
+        funcnow->funcInfo.asms.push_back(text);
     }
-    funcnow->funcInfo.asms.push_back(content);
     return;
 }
 // 处理整型常量，支持十进制、十六进制、八进制格式
@@ -2927,60 +2728,10 @@ int astVisitor::parseIntegerConstant(const std::string& text)
 // 处理字符常量，支持转义序列
 int astVisitor::parseCharacterConstant(const std::string& text)
 {
-    // 移除前后的单引号
-    std::string content = text.substr(1, text.size() - 2);
-
-    // 处理转义序列
-    if (content.size() > 0 && content[0] == '\\')
-    {
-        if (content.size() < 2)
-        {
-            throw error::invalid_constant;
-        }
-
-        switch (content[1])
-        {
-        case 'n':
-            return '\n'; // 换行
-        case 't':
-            return '\t'; // 制表符
-        case 'r':
-            return '\r'; // 回车
-        case '0':
-            return '\0'; // 空字符
-        case '\\':
-            return '\\'; // 反斜杠
-        case '\'':
-            return '\''; // 单引号
-        case '\"':
-            return '\"'; // 双引号
-        case 'x':
-        { // 十六进制表示 \xhh
-            if (content.size() < 4)
-            {
-                throw error::invalid_constant;
-            }
-            std::string hexValue = content.substr(2, 2);
-            try
-            {
-                return std::stoi(hexValue, nullptr, 16);
-            }
-            catch (...)
-            {
-                throw error::invalid_constant;
-            }
-        }
-        default:
-            throw error::invalid_constant;
-        }
-    }
-    else if (content.size() == 1)
-    {
-        // 普通字符
-        return static_cast<int>(content[0]);
-    }
-
-    throw error::invalid_constant;
+    int v = 0;
+    if (!decode_character_token(text, v))
+        throw error::invalid_constant;
+    return v;
 }
 
 // 检查是否为整型常量
