@@ -1,11 +1,11 @@
 #include "complier.hpp"
-#include "settings.h"
 #include "ASM.hpp"
-#include "CParserBaseVisitor.h"
 #include "CLexer.h"
 #include "CParser.h"
+#include "CParserBaseVisitor.h"
 #include "obj.h"
 #include "preprocessor.hpp"
+#include "settings.h"
 #include "tools.hpp"
 #include <algorithm>
 #include <antlr4-runtime/antlr4-runtime.h>
@@ -170,7 +170,6 @@ std::string Type::to_string() const
 
 std::expected<size_t, error> linker::pushfunc(std::string funcname)
 {
-    // [TODO] globalvar@name 的链接
     IDdef* func = nullptr;
     auto ret = addrmap.find("func@" + funcname);
     if (ret == addrmap.end()) // 重定向表未记录
@@ -256,10 +255,10 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                         if (std::regex_search(this->exe.asms[i], match, pattern) &&
                             match.size() > 1)
                         {
-                            auto funnametoreaddr = match[1].str(); // 返回第一个捕获组
+                            auto varname = match[1].str(); // 返回第一个捕获组
                             size_t pos = match.position(0);
                             size_t len = match.length(0);
-                            auto it = addrmap.find("globalvar@" + funnametoreaddr);
+                            auto it = addrmap.find("globalvar@" + varname);
                             if (it != addrmap.end())
                             {
                                 // 替换为实际地址
@@ -267,12 +266,7 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                             }
                             else
                             {
-                                auto ret = pushfunc(funnametoreaddr);
-                                if (!ret)
-                                {
-                                    return std::unexpected(error::undifined_func);
-                                }
-                                this->exe.asms[i].replace(pos, len, std::to_string(ret.value()));
+                                THROW_ERR_NOCTX_INFO(error::undefined_symbol, varname);
                             }
                         }
                         else
@@ -283,11 +277,12 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                 }
             }
         }
+        if (!flag)
+        {
+            THROW_ERR_NOCTX_INFO(error::undefined_symbol, funcname);
+        }
     }
-    else // 重定向表已记录
-    {
-        return addrmap["func@" + funcname];
-    }
+    // 重定向表已记录
     return addrmap["func@" + funcname];
 }
 std::expected<std::vector<std::string>, error> linker::process()
@@ -446,9 +441,14 @@ std::expected<std::vector<std::string>, error> complier::process(
     showFoldedNames = tvm.get(app_options::show_folded_names).or_(false);
     disableStd = tvm.get(app_options::disable_std).or_(false);
     preprocess_only = tvm.get(app_options::preprocess_only).or_(false);
-    try {
+    try
+    {
         mainargs = tvm.get_direct(main_args);
-    } catch (...) { mainargs = {}; }
+    }
+    catch (...)
+    {
+        mainargs = {};
+    }
 
     std::vector<OBJ> objs;
     if (!disableStd)
@@ -794,10 +794,14 @@ std::expected<std::vector<std::string>, error> complier::process(std::vector<std
     bool disableStd = tvm.get(app_options::disable_std).or_(false);
     bool preprocess_only = tvm.get(app_options::preprocess_only).or_(false);
     std::vector<std::string> mainargs;
-    try {
+    try
+    {
         mainargs = tvm.get_direct(main_args);
-    } catch (...) {
+    }
+    catch (...)
+    {
         mainargs = {};
     }
-    return process(std::move(paths), showASt, tolerate, showFoldedNames, disableStd, mainargs, preprocess_only);
+    return process(std::move(paths), showASt, tolerate, showFoldedNames, disableStd, mainargs,
+                   preprocess_only);
 }

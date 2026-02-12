@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.14)
 project(mycomplier)
 
 # 设置 C++23 标准
@@ -124,7 +124,15 @@ else()
   target_link_libraries(mycomplier PRIVATE ${ANTLR4_RUNTIME_LIB})
 endif()
 find_package(Boost REQUIRED COMPONENTS program_options)
-target_link_libraries(mycomplier PRIVATE Boost::program_options)
+
+include(FetchContent)
+FetchContent_Declare(
+  magic_enum
+  GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
+  GIT_TAG        v0.9.7
+)
+FetchContent_MakeAvailable(magic_enum)
+target_link_libraries(mycomplier PRIVATE magic_enum Boost::program_options)
 
 # 添加 test 子目录以构建并注册测试
 add_subdirectory(${CMAKE_SOURCE_DIR}/test)

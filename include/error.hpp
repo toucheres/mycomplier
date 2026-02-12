@@ -1,8 +1,8 @@
 #pragma once
 #include <exception>
+#include <magic_enum/magic_enum.hpp>
 #include <string>
 #include <utility>
-
 enum class error
 {
     file_not_exsist,
@@ -42,6 +42,7 @@ enum class error
     unsurpported_num,
     unexpected_storageClassSpecifier,
     unexpected_typeQualifiers,
+    undefined_symbol,
     preprocess_error,
     unknow,
 };
@@ -111,7 +112,8 @@ struct compile_error : std::exception
         : code(c), ctx_text(std::move(ctx)), file(file_in ? file_in : ""), line(line_in),
           func(func_in ? func_in : "")
     {
-        message_cache = std::string("error[") + error_name(code) + "]";
+        // message_cache = std::string("error[") + error_name(code) + "]";
+        message_cache = std::string("error[") + std::string{magic_enum::enum_name(code)} + "]";
 
         if (!file.empty())
         {
@@ -159,5 +161,7 @@ struct compile_error : std::exception
 
 // 无上下文场景
 #define THROW_ERR_NOCTX(code) throw compile_error((code), {}, __FILE__, __LINE__, __func__)
+#define THROW_ERR_NOCTX_INFO(code, imf)                                                            \
+    throw compile_error((code), imf, __FILE__, __LINE__, __func__)
 #define THROW_ERR_INFO(info)                                                                       \
     throw compile_error((error::unknow), info, __FILE__, __LINE__, __func__)
