@@ -360,55 +360,6 @@ std::expected<std::vector<std::string>, error> linker::process()
     }
 }
 
-// size_t Type::getsize() const
-// {
-//     if (this->basic_type == BasicType::Char && (!this->is_pointer()))
-//     {
-//         return 1;
-//     }
-//     return VCPU::size_word;
-// }
-
-// Type::Type(std::shared_ptr<peg::Ast> astnode)
-// {
-//     if (!astnode)
-//     {
-//         throw;
-//     }
-//     auto node = *astnode;
-//     std::string basictypename = node.nodes[0]->token_to_string();
-//     if (basictypename == "int")
-//     {
-//         basic_type = BasicType::Int;
-//     }
-//     else if (basictypename == "char")
-//     {
-//         basic_type = BasicType::Char;
-//     }
-//     else if (basictypename == "void")
-//     {
-//         basic_type = BasicType::Void;
-//     }
-//     if (node.nodes.size() == 2)
-//     {
-//         // 有ptr
-//         auto& ptrs = *node.nodes[1];
-//         std::string ptr_str = ptrs.token_to_string();
-//         this->pointer_level = std::count(ptr_str.begin(), ptr_str.end(), '*');
-//     }
-// }
-
-// argDef::argDef(std::shared_ptr<peg::Ast> astnode)
-// {
-//     if (!astnode)
-//     {
-//         throw;
-//     }
-//     auto node = *astnode;
-//     type = Type{node.nodes[0]};
-//     name = node.nodes[1]->token_to_string();
-// }
-
 size_t IDdef::get_addr_in_stack(size_t posnow)
 {
     // [TODO] char的考虑
