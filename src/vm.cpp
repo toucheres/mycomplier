@@ -180,6 +180,7 @@ catch (...)
     dump_debug_buffer(128);
     throw;
 }
+// [TIME] 30.7
 void VM::debug()
 {
     std::ostringstream out;

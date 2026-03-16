@@ -132,8 +132,7 @@ static size_t find_identifier(const std::string& text, const std::string& name, 
         if (i + name.size() <= text.size() && text.compare(i, name.size(), name) == 0)
         {
             bool start_ok = (i == 0 || !is_ident_char(text[i - 1]));
-            bool end_ok = (i + name.size() >= text.size() ||
-                           !is_ident_char(text[i + name.size()]));
+            bool end_ok = (i + name.size() >= text.size() || !is_ident_char(text[i + name.size()]));
             if (start_ok && end_ok)
                 return i;
         }
@@ -360,8 +359,8 @@ std::expected<file, error> Preprocessor::deal_directives(file src)
     while (src.readline(line))
     {
         // 检查是否是预处理指令
-        std::regex directive_regex(R"(^\s*#\s*(\w+)\s*(.*))");
-        std::smatch dmatch;
+        static const std::regex directive_regex(R"(^\s*#\s*(\w+)\s*(.*))");
+        static std::smatch dmatch;
 
         if (std::regex_search(line, dmatch, directive_regex))
         {
@@ -427,8 +426,8 @@ std::expected<file, error> Preprocessor::deal_directives(file src)
                 if (skip)
                     continue;
                 // 提取要 undef 的名字
-                std::regex undef_regex(R"(^\s*#\s*undef\s+(\w+))");
-                std::smatch um;
+                static const std::regex undef_regex(R"(^\s*#\s*undef\s+(\w+))");
+                static std::smatch um;
                 if (std::regex_search(line, um, undef_regex))
                 {
                     std::string name = um[1];
@@ -439,8 +438,8 @@ std::expected<file, error> Preprocessor::deal_directives(file src)
             }
             else if (directive == "ifdef")
             {
-                std::regex ifdef_regex(R"(^\s*#\s*ifdef\s+(\w+))");
-                std::smatch im;
+                static const std::regex ifdef_regex(R"(^\s*#\s*ifdef\s+(\w+))");
+                static std::smatch im;
                 if (std::regex_search(line, im, ifdef_regex))
                 {
                     std::string name = im[1];
@@ -451,8 +450,8 @@ std::expected<file, error> Preprocessor::deal_directives(file src)
             }
             else if (directive == "ifndef")
             {
-                std::regex ifndef_regex(R"(^\s*#\s*ifndef\s+(\w+))");
-                std::smatch nm;
+                static const std::regex ifndef_regex(R"(^\s*#\s*ifndef\s+(\w+))");
+                static std::smatch nm;
                 if (std::regex_search(line, nm, ifndef_regex))
                 {
                     std::string name = nm[1];

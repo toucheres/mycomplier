@@ -21,6 +21,7 @@ struct IDdef;
 
 struct StructInfo
 {
+    std::string name;
     std::vector<std::pair<std::string, IDdef>> members;
     size_t getmemberbias(std::string membername);
     IDdef* getmember(std::string name);
@@ -77,15 +78,15 @@ struct Type
     };
     Type() = default;
     Type(const Type&) = default;
+    Type(Kind kind);
     Type(Kind kind, BasicType arg);           // for basic
     Type(Kind kind, int arg);                 // for arr
-    Type(Kind kind, std::string arg);         // for id
     Type(Kind kind, std::vector<IDdef> args); // for function
     Kind kind = Kind::Undefined;
     ValueType valueType = ValueType::Right;
     StructInfo structInfo;
     // 标识符名称在迁移到 IDdef 过程中暂时保留，后续可移除
-    std::string structID; // 仅用于struct
+    // std::string structID; // 仅用于struct
     // 基础类型
     BasicType basic_type; // avilable when kind == Basic
     value_ptr<Type> subType;

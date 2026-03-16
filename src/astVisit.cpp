@@ -636,7 +636,7 @@ Type astVisitor::visitTypeSpecifier(CParser::TypeSpecifierContext* ctx)
                 IDdef thisStruct;
                 thisStruct.storageClassSpecifier = Type::StorageClassSpecifier::StructDef;
                 static long structIndex = 0;
-                nonameID = thisStruct.name = thisStruct.type.structID =
+                nonameID = thisStruct.name = thisStruct.type.structInfo.name =
                     ctx->structOrUnionSpecifier()->Identifier()
                         ? ctx->structOrUnionSpecifier()->Identifier()->getText()
                         : "__nuname_struct_" + std::to_string(structIndex++);
