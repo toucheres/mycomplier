@@ -245,7 +245,7 @@ void complier::printAST(antlr4::tree::ParseTree* tree)
             size_t idx = ctx->getRuleIndex();
             try
             {
-                CParser::initialize(); // [TIME]
+                // CParser::initialize(); // [TIME]
                 static CParser parser(nullptr);
                 const auto& names = parser.getRuleNames();
                 if (idx < names.size())
@@ -293,7 +293,7 @@ void complier::printAST(antlr4::tree::ParseTree* tree)
             size_t idx = ctx->getRuleIndex();
             try
             {
-                CParser::initialize();
+                // CParser::initialize();
                 static CParser parser(nullptr); // [TIME]
                 const auto& names = parser.getRuleNames();
                 if (idx < names.size())
@@ -405,7 +405,7 @@ void complier::printAST(antlr4::tree::ParseTree* tree)
                             if (auto ctx = dynamic_cast<antlr4::ParserRuleContext*>(chain_nodes[j]))
                             {
                                 size_t idx = ctx->getRuleIndex();
-                                CParser::initialize();
+                                // CParser::initialize();
                                 static CParser parser(nullptr);
                                 const auto& names = parser.getRuleNames();
                                 if (idx < names.size())
