@@ -11,7 +11,7 @@ const std::vector<std::string> platform::get_default_libc_paths()
     std::vector<std::string> libcs{};
     get_default_root_paths() + "/stdlibc";
     std::filesystem::path libcPath = get_default_root_paths() + "/stdlibc";
-    for (const auto& entry : std::filesystem::directory_iterator(libcPath))
+    for (const auto &entry : std::filesystem::directory_iterator(libcPath))
     {
         if (entry.is_regular_file() && entry.path().extension() == ".c")
         {
@@ -23,5 +23,5 @@ const std::vector<std::string> platform::get_default_libc_paths()
 
 const std::string platform::get_default_root_paths()
 {
-    return std::string{"/home/toucher/vscoderope/mycomplier"};
+    return std::filesystem::current_path() / "..";
 }

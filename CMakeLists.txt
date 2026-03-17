@@ -21,7 +21,11 @@ if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # 查找 ANTLR4 工具
-find_program(ANTLR_EXECUTABLE REQUIRED antlr4)
+find_program(ANTLR_EXECUTABLE
+  NAMES
+    antlr4
+  REQUIRED
+)
 
 # 定义语法文件（分为 lexer 与 parser）
 set(GRAMMAR_FILES
