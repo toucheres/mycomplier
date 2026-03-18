@@ -19,7 +19,6 @@
 #include <unistd.h>
 #endif
 #include <cstdio>
-
 std::expected<size_t, error> linker::pushfunc(std::string funcname)
 {
     IDdef* func = nullptr;

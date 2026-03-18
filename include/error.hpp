@@ -1,6 +1,6 @@
 #pragma once
 #include <exception>
-#include <magic_enum/magic_enum.hpp>
+#include "magic_enum/magic_enum.hpp"
 #include <string>
 #include <utility>
 enum class error

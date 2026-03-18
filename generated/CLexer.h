@@ -1,6 +1,6 @@
 #include "CLexerBase.h"
 
-// Generated from /home/toucher/vscoderope/mycomplier/grammar/CLexer.g4 by ANTLR 4.13.1
+// Generated from grammar/CLexer.g4 by ANTLR 4.13.1
 
 #pragma once
 

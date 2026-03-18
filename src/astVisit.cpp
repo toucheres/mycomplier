@@ -8,6 +8,7 @@
 #include "type_utils.hpp"
 #include "vm.h"
 #include <algorithm>
+#include <format>
 #include <functional>
 #include <tree/TerminalNode.h>
 #include <utility>
@@ -592,7 +593,7 @@ std::variant<Type, Type::StorageClassSpecifier, Type::TypeQualifier> astVisitor:
         }
         else if (ctx->getText() == "_Atomic")
         {
-            return Type::TypeQualifier::_Atomic;
+            return Type::TypeQualifier::Atomic;
         }
         else if (ctx->getText() == "volatile")
         {
@@ -1132,14 +1133,14 @@ IDdef astVisitor::visitParameterDeclaration(CParser::ParameterDeclarationContext
         IDdef iddef;
         iddef.type = visitAbstractDeclarator(ctx->abstractDeclarator());
         iddef.type.pushTop(basetype);
-        iddef.name = "__noname_para_" + noname_para_index++;
+        iddef.name = std::format("__noname_para_{}", noname_para_index++);
         return iddef;
     }
     else
     {
         IDdef tp;
         tp.type = basetype;
-        tp.name = "__noname_para_" + noname_para_index++;
+        tp.name = std::format("__noname_para_{}", noname_para_index++);
         return tp;
     }
     throw;
@@ -1982,7 +1983,7 @@ Type astVisitor::visitPostfixExpression(CParser::PostfixExpressionContext* ctx)
                 struct_ret.type = funtype.subType;
                 struct_ret.kind = IDdef::Kind::Local;
                 static size_t index = 0;
-                struct_ret.name = "__struct_ret" + index++;
+                struct_ret.name = std::format("__struct_ret", index++);
                 auto def = record_ID_decl(struct_ret, funcnow);
                 funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::IMM, def->addr});
                 funcnow->funcInfo.asms.push_back(ASM{ASM::basic_asm::LEA, def->addr});
@@ -2269,7 +2270,7 @@ std::tuple<std::vector<Type::TypeQualifier>, std::optional<Type>> astVisitor::
             }
             else if (str == "_Atomic")
             {
-                typeQualifier.push_back(Type::TypeQualifier::_Atomic);
+                typeQualifier.push_back(Type::TypeQualifier::Atomic);
             }
         }
         else if (auto ts = tsq->typeSpecifier())
@@ -2573,7 +2574,7 @@ std::vector<std::pair<std::string, IDdef>> astVisitor::visitMemberDeclarationLis
         {
             IDdef tpvar;
             tpvar.type = *basetype;
-            tpvar.name = "__noname_member_" + nonameindex;
+            tpvar.name = std::format("__noname_member_{}", nonameindex);
             tpvar.valueType = ValueType::Left;
             tps.push_back(tpvar);
         }

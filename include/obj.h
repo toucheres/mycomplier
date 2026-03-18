@@ -74,7 +74,7 @@ struct Type
         Const,
         Restrict,
         Volatile,
-        _Atomic
+        Atomic
     };
     Type() = default;
     Type(const Type&) = default;
