@@ -1,6 +1,6 @@
 #include "CLexerBase.h"
 
-// Generated from grammar/CLexer.g4 by ANTLR 4.13.1
+// Generated from grammar/CLexer.g4 by ANTLR 4.13.2
 
 
 #include "CLexer.h"
@@ -46,7 +46,7 @@ struct CLexerStaticData final {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
 static thread_local
 #endif
-CLexerStaticData *clexerLexerStaticData = nullptr;
+std::unique_ptr<CLexerStaticData> clexerLexerStaticData = nullptr;
 
 void clexerLexerInitialize() {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
@@ -807,7 +807,7 @@ void clexerLexerInitialize() {
   for (size_t i = 0; i < count; i++) { 
     staticData->decisionToDFA.emplace_back(staticData->atn->getDecisionState(i), i);
   }
-  clexerLexerStaticData = staticData.release();
+  clexerLexerStaticData = std::move(staticData);
 }
 
 }

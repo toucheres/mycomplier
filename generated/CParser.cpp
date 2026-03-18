@@ -1,6 +1,6 @@
 #include "CParserBase.h"
 
-// Generated from grammar/CParser.g4 by ANTLR 4.13.1
+// Generated from grammar/CParser.g4 by ANTLR 4.13.2
 
 
 #include "CParserListener.h"
@@ -42,7 +42,7 @@ struct CParserStaticData final {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
 static thread_local
 #endif
-CParserStaticData *cparserParserStaticData = nullptr;
+std::unique_ptr<CParserStaticData> cparserParserStaticData = nullptr;
 
 void cparserParserInitialize() {
 #if ANTLR4_USE_THREAD_LOCAL_CACHE
@@ -693,7 +693,7 @@ void cparserParserInitialize() {
   for (size_t i = 0; i < count; i++) { 
     staticData->decisionToDFA.emplace_back(staticData->atn->getDecisionState(i), i);
   }
-  cparserParserStaticData = staticData.release();
+  cparserParserStaticData = std::move(staticData);
 }
 
 }

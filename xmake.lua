@@ -5,12 +5,30 @@ set_version("0.1")
 set_languages("c++23")
 
 add_rules("mode.debug", "mode.release")
-add_requires("boost", "magic_enum", "Vcpkg::antlr-runtime 4.13.1")
+add_requires("boost", "magic_enum","antlr4 4.13.2","antlr4-runtime 4.13.2")
 -- 在 debug 或 relwithdebinfo 模式下为 GNU 编译器添加 -pg（gprof）支持
 if is_mode("debug") or is_mode("relwithdebinfo") then
     add_cxxflags("-pg", {force = true})
     add_ldflags("-pg", {force = true})
 end
+
+-- package("antlr4.13.2_runtime")
+--     add_deps("cmake")
+--     set_sourcedir(path.join(os.scriptdir(), "antlr4.13.2"))
+--     on_install(function (package)
+--         local configs = {}
+--         table.insert(configs, "-DCMAKE_BUILD_TYPE=" .. (package:debug() and "Debug" or "Release"))
+--         table.insert(configs, "-DBUILD_SHARED_LIBS=" .. (package:config("shared") and "ON" or "OFF"))
+--         -- 跳过 C++ 测试，避免 FetchContent 联网拉取 googletest
+--         table.insert(configs, "-DANTLR_BUILD_CPP_TESTS=OFF")
+--         -- 只构建运行时库，不构建额外示例/测试目标
+--         table.insert(configs, "-DANTLR_BUILD_SHARED=ON")
+--         table.insert(configs, "-DANTLR_BUILD_STATIC=OFF")
+--         import("package.tools.cmake").install(package, configs)
+--     end)
+-- package_end()
+
+-- add_requires("antlr4.13.2_runtime")
 
 -- 主目标
 target("mycomplier")
@@ -22,16 +40,15 @@ target("mycomplier")
     add_files("generated/**.cpp")
 
     -- 头文件搜索路径
-    add_includedirs("include", "generated", "grammar/Cpp")
-    -- 添加系统安装的 ANTLR 头目录（包含 misc/Interval.h 等）
+    add_includedirs("include","grammar/Cpp","generated")
 
     -- 链接库
-    add_packages("antlr4-runtime", "magic_enum","Vcpkg::antlr-runtime 4.13.1")
+    add_packages("magic_enum","antlr4 4.13.2","antlr4-runtime 4.13.2")
 
     -- 在构建前运行 ANTLR 生成 C++ 源文件
     before_build(function (target)
         os.exec("mkdir -p generated")
-        local cmd =  "java -jar ./antlr4.13.1/antlr-4.13.1-complete.jar -Dlanguage=Cpp -visitor -listener -o generated -Xexact-output-dir grammar/CLexer.g4 grammar/CParser.g4"
+        local cmd =  "java -jar ./antlr4.13.2/antlr-4.13.2-complete.jar -Dlanguage=Cpp -visitor -listener -o generated -Xexact-output-dir grammar/CLexer.g4 grammar/CParser.g4"
         print("run: " .. cmd)
         os.exec(cmd)
     end)
