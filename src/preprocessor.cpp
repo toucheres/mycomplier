@@ -8,6 +8,7 @@
 #include <regex>
 #include <sstream>
 #include <unordered_map>
+#include <algorithm>
 
 // 辅助函数：检查是否是标识符字符
 static bool is_ident_char(char c)

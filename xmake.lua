@@ -5,7 +5,8 @@ set_version("0.1")
 set_languages("c++23")
 
 add_rules("mode.debug", "mode.release")
-add_requires("boost", "magic_enum","antlr4 4.13.2","antlr4-runtime 4.13.2")
+add_requires("boost", {configs = {program_options = true, cmake = false}})
+add_requires("magic_enum","antlr4 4.13.2","antlr4-runtime 4.13.2")
 -- 在 debug 或 relwithdebinfo 模式下为 GNU 编译器添加 -pg（gprof）支持
 if is_mode("debug") or is_mode("relwithdebinfo") then
     add_cxxflags("-pg", {force = true})
@@ -43,7 +44,7 @@ target("mycomplier")
     add_includedirs("include","grammar/Cpp","generated")
 
     -- 链接库
-    add_packages("magic_enum","antlr4 4.13.2","antlr4-runtime 4.13.2")
+    add_packages("magic_enum","antlr4","antlr4-runtime","boost")
 
     -- 在构建前运行 ANTLR 生成 C++ 源文件
     before_build(function (target)
