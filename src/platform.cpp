@@ -9,7 +9,6 @@ const std::vector<std::string> platform::get_default_include_dir_paths()
 const std::vector<std::string> platform::get_default_libc_paths()
 {
     std::vector<std::string> libcs{};
-    get_default_root_paths() + "/stdlibc";
     std::filesystem::path libcPath = get_default_root_paths() + "/stdlibc";
     for (const auto &entry : std::filesystem::directory_iterator(libcPath))
     {
@@ -23,5 +22,5 @@ const std::vector<std::string> platform::get_default_libc_paths()
 
 const std::string platform::get_default_root_paths()
 {
-    return std::filesystem::current_path() / "..";
+    return std::filesystem::current_path();
 }

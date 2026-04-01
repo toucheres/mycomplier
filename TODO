@@ -24,5 +24,5 @@
 [OK][TODO]sizeof(xxx)不起作用
 [OK][TODO] 常量去特殊化, Type携带constexpr(及其val)属性
 [NOTE] 对空optional *opt与opt->解引用未定义, opt.value才抛异常
-[TODO] linker 报错规范化
+[OK][TODO] linker 报错规范化
 [OK][TODO] 优化内存占用问题

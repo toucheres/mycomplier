@@ -188,9 +188,9 @@ bool IDdef::operator==(const IDdef& that) const
     return this->type == that.type && this->name == that.name &&
            this->storageClassSpecifier == that.storageClassSpecifier;
 }
-std::expected<std::vector<std::string>, error> complier::process(
-    std::vector<std::string> paths, bool showASt, int tolerate, bool showFoldedNames,
-    bool disableStd, std::vector<std::string> mainargs, bool preprocess_only)
+std::vector<std::string> complier::process(std::vector<std::string> paths, bool showASt,
+                                           int tolerate, bool showFoldedNames, bool disableStd,
+                                           std::vector<std::string> mainargs, bool preprocess_only)
 {
     // override incoming params by reading singleton settings to centralize runtime config
     using namespace app_options;

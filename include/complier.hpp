@@ -43,18 +43,10 @@
 // funvar:bp+偏移   LEA + 数 LI 访问
 // funvar初始stack大小为8,为 obp opc+1预留位置
 #pragma once
-#include "CParser.h"
-#include "error.hpp"
 #include "obj.h"
 #include <climits>
-#include <expected>
-#include <map>
-#include <memory>
-#include <optional>
 #include <peglib.h>
-#include <stack>
 #include <string>
-#include <variant>
 #include <vector>
 #include <vm.h>
 // AST 节点基类
@@ -70,8 +62,8 @@ struct linker
     std::vector<OBJ>& objs;
     std::vector<std::string> mainargs;
     exefile exe;
-    std::expected<size_t, error> pushfunc(std::string funcname);
-    std::expected<std::vector<std::string>, error> process();
+    size_t pushfunc(std::string funcname);
+    std::vector<std::string> process();
     linker(std::vector<OBJ>& ins, std::vector<std::string> amainargs)
         : objs(ins), mainargs(amainargs)
     {
@@ -79,13 +71,12 @@ struct linker
 };
 struct complier
 {
-    static std::expected<std::vector<std::string>, error> process(
-        std::vector<std::string> paths);
+    static std::vector<std::string> process(std::vector<std::string> paths);
+
   private:
     static void printAST(antlr4::tree::ParseTree* tree);
-    static std::expected<std::vector<std::string>, error> process(
-        std::vector<std::string> paths, bool showASt, int tolerate,
-        bool showFoldedNames, bool disableStd,
-        std::vector<std::string> mainargs,
-        bool preprocess_only);
+    static std::vector<std::string> process(std::vector<std::string> paths, bool showASt,
+                                            int tolerate, bool showFoldedNames, bool disableStd,
+                                            std::vector<std::string> mainargs,
+                                            bool preprocess_only);
 };

@@ -1,5 +1,3 @@
--- xmake.lua - 从 CMakeLists.txt 翻译而来，作为起点。请根据本机环境调整依赖安装路径。
-
 set_project("mycomplier")
 set_version("0.1")
 set_languages("c++23")
@@ -79,6 +77,14 @@ target("mycomplier")
         end
     end)
 
+    after_build(function (target)
+        local  src_dir = "stdlibc"
+        local dst_dir = path.join(target:targetdir(), path.filename(src_dir))
+        os.cp(src_dir,dst_dir)
+        src_dir = "stdhead" 
+        dst_dir = path.join(target:targetdir(), path.filename(src_dir))
+        os.cp(src_dir,dst_dir)
+    end)
 
     -- 设置为使用 c++23 标准（已在 project 级别设置，但可在 target 级别加强）
     set_languages("c++23")

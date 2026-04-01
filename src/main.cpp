@@ -33,21 +33,15 @@ int main(int argc, const char* argv[])
             std::setvbuf(stdout, nullptr, _IONBF, 0);
         }
         auto ret = complier::process(tvm.get_direct(input_files));
-        if (!ret)
+
+        if (tvm.get(print_asm))
         {
-            std::cout << "error\n";
-        }
-        else
-        {
-            if (tvm.get(print_asm))
+            for (int i = 0; i < ret.size(); i++)
             {
-                for (int i = 0; i < ret.value().size(); i++)
-                {
-                    std::cout << "[" << i << "]:" << ret.value()[i] << '\n';
-                }
+                std::cout << "[" << i << "]:" << ret[i] << '\n';
             }
         }
-        VM vm{ret.value()};
+        VM vm{ret};
         vm.enable_debug = tvm.get(app_options::enable_debug);
         auto retval = vm.run();
         if (retval)

@@ -86,6 +86,10 @@ template <class T> class value_ptr
     {
         return ptr == nullptr;
     }
+    bool operator==(value_ptr<T> other) const
+    {
+        return ptr != nullptr && other != nullptr && *ptr == *other;
+    }
     // 解引用运算符
     T& operator*() const
     {

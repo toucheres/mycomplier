@@ -1,17 +1,10 @@
 #include "complier.hpp"
 #include "ASM.hpp"
-#include "CLexer.h"
 #include "CParser.h"
-#include "CParserBaseVisitor.h"
 #include "obj.h"
-#include "preprocessor.hpp"
 #include "settings.h"
-#include "tools.hpp"
-#include <algorithm>
 #include <antlr4-runtime/antlr4-runtime.h>
 #include <astVisit.h>
-#include <filesystem>
-#include <format>
 #include <iostream>
 #include <regex>
 #include <utility>
@@ -19,7 +12,7 @@
 #include <unistd.h>
 #endif
 #include <cstdio>
-std::expected<size_t, error> linker::pushfunc(std::string funcname)
+size_t linker::pushfunc(std::string funcname)
 {
     IDdef* func = nullptr;
     auto ret = addrmap.find("func@" + funcname);
@@ -37,7 +30,7 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
             {
                 if (flag)
                 {
-                    return std::unexpected(error::double_defined);
+                    THROW_ERR_NOCTX_INFO(error::double_defined, funcname);
                 }
                 else
                 {
@@ -68,11 +61,7 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
                             else
                             {
                                 auto ret = pushfunc(funnametoreaddr);
-                                if (!ret)
-                                {
-                                    return std::unexpected(error::undifined_func);
-                                }
-                                this->exe.asms[i].replace(pos, len, std::to_string(ret.value()));
+                                this->exe.asms[i].replace(pos, len, std::to_string(ret));
                             }
                         }
                         else
@@ -136,7 +125,7 @@ std::expected<size_t, error> linker::pushfunc(std::string funcname)
     // 重定向表已记录
     return addrmap["func@" + funcname];
 }
-std::expected<std::vector<std::string>, error> linker::process()
+std::vector<std::string> linker::process()
 {
     // 分配全局变量空间,确定地址
     for (auto& eachobj : objs)
@@ -161,7 +150,7 @@ std::expected<std::vector<std::string>, error> linker::process()
                 std::string{"globalvar@"} + (is_static ? eachobj.name + "@" : "") + eachgvar.name;
             if (addrmap.find(labal) != addrmap.end())
             {
-                return std::unexpected(error::double_defined);
+                THROW_ERR_NOCTX_INFO(error::double_defined, labal);
             }
             addrmap[labal] = eachgvar.addr;
         }
@@ -177,7 +166,7 @@ std::expected<std::vector<std::string>, error> linker::process()
         auto ret = eachobj.symbol_table.globaldef.find("__global_init" + eachobj.name);
         if (ret == eachobj.symbol_table.globaldef.end())
         {
-            return std::unexpected(error::undifined_obj_init_fun);
+            THROW_ERR_NOCTX_INFO(error::undifined_obj_init_fun, "__global_init" + eachobj.name);
         }
         for (auto& eachasm : ret->second.funcInfo.asms)
         {
@@ -201,17 +190,9 @@ std::expected<std::vector<std::string>, error> linker::process()
     this->exe.asms.push_back(ASM{ASM::basic_asm::CALL});                     // call main
     this->exe.asms.push_back(ASM{ASM::basic_asm::EXIT});
     // 推入main函数, 并重定向func@
-    if (auto ret = pushfunc("main"); !ret)
-    {
-        return std::unexpected(ret.error());
-    }
-    else
-    {
-        return exe.asms;
-    }
+    pushfunc("main");
+    return exe.asms;
 }
-
-
 
 void complier::printAST(antlr4::tree::ParseTree* tree)
 {
@@ -468,7 +449,7 @@ void complier::printAST(antlr4::tree::ParseTree* tree)
 }
 
 // 新的重载：从 settings 单例读取运行时选项并调用完整实现
-std::expected<std::vector<std::string>, error> complier::process(std::vector<std::string> paths)
+std::vector<std::string> complier::process(std::vector<std::string> paths)
 {
     using namespace app_options;
     auto& tvm = settings::tvm();
