@@ -1,112 +1,136 @@
-cmake_minimum_required(VERSION 3.14)
-project(mycomplier)
+cmake_minimum_required(VERSION 3.20)
+project(mycomplier LANGUAGES CXX)
 
-# 设置 C++23 标准
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# 在使用 GNU 编译器且为 Debug/RelWithDebInfo 构建时启用 gprof 支持（-pg）
-if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
-  if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -pg")
-    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -pg")
-    set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} -pg")
-    set(CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS_DEBUG} -pg")
-
-    set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELWITHDEBINFO} -pg")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -pg")
-    set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO} -pg")
-    set(CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO "${CMAKE_SHARED_LINKER_FLAGS_RELWITHDEBINFO} -pg")
-  endif()
+if(POLICY CMP0167)
+  cmake_policy(SET CMP0167 NEW)
 endif()
 
-# 查找 ANTLR4 工具
-find_program(ANTLR_EXECUTABLE
-  NAMES
-    antlr4
-  REQUIRED
-)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# 定义语法文件（分为 lexer 与 parser）
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+option(MYCOMPLIER_PROFILING "Build with gprof (-pg)" OFF)
+if(MYCOMPLIER_PROFILING)
+  add_compile_options(-pg)
+  add_link_options(-pg)
+endif()
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+find_program(ANTLR_EXECUTABLE NAMES antlr4 REQUIRED)
+find_package(antlr4-runtime CONFIG QUIET)
+if(NOT antlr4-runtime_FOUND)
+  # Fallback for installations that ship headers/libraries without a CMake
+  # package config (e.g. a manually installed antlr4-runtime).
+  find_path(ANTLR4_INCLUDE_DIR NAMES antlr4-runtime.h PATH_SUFFIXES antlr4-runtime)
+  find_library(ANTLR4_LIBRARY NAMES antlr4-runtime libantlr4-runtime)
+  if(NOT ANTLR4_INCLUDE_DIR OR NOT ANTLR4_LIBRARY)
+    message(FATAL_ERROR
+      "antlr4-runtime not found. Install it, set CMAKE_PREFIX_PATH, or pass "
+      "ANTLR4_INCLUDE_DIR and ANTLR4_LIBRARY.")
+  endif()
+  add_library(mycomplier_antlr4 UNKNOWN IMPORTED)
+  set_target_properties(mycomplier_antlr4 PROPERTIES
+    IMPORTED_LOCATION "${ANTLR4_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${ANTLR4_INCLUDE_DIR}"
+  )
+endif()
+find_package(Boost REQUIRED COMPONENTS program_options)
+find_package(Threads REQUIRED)
+
+message(STATUS "ANTLR tool:            ${ANTLR_EXECUTABLE}")
+message(STATUS "ANTLR runtime include: ${ANTLR4_INCLUDE_DIR}")
+
+# ---------------------------------------------------------------------------
+# Generate the parser out-of-source.  This keeps the checked-in generated/
+# directory (used by the xmake build) untouched and guarantees that the
+# generated code matches the ANTLR runtime found above.
+# ---------------------------------------------------------------------------
 set(GRAMMAR_FILES
   ${CMAKE_SOURCE_DIR}/grammar/CLexer.g4
   ${CMAKE_SOURCE_DIR}/grammar/CParser.g4
 )
-
-# 设置 ANTLR4 生成目录
-set(ANTLR_GENERATED_DIR ${CMAKE_SOURCE_DIR}/generated)
+set(ANTLR_GENERATED_DIR ${CMAKE_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${ANTLR_GENERATED_DIR})
 
-# 生成 ANTLR4 解析器代码的自定义命令
+set(ANTLR_GENERATED_SOURCES
+  ${ANTLR_GENERATED_DIR}/CLexer.cpp
+  ${ANTLR_GENERATED_DIR}/CParser.cpp
+  ${ANTLR_GENERATED_DIR}/CParserBaseListener.cpp
+  ${ANTLR_GENERATED_DIR}/CParserBaseVisitor.cpp
+  ${ANTLR_GENERATED_DIR}/CParserListener.cpp
+  ${ANTLR_GENERATED_DIR}/CParserVisitor.cpp
+)
+
 add_custom_command(
-  OUTPUT
-    ${ANTLR_GENERATED_DIR}/CLexer.cpp
-    ${ANTLR_GENERATED_DIR}/CParser.cpp
-    ${ANTLR_GENERATED_DIR}/CParserBaseVisitor.cpp
-    ${ANTLR_GENERATED_DIR}/CParserVisitor.cpp
-  COMMAND 
-    ${ANTLR_EXECUTABLE} -Dlanguage=Cpp -visitor -listener -o ${ANTLR_GENERATED_DIR} ${GRAMMAR_FILES}
-  DEPENDS 
-    ${GRAMMAR_FILES}
-  COMMENT 
-    "Generating parser from ${GRAMMAR_FILES}"
+  OUTPUT ${ANTLR_GENERATED_SOURCES}
+  COMMAND ${ANTLR_EXECUTABLE} -Dlanguage=Cpp -visitor -listener
+          -Xexact-output-dir -o ${ANTLR_GENERATED_DIR} ${GRAMMAR_FILES}
+  DEPENDS ${GRAMMAR_FILES} ${ANTLR_EXECUTABLE}
+  COMMENT "Generating C parser with ANTLR"
+  VERBATIM
 )
 
-# 查找 ANTLR4 库
-find_package(antlr4-runtime REQUIRED CONFIG QUIET)
+# ---------------------------------------------------------------------------
+# Target
+# ---------------------------------------------------------------------------
+file(GLOB_RECURSE MYCOMPLIER_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cpp")
 
-
-# 添加 include 目录为头文件搜索路径
-include_directories(
-  ${CMAKE_SOURCE_DIR}/include
-  ${CMAKE_SOURCE_DIR}/generated
-  ${CMAKE_SOURCE_DIR}/grammar/Cpp
-)
-
-# 自动收集 src 下所有源文件
-file(GLOB_RECURSE SRC_FILES "${CMAKE_SOURCE_DIR}/src/*")
-
-# grammar Cpp 支撑源文件（CLexerBase/CParserBase/SymbolTable）
 set(CPP_GRAMMAR_SOURCES
   ${CMAKE_SOURCE_DIR}/grammar/Cpp/CLexerBase.cpp
   ${CMAKE_SOURCE_DIR}/grammar/Cpp/CParserBase.cpp
   ${CMAKE_SOURCE_DIR}/grammar/Cpp/SymbolTable.cpp
 )
 
-# 添加生成的 ANTLR4 源文件
-set(PARSER_SOURCES
-  ${ANTLR_GENERATED_DIR}/CLexer.cpp
-  ${ANTLR_GENERATED_DIR}/CParser.cpp
-  ${ANTLR_GENERATED_DIR}/CParserBaseVisitor.cpp
-  ${ANTLR_GENERATED_DIR}/CParserVisitor.cpp
+add_executable(mycomplier
+  ${MYCOMPLIER_SOURCES}
+  ${CPP_GRAMMAR_SOURCES}
+  ${ANTLR_GENERATED_SOURCES}
 )
 
-# 创建可执行文件，包括源文件和生成的解析器代码
-add_executable(mycomplier ${SRC_FILES} ${CPP_GRAMMAR_SOURCES} ${PARSER_SOURCES})
+target_include_directories(mycomplier PRIVATE
+  ${CMAKE_SOURCE_DIR}/include
+  ${CMAKE_SOURCE_DIR}/grammar/Cpp
+  ${CMAKE_SOURCE_DIR}/third_party/magic_enum/include
+  ${ANTLR_GENERATED_DIR}
+  ${ANTLR4_INCLUDE_DIR}
+)
 
-# for #include "antlr4-runtime.h" insteaded of "antlr4/antlr4-runtime.h"
-find_path(ANTLR4_INCLUDE_DIR NAMES antlr4-runtime.h HINTS ${CMAKE_PREFIX_PATH})
-if(ANTLR4_INCLUDE_DIR)
-    target_include_directories(mycomplier PRIVATE ${ANTLR4_INCLUDE_DIR})
+# The source tree is the compiler's "installation root" for stdhead/ and
+# stdlibc/; pass it in so the binary does not depend on the current directory.
+target_compile_definitions(mycomplier PRIVATE
+  MYCOMPLIER_ROOT="${CMAKE_SOURCE_DIR}"
+)
+
+if(TARGET antlr4_static)
+  set(ANTLR4_RUNTIME_TARGET antlr4_static)
+elseif(TARGET antlr4_shared)
+  set(ANTLR4_RUNTIME_TARGET antlr4_shared)
+elseif(TARGET mycomplier_antlr4)
+  set(ANTLR4_RUNTIME_TARGET mycomplier_antlr4)
 else()
-    message(FATAL_ERROR "antlr4 runtime not found. Install it or set CMAKE_PREFIX_PATH or ensure pkg-config exports antlr4-runtime.")
+  set(ANTLR4_RUNTIME_TARGET antlr4-runtime)
 endif()
-# 链接 ANTLR4 运行时
-target_link_libraries(mycomplier PRIVATE antlr4-runtime)
 
-find_package(Boost REQUIRED COMPONENTS program_options)
-
-include(FetchContent)
-FetchContent_Declare(
-  magic_enum
-  GIT_REPOSITORY https://github.com/Neargye/magic_enum.git
-  GIT_TAG        v0.9.7
+target_link_libraries(mycomplier PRIVATE
+  ${ANTLR4_RUNTIME_TARGET}
+  Boost::program_options
+  Threads::Threads
 )
-FetchContent_MakeAvailable(magic_enum)
-target_link_libraries(mycomplier PRIVATE magic_enum Boost::program_options)
 
-# 启用 CTest 测试框架
+# ---------------------------------------------------------------------------
+# magic_enum is vendored under third_party/magic_enum (MIT) so configuration
+# works offline; nothing to fetch or link.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
 enable_testing()
-
-# 添加 test 子目录以构建并注册测试
 add_subdirectory(${CMAKE_SOURCE_DIR}/test)

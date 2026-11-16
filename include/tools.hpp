@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 inline long align_up(long num, long align)
 {
     if (num % align == 0)

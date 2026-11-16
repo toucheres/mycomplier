@@ -1,5 +1,6 @@
 #include "preprocessor.hpp"
 #include "file.hpp"
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <fstream>
